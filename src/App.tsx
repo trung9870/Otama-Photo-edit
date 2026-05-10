@@ -33,6 +33,7 @@ import {
   ArrowLeft,
   LogIn,
   LogOut,
+  Globe,
   Settings,
   Crop,
   RotateCw,
@@ -231,16 +232,8 @@ function App() {
 
   // API Keys and Settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [kieApiKey, setKieApiKey] = useState<string>('');
-  const [googleApiKey, setGoogleApiKey] = useState<string>('');
-  
-  useEffect(() => {
-    // Load keys from localStorage on mount
-    const savedKie = localStorage.getItem('kieApiKey') || '';
-    const savedGoogle = localStorage.getItem('googleApiKey') || '';
-    setKieApiKey(savedKie);
-    setGoogleApiKey(savedGoogle);
-  }, []);
+  const [kieApiKey, setKieApiKey] = useState<string>(() => localStorage.getItem('kieApiKey') || '');
+  const [googleApiKey, setGoogleApiKey] = useState<string>(() => localStorage.getItem('googleApiKey') || '');
 
   // Ecom State
   const defaultEcomPrompts: SavedPrompt[] = [
@@ -702,8 +695,9 @@ function App() {
   const handleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
+      setGlobalError(`Lỗi đăng nhập: ${error.message}`);
     }
   };
 
@@ -850,6 +844,18 @@ function App() {
       await deleteDoc(doc(db, 'prompts', id));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `prompts/${id}`);
+    }
+  };
+
+  const toggleSyncEcomPrompt = async (p: SavedPrompt, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAdmin) return;
+    try {
+      await setDoc(doc(db, 'prompts', p.id), { 
+        isDefault: !p.isDefault
+      }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `prompts/${p.id}`);
     }
   };
 
@@ -2142,13 +2148,15 @@ function App() {
                         <Edit2 size={12} />
                         NHẬP THỦ CÔNG
                       </button>
-                      <button 
-                        onClick={() => setIsAddingEcomPrompt(true)}
-                        className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
-                      >
-                        <Plus size={12} />
-                        THÊM MỚI
-                      </button>
+                      {isAdmin && (
+                        <button 
+                          onClick={() => setIsAddingEcomPrompt(true)}
+                          className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                        >
+                          <Plus size={12} />
+                          THÊM MỚI
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -2225,17 +2233,29 @@ function App() {
                             </div>
                           </div>
                           <div className="flex items-center gap-1 transition-all">
-                            {(isAdmin || !p.isDefault) && (
+                            {p.isDefault && !isAdmin && (
+                              <span className="text-[10px] mr-2" title="Đã đồng bộ công khai">🌐</span>
+                            )}
+                            {isAdmin && (
                               <>
+                                <button 
+                                  onClick={(e) => toggleSyncEcomPrompt(p, e)}
+                                  className="p-1.5 transition-all"
+                                  title={p.isDefault ? "Hủy đồng bộ" : "Đồng bộ lên chung"}
+                                >
+                                  <Globe size={12} className={p.isDefault ? "text-blue-400" : "text-gray-500 hover:text-blue-400"} />
+                                </button>
                                 <button 
                                   onClick={(e) => startEditEcomPrompt(p, e)}
                                   className="p-1.5 hover:text-editor-accent transition-all"
+                                  title="Sửa"
                                 >
                                   <Edit2 size={12} />
                                 </button>
                                 <button 
                                   onClick={(e) => deleteEcomPrompt(p.id, e)}
                                   className="p-1.5 hover:text-red-500 transition-all"
+                                  title="Xóa"
                                 >
                                   <Trash2 size={12} />
                                 </button>
@@ -2261,43 +2281,90 @@ function App() {
                   />
                 </div>
 
-                <div>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold mt-4">MODEL AI</p>
-                  <select 
-                    value={ecomModel} 
-                    onChange={(e) => setEcomModel(e.target.value as ModelType)}
-                    className="w-full bg-editor-border/20 border border-editor-border rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-editor-accent"
-                  >
-                    <option value="gpt2" className="bg-black">GPT2</option>
-                    <option value="banana-2"    className="bg-black">BANANA2</option>
-                    <option value="banana-pro"  className="bg-black">BANANA PRO</option>
-                  </select>
-                </div>
-
-                <div>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">TỈ LỆ ẢNH</p>
-                  <select 
-                    value={ecomAspectRatio} 
-                    onChange={(e) => setEcomAspectRatio(e.target.value)}
-                    className="w-full bg-editor-border/20 border border-editor-border rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-editor-accent"
-                  >
-                    {['Auto', '1:1', '21:9', '8:1', '4:1', '16:9', '9:16', '1:4', '1:8', '4:3', '4:5', '5:4', '3:4', '3:2', '2:3'].map(r => (
-                      <option key={r} value={r === 'Auto' ? '1:1' : r} className="bg-black">{r}</option>
+                <div className="mb-6">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold mt-4">Google AI Engine</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setEcomModel(m)}
+                        className={`p-2 rounded-xl border text-center transition-all relative overflow-hidden ${
+                          ecomModel === m 
+                            ? 'border-editor-accent bg-editor-accent/5' 
+                            : m === 'banana-pro'
+                              ? 'border-amber-500/50 bg-amber-500/5'
+                              : 'border-editor-border hover:border-gray-600'
+                        }`}
+                      >
+                        {m === 'banana-pro' && (
+                          <div className="absolute top-0 right-0 bg-amber-500 text-black text-[6px] font-black px-1 py-0.5 rounded-bl-md">
+                            BEST
+                          </div>
+                        )}
+                        <p className={`text-[11px] font-bold ${
+                          ecomModel === m 
+                            ? 'text-editor-accent' 
+                            : m === 'banana-pro'
+                              ? 'text-amber-500'
+                              : 'text-white'
+                        }`}>
+                          {MODEL_CONFIG[m].name}
+                        </p>
+                        {MODEL_CONFIG[m].requiredKey === 'google' && (
+                          <span className="text-[7px] text-editor-accent uppercase font-bold block mt-0.5">Google</span>
+                        )}
+                        {MODEL_CONFIG[m].requiredKey === 'kie' && (
+                          <span className="text-[7px] text-amber-500/70 uppercase font-bold block mt-0.5">Kie.ai</span>
+                        )}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
 
-                <div>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold mt-4">CHẤT LƯỢNG ẢNH</p>
-                  <select 
-                    value={ecomImageSize} 
-                    onChange={(e) => setEcomImageSize(e.target.value)}
-                    className="w-full bg-editor-border/20 border border-editor-border rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-editor-accent"
-                  >
-                    <option value="1k" className="bg-black">1K</option>
-                    <option value="2k" className="bg-black">2K</option>
-                    <option value="4k" className="bg-black">4K</option>
-                  </select>
+                <div className="mb-6">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold">TỈ LỆ KHUNG HÌNH</p>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {ASPECT_RATIOS.map((ratio) => (
+                      <button
+                        key={ratio.value}
+                        onClick={() => setEcomAspectRatio(ratio.value)}
+                        className={`py-2 px-1 rounded-lg border flex flex-col items-center gap-1 transition-all ${
+                          ecomAspectRatio === ratio.value 
+                            ? 'border-editor-accent bg-editor-accent/5' 
+                            : 'border-editor-border hover:border-gray-600'
+                        }`}
+                      >
+                        <div className={`border border-current ${
+                          ratio.value === '1:1' ? 'w-3 h-3' : 
+                          ratio.value === '3:4' ? 'w-2.5 h-3' : 
+                          ratio.value === '4:3' ? 'w-3 h-2.5' : 
+                          ratio.value === '9:16' ? 'w-2 h-3.5' : 'w-3.5 h-2'
+                        } ${ecomAspectRatio === ratio.value ? 'text-editor-accent' : 'text-gray-500'}`} />
+                        <span className={`text-[8px] font-bold ${ecomAspectRatio === ratio.value ? 'text-editor-accent' : 'text-white'}`}>
+                          {ratio.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold">CHẤT LƯỢNG ẢNH</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['1k', '2k', '4k'].map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => setEcomImageSize(size)}
+                        className={`py-2 rounded-xl border text-center transition-all ${
+                          ecomImageSize === size 
+                            ? 'border-editor-accent bg-editor-accent/5 text-editor-accent' 
+                            : 'border-editor-border hover:border-gray-600 text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold uppercase">{size}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="pt-4 space-y-4">
