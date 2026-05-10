@@ -1,0 +1,5 @@
+{
+  "name": "Banana Pro Photo Editor",
+  "description": "A professional-grade photo editor featuring traditional adjustments and AI-powered background replacement using the Banana Pro model.",
+  "requestFramePermissions": []
+}

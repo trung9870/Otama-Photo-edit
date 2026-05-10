@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-editor-bg: #0a0a0f;
+  --color-editor-card: #151521;
+  --color-editor-accent: #d4ff5c;
+  --color-editor-border: #2a2a3a;
+}
+
+@layer base {
+  body {
+    @apply bg-editor-bg text-white font-sans antialiased;
+  }
+}
+
+.glass-panel {
+  @apply bg-editor-card/80 backdrop-blur-md border border-editor-border rounded-2xl;
+}
+
+.action-button {
+  @apply flex flex-col items-center justify-center p-4 rounded-xl border border-editor-border transition-all duration-200 hover:bg-editor-border/30;
+}
+
+.action-button.active {
+  @apply border-editor-accent bg-editor-accent/5;
+}
+
+.ai-input {
+  @apply w-full bg-editor-bg border border-editor-border rounded-xl p-4 text-sm focus:outline-none focus:border-editor-accent transition-colors;
+}
+
+.primary-btn {
+  @apply w-full bg-editor-accent text-black font-bold py-4 rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed;
+}

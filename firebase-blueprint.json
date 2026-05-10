@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "Prompt": {
+      "title": "Prompt",
+      "description": "A saved prompt for image generation or analysis.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the prompt." },
+        "name": { "type": "string", "description": "Name of the prompt." },
+        "prompt": { "type": "string", "description": "The prompt text." },
+        "type": { "type": "string", "enum": ["generate", "tryon", "ecom"], "description": "The type of prompt." },
+        "uid": { "type": "string", "description": "The user ID of the owner." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the prompt was created." },
+        "isDefault": { "type": "boolean", "description": "Whether this is a default prompt." }
+      },
+      "required": ["id", "name", "prompt", "type", "uid", "createdAt"]
+    },
+    "SavedModel": {
+      "title": "SavedModel",
+      "description": "A saved model image for frequently used try-on sessions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the model." },
+        "imageUrl": { "type": "string", "description": "The base64 or URL of the model image." },
+        "uid": { "type": "string", "description": "The user ID of the owner." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the model was saved." }
+      },
+      "required": ["id", "imageUrl", "uid", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "User profile with roles and permissions.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "canUseClothing": { "type": "boolean" },
+        "canUseEcom": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "canUseClothing", "canUseEcom", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/prompts/{promptId}": {
+      "schema": "Prompt",
+      "description": "Collection of user prompts."
+    },
+    "/models/{modelId}": {
+      "schema": "SavedModel",
+      "description": "Collection of user's frequently used model images."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and permissions."
+    }
+  }
+}
