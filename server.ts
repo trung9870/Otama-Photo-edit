@@ -39,12 +39,12 @@ async function startServer() {
   // API endpoint for AI generation (using owner's key)
   app.post("/api/generate", async (req, res) => {
     try {
-      const { modelId, prompt, imageBase64, aspectRatio, imageSize, numberOfImages, clientKieApiKey, clientGoogleApiKey } = req.body;
-      console.log(`[server] /api/generate called with modelId=${modelId}, numberOfImages=${numberOfImages}, prompt=${prompt}, imageSize=${imageSize}`);
+      const { modelId, prompt, imageBase64, templateBase64, aspectRatio, imageSize, numberOfImages, clientKieApiKey, clientGoogleApiKey } = req.body;
+      console.log(`[server] /api/generate called with modelId=${modelId}, numberOfImages=${numberOfImages}, prompt=${prompt}, imageSize=${imageSize}, hasTemplate=${!!templateBase64}`);
       
       const defaultApiKey = process.env.GEMINI_API_KEY;
 
-      const runKieImageTask = async (inputUrl: string, prompt: string, apiKey: string, aspectRatio: string) => {
+      const runKieImageTask = async (inputUrls: string[], prompt: string, apiKey: string, aspectRatio: string, imageSize: string) => {
         const createRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
           method: 'POST',
           headers: {
@@ -55,8 +55,9 @@ async function startServer() {
             model: 'gpt-image-2-image-to-image',
             input: {
               prompt: prompt,
-              input_urls: [inputUrl],
-              aspect_ratio: aspectRatio === '1:1' ? '1:1' : (aspectRatio === '9:16' ? '9:16' : 'auto')
+              input_urls: inputUrls,
+              aspect_ratio: aspectRatio === '1:1' ? '1:1' : (aspectRatio === '9:16' ? '9:16' : 'auto'),
+              resolution: (aspectRatio === '1:1' && (imageSize || '1K').toUpperCase() === '4K') ? '2K' : (aspectRatio === 'auto' ? '1K' : (imageSize || '1K').toUpperCase())
             }
           })
         });
@@ -77,7 +78,7 @@ async function startServer() {
            throw new Error("Kie.ai không trả về taskId.");
         }
 
-        let maxAttempts = 60; // 60 attempts, 3s each = 180s
+        let maxAttempts = 120; // 120 attempts, 3s each = 360s
         while (maxAttempts > 0) {
           await new Promise(r => setTimeout(r, 3000));
           
@@ -125,20 +126,31 @@ async function startServer() {
            return res.status(401).json({ error: "Missing Kie.ai API key" });
         }
         
-        let inputUrl = '';
+        let inputUrls: string[] = [];
         try {
-          const buffer = Buffer.from(imageBase64, 'base64');
-          const formData = new FormData();
-          formData.append('file', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
-          
-          const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', {
-            method: 'POST',
-            body: formData
-          });
-          const uploadData = await uploadRes.json();
-          const pageUrl = uploadData?.data?.url;
-          if (!pageUrl) throw new Error("No URL returned");
-          inputUrl = pageUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/').replace('http://', 'https://');
+          const uploadBase64ToTmpFiles = async (b64: string): Promise<string> => {
+            const buffer = Buffer.from(b64, 'base64');
+            const formData = new FormData();
+            formData.append('file', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
+            const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', {
+              method: 'POST',
+              body: formData
+            });
+            const uploadData = await uploadRes.json();
+            const pageUrl = uploadData?.data?.url;
+            if (!pageUrl) throw new Error("No URL returned");
+            return pageUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/').replace('http://', 'https://');
+          };
+
+          if (templateBase64) {
+            // Upload both parallelly. Prompt rule: Template is Image 1, Product is Image 2.
+            inputUrls = await Promise.all([
+              uploadBase64ToTmpFiles(templateBase64),
+              uploadBase64ToTmpFiles(imageBase64)
+            ]);
+          } else {
+            inputUrls = [await uploadBase64ToTmpFiles(imageBase64)];
+          }
         } catch (e: any) {
            return res.status(500).json({ error: "Lỗi tải ảnh tĩnh lên máy chủ tạm: " + e.message });
         }
@@ -149,7 +161,7 @@ async function startServer() {
           const promises = Array.from({ length: count }).map((_, i) => {
             // Append an invisible space or something to force cache miss / variation
             const variedPrompt = prompt + ' '.repeat(i);
-            return runKieImageTask(inputUrl, variedPrompt, apiKey, aspectRatio);
+            return runKieImageTask(inputUrls, variedPrompt, apiKey, aspectRatio, imageSize);
           });
           const urls = await Promise.all(promises);
           console.log("[server] Generated urls:", urls);
