@@ -7,6 +7,8 @@ import React, { useState, useRef, useEffect, useCallback, Component } from 'reac
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { GoogleGenAI } from "@google/genai";
+import Cropper from 'react-easy-crop';
+import { getCroppedImg } from './utils/cropImage';
 import { 
   Upload, 
   Palette, 
@@ -292,10 +294,26 @@ function App() {
   const [ecomFinalImages, setEcomFinalImages] = useState<{ id: string, url: string, loading: boolean }[]>([]);
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
-  const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template'>('gen-new');
+  const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace'>('gen-new');
   const [ecomTemplateImage, setEcomTemplateImage] = useState<string | null>(null);
+  
+  // Pattern Replace State
+  const [patternSourceImage, setPatternSourceImage] = useState<string | null>(null);
+  const [generatedPattern, setGeneratedPattern] = useState<string | null>(null);
+  const [isGeneratingPattern, setIsGeneratingPattern] = useState(false);
+  const [patternMockupImage, setPatternMockupImage] = useState<string | null>(null);
+  
+  // Pattern Crop State
+  const [isPatternCropModalOpen, setIsPatternCropModalOpen] = useState(false);
+  const [patternCrop, setPatternCrop] = useState({ x: 0, y: 0 });
+  const [patternZoom, setPatternZoom] = useState(1);
+  const [patternRotation, setPatternRotation] = useState(0);
+  const [patternCroppedAreaPixels, setPatternCroppedAreaPixels] = useState(null);
+  
   const ecomFileInputRef = useRef<HTMLInputElement>(null);
   const ecomTemplateFileInputRef = useRef<HTMLInputElement>(null);
+  const patternSourceFileInputRef = useRef<HTMLInputElement>(null);
+  const patternMockupFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (ecomFinalImages.length > 0 && resultsRef.current) {
@@ -1703,6 +1721,148 @@ function App() {
     }
   };
 
+  const handleEcomGeneratePattern = async () => {
+    if (!patternSourceImage) return;
+    setIsGeneratingPattern(true);
+    setGlobalError(null);
+    setGeneratedPattern(null);
+
+    const currentPrompt = "Recreate this image as a flat 2D seamless repeating pattern, formatted as a print-ready textile design file. Preserve all motifs, colors, proportions, and spatial layout exactly as in the reference. Solid flat background, no fabric texture, no folds, no shadows, no lighting effects, no mockup, no product photography, no borders, no frames, no extra decorative elements added. Output as a clean digital pattern tile, top-down view, 1:1 aspect ratio.";
+    const config = MODEL_CONFIG[ecomModel];
+
+    try {
+      const mainBase64 = patternSourceImage.split(',')[1];
+      const fullPrompt = `${currentPrompt} (Quality: 1K)`;
+
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelId: config.id,
+          prompt: fullPrompt,
+          imageBase64: mainBase64,
+          aspectRatio: '1:1',
+          imageSize: '1k',
+          numberOfImages: 1,
+          clientKieApiKey: kieApiKey,
+          clientGoogleApiKey: googleApiKey
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        let finalImage = "";
+        if (data.isUrl && data.imagesBase64?.length > 0) {
+          finalImage = data.imagesBase64[0];
+        } else if (Array.isArray(data.imagesBase64) && data.imagesBase64.length > 0) {
+          finalImage = `data:image/png;base64,${data.imagesBase64[0]}`;
+        } else if (data.imageBase64) {
+          finalImage = `data:image/png;base64,${data.imageBase64}`;
+        }
+        if (finalImage) {
+          setGeneratedPattern(finalImage);
+        } else {
+          throw new Error("Không nhận được ảnh hợp lệ từ API");
+        }
+      } else {
+        const err = await response.json();
+        throw new Error(err.error || "Lỗi Server");
+      }
+    } catch (error: any) {
+      console.error("Generate Pattern Error:", error);
+      setGlobalError(error.message);
+    } finally {
+      setIsGeneratingPattern(false);
+    }
+  };
+
+  const handleEcomApplyPattern = async () => {
+    if (!patternMockupImage || !generatedPattern) return;
+    setIsEcomGenerating(true);
+    setGlobalError(null);
+    setEcomResults([]);
+
+    const currentPrompt = "Replace the pattern on the main textile product visible in image with the pattern from image 1. Apply the new pattern as actual printed fabric, not as a flat overlay or sticker. Preserve all original fabric wrinkles, folds, creases, soft shadows, highlights, and natural depth of the PRODUCT. The pattern must follow the contours of the fabric — stretching at tension points, compressing at folds, darkening in shadowed areas, brightening where light hits. Keep the original lighting, scene, composition, pose, and all other elements unchanged. Photorealistic textile rendering.";
+    const config = MODEL_CONFIG[ecomModel];
+
+    try {
+      const mainBase64 = patternMockupImage.split(',')[1];
+      
+      let finalTemplateBase64 = generatedPattern;
+      if (generatedPattern.startsWith('http')) {
+        const proxyUrl = generatedPattern.includes('tmpfiles.org') 
+          ? generatedPattern.replace('tmpfiles.org/', 'tmpfiles.org/dl/') 
+          : generatedPattern;
+        const res = await fetch(`/api/proxy?url=${encodeURIComponent(proxyUrl)}`);
+        if (!res.ok) throw new Error("Không thể tải ảnh pattern");
+        const blob = await res.blob();
+        finalTemplateBase64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      }
+      
+      const templateBase64 = finalTemplateBase64.split(',')[1];
+      const fullPrompt = `${currentPrompt} (Quality: ${ecomImageSize.toUpperCase()})`;
+
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelId: config.id,
+          prompt: fullPrompt,
+          imageBase64: mainBase64,
+          templateBase64: templateBase64,
+          aspectRatio: ecomAspectRatio, // Use the selected aspect ratio
+          imageSize: ecomImageSize,
+          numberOfImages: ecomImageCount,
+          clientKieApiKey: kieApiKey,
+          clientGoogleApiKey: googleApiKey
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        let generatedImages: string[] = [];
+        if (data.isUrl) {
+          generatedImages = data.imagesBase64;
+        } else if (data.imagesBase64 && Array.isArray(data.imagesBase64)) {
+          generatedImages = data.imagesBase64.map((b64: string) => `data:image/png;base64,${b64}`);
+        } else if (data.imageBase64) {
+          generatedImages = [`data:image/png;base64,${data.imageBase64}`];
+        }
+        setEcomResults(generatedImages);
+      } else {
+        const err = await response.json();
+        throw new Error(err.error || "Lỗi Server");
+      }
+    } catch (error: any) {
+      console.error("Apply Pattern Error:", error);
+      setGlobalError(error.message);
+    } finally {
+      setIsEcomGenerating(false);
+    }
+  };
+
+  const onPatternCropComplete = useCallback((_croppedArea: any, croppedAreaPixels: any) => {
+    setPatternCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  const handleSavePatternCrop = async () => {
+    if (!patternSourceImage || !patternCroppedAreaPixels) return;
+    try {
+      const croppedImage = await getCroppedImg(patternSourceImage, patternCroppedAreaPixels, patternRotation);
+      if (croppedImage) {
+        setPatternSourceImage(croppedImage);
+        setIsPatternCropModalOpen(false);
+      }
+    } catch (e) {
+      console.error(e);
+      setGlobalError("Không thể cắt ảnh");
+    }
+  };
+
   const handleDetectGridBoxes = async () => {
     if (!selectedEcomGrid) return;
     setIsDetectingBoxes(true);
@@ -2137,6 +2297,12 @@ function App() {
                 >
                   Clone Templates
                 </button>
+                <button
+                  onClick={() => setEcomSubTab('pattern-replace')}
+                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${ecomSubTab === 'pattern-replace' ? 'bg-editor-accent text-black shadow-md' : 'text-gray-400 hover:text-white'}`}
+                >
+                  Thay Pattern
+                </button>
               </div>
 
               {ecomSubTab === 'clone-template' ? (
@@ -2187,6 +2353,119 @@ function App() {
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+              ) : ecomSubTab === 'pattern-replace' ? (
+                <div className="flex flex-col gap-6">
+                  {/* Step 1 */}
+                  <div className="bg-editor-border/10 p-4 rounded-xl border border-editor-border">
+                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-editor-accent text-black flex items-center justify-center text-xs">1</span>
+                      TẠO PATTERN TỪ ẢNH MẪU
+                    </h3>
+                    <div 
+                      className="w-full aspect-square border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
+                      onClick={() => {
+                        if (patternSourceFileInputRef.current) patternSourceFileInputRef.current.click();
+                      }}
+                    >
+                      {patternSourceImage ? (
+                        <>
+                          <img src={patternSourceImage} alt="Pattern Source" className="w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsPatternCropModalOpen(true);
+                              }}
+                              className="p-3 bg-black/60 text-white rounded-md hover:bg-editor-accent hover:text-black transition-colors"
+                              title="Cắt ảnh"
+                            >
+                              <Crop size={24} />
+                            </button>
+                            <div className="w-[1px] h-8 bg-white/30"></div>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPatternSourceImage(null);
+                                setGeneratedPattern(null);
+                                if (patternSourceFileInputRef.current) patternSourceFileInputRef.current.value = '';
+                              }}
+                              className="p-3 bg-black/60 text-white rounded-md hover:bg-red-500 transition-colors"
+                              title="Xóa ảnh"
+                            >
+                              <Trash2 size={24} />
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent">
+                          <Upload size={32} />
+                          <span className="text-sm font-medium text-center px-4">Tải ảnh hoa văn tham khảo</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <button
+                      onClick={handleEcomGeneratePattern}
+                      disabled={!patternSourceImage || isGeneratingPattern}
+                      className="w-full mt-4 py-3 bg-editor-accent text-black rounded-xl font-bold hover:bg-editor-accent/90 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
+                    >
+                      {isGeneratingPattern ? (
+                        <><Loader2 className="animate-spin" size={20} /> ĐANG TẠO PATTERN 2D...</>
+                      ) : (
+                        <><Wand2 size={20} /> TẠO PATTERN 2D</>
+                      )}
+                    </button>
+
+                    {generatedPattern && (
+                      <div className="mt-4">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">KẾT QUẢ PATTERN 2D</p>
+                        <div className="w-full aspect-square rounded-xl overflow-hidden border border-editor-accent/30 bg-black/40 relative group">
+                          <img src={generatedPattern} alt="Generated Pattern" className="w-full h-full object-cover" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className={`bg-editor-border/10 p-4 rounded-xl border border-editor-border transition-opacity duration-300 ${!generatedPattern ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-editor-accent text-black flex items-center justify-center text-xs">2</span>
+                      ÁP DỤNG LÊN SẢN PHẨM MẪU
+                    </h3>
+                    <div 
+                      className="w-full aspect-square border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
+                      onClick={() => {
+                        if (patternMockupFileInputRef.current) patternMockupFileInputRef.current.click();
+                      }}
+                    >
+                      {patternMockupImage ? (
+                        <>
+                          <img src={patternMockupImage} alt="Product Mockup" className="w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <span className="text-white font-bold text-xs">Thay đổi ảnh sản phẩm</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent">
+                          <Upload size={32} />
+                          <span className="text-sm font-medium text-center px-4">Tải ảnh sản phẩm (mockup)</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={handleEcomApplyPattern}
+                      disabled={!patternMockupImage || !generatedPattern || isEcomGenerating}
+                      className="w-full mt-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
+                    >
+                      {isEcomGenerating ? (
+                        <><Loader2 className="animate-spin" size={20} /> ĐANG ÁP DỤNG...</>
+                      ) : (
+                        <><Shirt size={20} /> ÁP DỤNG PATTERN</>
+                      )}
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -2241,6 +2520,37 @@ function App() {
                       setEcomProductImage(ev.target?.result as string);
                       setEcomResults([]);
                     };
+                    r.readAsDataURL(file);
+                  }
+                }}
+              />
+              <input
+                type="file"
+                ref={patternSourceFileInputRef}
+                className="hidden"
+                accept="image/png, image/jpeg, image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const r = new FileReader();
+                    r.onload = (ev) => {
+                      setPatternSourceImage(ev.target?.result as string);
+                      setGeneratedPattern(null); // Reset when new source uploaded
+                    };
+                    r.readAsDataURL(file);
+                  }
+                }}
+              />
+              <input
+                type="file"
+                ref={patternMockupFileInputRef}
+                className="hidden"
+                accept="image/png, image/jpeg, image/webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const r = new FileReader();
+                    r.onload = (ev) => setPatternMockupImage(ev.target?.result as string);
                     r.readAsDataURL(file);
                   }
                 }}
@@ -2393,6 +2703,10 @@ function App() {
                   />
                 </div>
 
+              </div>
+            </>
+            )}
+
                 <div className="mb-6">
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold mt-4">Google AI Engine</p>
                   <div className="grid grid-cols-3 gap-2">
@@ -2432,9 +2746,6 @@ function App() {
                     ))}
                   </div>
                 </div>
-              </div>
-            </>
-            )}
 
                 <div className="mb-6">
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold">TỈ LỆ KHUNG HÌNH</p>
@@ -2485,7 +2796,7 @@ function App() {
                 <div className="mb-6">
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold">SỐ LƯỢNG KẾT QUẢ</p>
                   <div className="grid grid-cols-3 gap-2">
-                    {[1, 2, 3].map((count) => (
+                    {(ecomSubTab === 'pattern-replace' ? [1, 2] : [1, 2, 3]).map((count) => (
                       <button
                         key={count}
                         onClick={() => setEcomImageCount(count)}
@@ -2501,24 +2812,27 @@ function App() {
                   </div>
                 </div>
 
-                <div className="pt-4 space-y-4">
-                  {globalError && (
-                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-3 text-red-400 text-xs">
-                      <p>{globalError}</p>
-                    </div>
-                  )}
-                  <button 
-                    onClick={handleEcomGenerate}
-                    disabled={!ecomProductImage || isEcomGenerating}
-                    className="w-full py-4 rounded-xl bg-editor-accent text-black font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isEcomGenerating ? (
-                      <><Loader2 className="animate-spin" size={20} /> Đang xử lý...</>
-                    ) : (
-                      <><Sparkles size={20} /> Gen ảnh TMĐT</>
-                    )}
-                  </button>
-                </div>
+                {globalError && (
+                  <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-3 text-red-400 text-xs">
+                    <p>{globalError}</p>
+                  </div>
+                )}
+
+                {ecomSubTab !== 'pattern-replace' && (
+                  <div className="pt-4 space-y-4">
+                    <button 
+                      onClick={handleEcomGenerate}
+                      disabled={!ecomProductImage || isEcomGenerating}
+                      className="w-full py-4 rounded-xl bg-editor-accent text-black font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isEcomGenerating ? (
+                        <><Loader2 className="animate-spin" size={20} /> Đang xử lý...</>
+                      ) : (
+                        <><Sparkles size={20} /> Gen ảnh TMĐT</>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           {/* Right panel: Results */}
@@ -3948,6 +4262,88 @@ function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Crop Modal */}
+      <AnimatePresence>
+        {isPatternCropModalOpen && patternSourceImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center p-4"
+          >
+            <div className="w-full max-w-2xl bg-[#1e1e1e] rounded-xl overflow-hidden flex flex-col shadow-2xl">
+              <div className="p-4 border-b border-white/10 flex justify-between items-center bg-[#252525]">
+                <h3 className="text-white font-bold">Chỉnh sửa hình ảnh sản phẩm</h3>
+                <button onClick={() => setIsPatternCropModalOpen(false)} className="text-gray-400 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="relative w-full h-[50vh] min-h-[300px] bg-black/80">
+                <Cropper
+                  image={patternSourceImage}
+                  crop={patternCrop}
+                  zoom={patternZoom}
+                  rotation={patternRotation}
+                  aspect={1}
+                  onCropChange={setPatternCrop}
+                  onZoomChange={setPatternZoom}
+                  onRotationChange={setPatternRotation}
+                  onCropComplete={onPatternCropComplete}
+                />
+              </div>
+
+              <div className="p-4 border-t border-white/10 flex flex-col gap-4 bg-[#252525]">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-gray-400 font-bold uppercase tracking-wider w-20">Thu phóng:</span>
+                    <input
+                      type="range"
+                      value={patternZoom}
+                      min={1}
+                      max={3}
+                      step={0.1}
+                      aria-labelledby="Zoom"
+                      onChange={(e) => setPatternZoom(Number(e.target.value))}
+                      className="flex-1 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-gray-400 font-bold uppercase tracking-wider w-20">Xoay ảnh:</span>
+                    <input
+                      type="range"
+                      value={patternRotation}
+                      min={-180}
+                      max={180}
+                      step={1}
+                      aria-labelledby="Rotation"
+                      onChange={(e) => setPatternRotation(Number(e.target.value))}
+                      className="flex-1 h-1.5 bg-white/20 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <span className="text-xs text-editor-accent font-bold w-8 text-right">{patternRotation}°</span>
+                  </div>
+                </div>
+                <div className="flex justify-end gap-3 mt-2">
+                  <button 
+                    onClick={() => setIsPatternCropModalOpen(false)}
+                    className="px-6 py-2 border border-white/20 rounded-lg text-white font-bold hover:bg-white/10 transition-colors"
+                  >
+                    Đóng
+                  </button>
+                  <button 
+                    onClick={handleSavePatternCrop}
+                    className="px-6 py-2 bg-[#f05123] text-white rounded-lg font-bold hover:bg-[#d0451e] transition-colors shadow-lg"
+                  >
+                    Lưu
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Zoom Lightbox */}
       <AnimatePresence>
         {zoomImage && (
