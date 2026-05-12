@@ -9,6 +9,7 @@ import { saveAs } from 'file-saver';
 import { GoogleGenAI } from "@google/genai";
 import Cropper from 'react-easy-crop';
 import { getCroppedImg } from './utils/cropImage';
+import { stitchImages } from './utils/imageStitcher';
 import { 
   Upload, 
   Palette, 
@@ -294,8 +295,19 @@ function App() {
   const [ecomFinalImages, setEcomFinalImages] = useState<{ id: string, url: string, loading: boolean }[]>([]);
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
-  const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace'>('gen-new');
+  const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay'>('gen-new');
   const [ecomTemplateImage, setEcomTemplateImage] = useState<string | null>(null);
+  const [clonePromptType, setClonePromptType] = useState<'amazon' | 'taobao'>('amazon');
+  
+  // THAY State
+  const [ecomThayModelImage, setEcomThayModelImage] = useState<string | null>(null);
+  const [ecomThayProductImage, setEcomThayProductImage] = useState<string | null>(null);
+  const [ecomThayResult, setEcomThayResult] = useState<string | null>(null);
+  const [isEcomThayGenerating, setIsEcomThayGenerating] = useState(false);
+  const [ecomThayModel, setEcomThayModel] = useState<ModelType>('banana-pro');
+  const [ecomThayPrompt, setEcomThayPrompt] = useState<string>("Thay thế toàn bộ chăn ga gối trên giường bằng họa tiết và chất liệu từ ảnh sản phẩm. Giữ nguyên ánh sáng, nếp gấp và góc nhìn của giường. Output ONLY the resulting image.");
+  const ecomThayModelInputRef = useRef<HTMLInputElement>(null);
+  const ecomThayProductInputRef = useRef<HTMLInputElement>(null);
   
   // Pattern Replace State
   const [patternSourceImage, setPatternSourceImage] = useState<string | null>(null);
@@ -309,6 +321,7 @@ function App() {
   const [patternZoom, setPatternZoom] = useState(1);
   const [patternRotation, setPatternRotation] = useState(0);
   const [patternCroppedAreaPixels, setPatternCroppedAreaPixels] = useState(null);
+  const [isStitchingImages, setIsStitchingImages] = useState(false);
   
   const ecomFileInputRef = useRef<HTMLInputElement>(null);
   const ecomTemplateFileInputRef = useRef<HTMLInputElement>(null);
@@ -1473,19 +1486,23 @@ function App() {
                              err.message?.toLowerCase().includes("api key not valid");
                              
           if (isAuthError) {
-            const hasKey = await window.aistudio.hasSelectedApiKey();
-            if (!hasKey) {
-              await window.aistudio.openSelectKey();
-              const updatedHasKey = await window.aistudio.hasSelectedApiKey();
-              setHasPersonalKey(updatedHasKey);
-              const newApiKey = process.env.API_KEY || '';
-              if (newApiKey) {
-                response = await callTryOn(newApiKey);
+            if (window.aistudio) {
+              const hasKey = await window.aistudio.hasSelectedApiKey();
+              if (!hasKey) {
+                await window.aistudio.openSelectKey();
+                const updatedHasKey = await window.aistudio.hasSelectedApiKey();
+                setHasPersonalKey(updatedHasKey);
+                const newApiKey = process.env.API_KEY || '';
+                if (newApiKey) {
+                  response = await callTryOn(newApiKey);
+                } else {
+                  throw new Error("Vui lòng chọn API Key cá nhân để thực hiện Thay Đồ.");
+                }
               } else {
-                throw new Error("Vui lòng chọn API Key cá nhân để thực hiện Thay Đồ.");
+                throw err;
               }
             } else {
-              throw err;
+              throw new Error("API Key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại ở mục Cài Đặt.");
             }
           } else {
             throw err;
@@ -1607,7 +1624,11 @@ function App() {
     let templateB64: string | undefined = undefined;
 
     if (ecomSubTab === 'clone-template') {
-      currentPrompt = "请复刻图1的设计,为图二生成亚马逊视觉电商A+,越南语";
+      if (clonePromptType === 'amazon') {
+        currentPrompt = "请复刻图1的设计,为图二生成亚马逊视觉电商A+,越南语";
+      } else {
+        currentPrompt = "请复刻图1的设计,为图二生成淘寶视觉电商A+,英文";
+      }
       config = MODEL_CONFIG['gpt2']; // force GPT2
       templateB64 = ecomTemplateImage!.split(',')[1];
     }
@@ -1773,6 +1794,110 @@ function App() {
       setGlobalError(error.message);
     } finally {
       setIsGeneratingPattern(false);
+    }
+  };
+
+  const handleEcomThay = async () => {
+    if (!ecomThayModelImage || !ecomThayProductImage) {
+      setGlobalError("Vui lòng tải lên cả ẢNH GIƯỜNG (MODEL) và ẢNH SẢN PHẨM (PRODUCT).");
+      return;
+    }
+
+    setIsEcomThayGenerating(true);
+    setGlobalError(null);
+    setEcomThayResult(null);
+
+    try {
+      const apiKey = hasPersonalKey ? (process.env.API_KEY || '') : googleApiKey;
+      if (!apiKey && !hasPersonalKey) {
+        if (window.aistudio) {
+          const hasKey = await window.aistudio.hasSelectedApiKey();
+          if (!hasKey) {
+            await window.aistudio.openSelectKey();
+          }
+        } else {
+          throw new Error("Vui lòng thiết lập API Key trong phần Cài đặt.");
+        }
+      }
+
+      const modelB64 = ecomThayModelImage.split(',')[1];
+      const productB64 = ecomThayProductImage.split(',')[1];
+      const actualModelId = MODEL_CONFIG[ecomThayModel]?.id || 'gemini-3-pro-image-preview';
+
+      const callThay = async (currentApiKey: string) => {
+        const ai = new GoogleGenAI({ apiKey: currentApiKey });
+        return await ai.models.generateContent({
+          model: actualModelId,
+          contents: {
+            parts: [
+              { text: `Virtual Try-On Task: ${ecomThayPrompt}` },
+              { inlineData: { data: modelB64, mimeType: 'image/jpeg' } },
+              { inlineData: { data: productB64, mimeType: 'image/jpeg' } }
+            ]
+          },
+          config: {
+            imageConfig: {
+              aspectRatio: "3:4",
+              imageSize: "1K"
+            }
+          }
+        });
+      };
+
+      let response;
+      try {
+        response = await callThay(apiKey);
+      } catch (err: any) {
+        const isAuthError = err.message?.includes("400") || err.message?.includes("403") || 
+                           err.message?.toLowerCase().includes("permission") || 
+                           err.message?.toLowerCase().includes("api key not valid");
+                           
+        if (isAuthError) {
+          if (window.aistudio) {
+            const hasKey = await window.aistudio.hasSelectedApiKey();
+            if (!hasKey) {
+              await window.aistudio.openSelectKey();
+              const updatedHasKey = await window.aistudio.hasSelectedApiKey();
+              setHasPersonalKey(updatedHasKey);
+              const newApiKey = process.env.API_KEY || '';
+              if (newApiKey) {
+                response = await callThay(newApiKey);
+              } else {
+                throw new Error("Vui lòng chọn API Key cá nhân để thực hiện THAY.");
+              }
+            } else {
+              throw err;
+            }
+          } else {
+            throw new Error("API Key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại ở mục Cài Đặt.");
+          }
+        } else {
+          throw err;
+        }
+      }
+
+      let foundImage = false;
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          setEcomThayResult(`data:image/png;base64,${part.inlineData.data}`);
+          foundImage = true;
+          break;
+        }
+      }
+      
+      if (!foundImage) {
+        if (response.text) {
+          console.warn("AI returned text instead of image:", response.text);
+          throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
+        } else {
+          throw new Error("AI không trả về kết quả hợp lệ.");
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      setGlobalError(err.message || "Có lỗi xảy ra khi gọi Google API.");
+    } finally {
+      setIsEcomThayGenerating(false);
     }
   };
 
@@ -2303,6 +2428,12 @@ function App() {
                 >
                   Thay Pattern
                 </button>
+                <button
+                  onClick={() => setEcomSubTab('thay')}
+                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${ecomSubTab === 'thay' ? 'bg-editor-accent text-black shadow-md' : 'text-gray-400 hover:text-white'}`}
+                >
+                  THAY
+                </button>
               </div>
 
               {ecomSubTab === 'clone-template' ? (
@@ -2322,10 +2453,16 @@ function App() {
                             <span className="text-white font-bold text-xs">Thay đổi ảnh Template</span>
                           </div>
                         </>
+                      ) : isStitchingImages ? (
+                        <div className="flex flex-col items-center gap-3 text-editor-accent">
+                          <Loader2 className="animate-spin" size={32} />
+                          <span className="text-sm font-bold animate-pulse">Đang ghép ảnh...</span>
+                        </div>
                       ) : (
-                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent">
+                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
                           <Upload size={32} />
-                          <span className="text-sm font-medium">Click để tải ảnh Template mẫu</span>
+                          <span className="text-sm font-medium">Click để tải 1 ảnh hoặc ghép nhiều ảnh</span>
+                          <span className="text-[10px] opacity-60">Bạn có thể chọn nhiều ảnh cùng lúc để tự động ghép</span>
                         </div>
                       )}
                     </div>
@@ -2352,6 +2489,42 @@ function App() {
                           <span className="text-sm font-medium">Click để tải ảnh Sản phẩm</span>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="mt-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">3. LOẠI TEMPLATE CẦN TẠO</p>
+                    <div className="flex bg-[#252525] p-1 rounded-lg">
+                      <button
+                        onClick={() => setClonePromptType('amazon')}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'amazon' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        Amazon
+                      </button>
+                      <button
+                        onClick={() => setClonePromptType('taobao')}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'taobao' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        Taobao
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">3. KIỂU TEMPLATE</p>
+                    <div className="flex bg-[#252525] p-1 rounded-lg">
+                      <button
+                        onClick={() => setClonePromptType('amazon')}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'amazon' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        Amazon
+                      </button>
+                      <button
+                        onClick={() => setClonePromptType('taobao')}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'taobao' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        Taobao
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -2468,6 +2641,93 @@ function App() {
                     </button>
                   </div>
                 </div>
+              ) : ecomSubTab === 'thay' ? (
+                <div className="flex flex-col gap-6">
+                  {/* Upload Model */}
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">1. ẢNH GIƯỜNG ĐÍCH (MODEL)</p>
+                    <div 
+                      className="w-full aspect-[3/4] border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
+                      onClick={() => ecomThayModelInputRef.current?.click()}
+                    >
+                      {ecomThayModelImage ? (
+                        <>
+                          <img src={ecomThayModelImage} alt="Model" className="w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <span className="text-white font-bold text-xs">Thay đổi</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
+                          <Upload size={32} />
+                          <span className="text-sm font-medium">Tải ảnh Giường Đích</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Upload Product */}
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">2. ẢNH CHĂN GA NGUỒN (PRODUCT)</p>
+                    <div 
+                      className="w-full aspect-[3/4] border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
+                      onClick={() => ecomThayProductInputRef.current?.click()}
+                    >
+                      {ecomThayProductImage ? (
+                        <>
+                          <img src={ecomThayProductImage} alt="Product" className="w-full h-full object-contain" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <span className="text-white font-bold text-xs">Thay đổi</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
+                          <Upload size={32} />
+                          <span className="text-sm font-medium">Tải ảnh Chăn Ga Nguồn</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Settings */}
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">CHỌN MÔ HÌNH AI</p>
+                    <div className="flex bg-[#252525] p-1 rounded-lg mb-4">
+                      <button
+                        onClick={() => setEcomThayModel('banana-pro')}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${ecomThayModel === 'banana-pro' ? 'bg-[#d4ff00] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        BANANA PRO
+                      </button>
+                      <button
+                        onClick={() => setEcomThayModel('banana-2')}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${ecomThayModel === 'banana-2' ? 'bg-[#d4ff00] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        BANANA 2
+                      </button>
+                    </div>
+
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold mt-4">NỘI DUNG PROMPT</p>
+                    <textarea
+                      value={ecomThayPrompt}
+                      onChange={(e) => setEcomThayPrompt(e.target.value)}
+                      className="w-full h-32 bg-[#252525] text-white p-3 rounded-lg border border-white/10 focus:border-editor-accent focus:outline-none resize-none text-sm"
+                      placeholder="Mô tả cách thay thế..."
+                    />
+
+                    <button
+                      onClick={handleEcomThay}
+                      disabled={!ecomThayModelImage || !ecomThayProductImage || isEcomThayGenerating}
+                      className="w-full mt-4 py-3 bg-[#8b9d29] text-black rounded-xl font-bold hover:bg-[#a5ba30] transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
+                    >
+                      {isEcomThayGenerating ? (
+                        <><Loader2 className="animate-spin" size={20} /> ĐANG XỬ LÝ...</>
+                      ) : (
+                        <><Shirt size={20} /> BẮT ĐẦU THAY</>
+                      )}
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <div 
                   className="w-full aspect-square border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group"
@@ -2496,14 +2756,27 @@ function App() {
                 ref={ecomTemplateFileInputRef}
                 className="hidden"
                 accept="image/png, image/jpeg, image/webp"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const r = new FileReader();
-                    r.onload = (ev) => {
-                      setEcomTemplateImage(ev.target?.result as string);
-                    };
-                    r.readAsDataURL(file);
+                multiple
+                onChange={async (e) => {
+                  const files = e.target.files;
+                  if (files && files.length > 0) {
+                    if (files.length === 1) {
+                      const r = new FileReader();
+                      r.onload = (ev) => {
+                        setEcomTemplateImage(ev.target?.result as string);
+                      };
+                      r.readAsDataURL(files[0]);
+                    } else {
+                      setIsStitchingImages(true);
+                      const fileArray = Array.from(files);
+                      const stitched = await stitchImages(fileArray);
+                      if (stitched) {
+                        setEcomTemplateImage(stitched);
+                      } else {
+                        setGlobalError("Có lỗi xảy ra khi ghép ảnh.");
+                      }
+                      setIsStitchingImages(false);
+                    }
                   }
                 }}
               />
@@ -2551,6 +2824,34 @@ function App() {
                   if (file) {
                     const r = new FileReader();
                     r.onload = (ev) => setPatternMockupImage(ev.target?.result as string);
+                    r.readAsDataURL(file);
+                  }
+                }}
+              />
+              <input 
+                type="file" 
+                ref={ecomThayModelInputRef} 
+                className="hidden" 
+                accept="image/png, image/jpeg, image/webp" 
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const r = new FileReader();
+                    r.onload = (ev) => setEcomThayModelImage(ev.target?.result as string);
+                    r.readAsDataURL(file);
+                  }
+                }}
+              />
+              <input 
+                type="file" 
+                ref={ecomThayProductInputRef} 
+                className="hidden" 
+                accept="image/png, image/jpeg, image/webp" 
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const r = new FileReader();
+                    r.onload = (ev) => setEcomThayProductImage(ev.target?.result as string);
                     r.readAsDataURL(file);
                   }
                 }}
@@ -2707,6 +3008,9 @@ function App() {
             </>
             )}
 
+            {(ecomSubTab === 'gen-new' || ecomSubTab === 'clone-template') && (
+              <>
+
                 <div className="mb-6">
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold mt-4">Google AI Engine</p>
                   <div className="grid grid-cols-3 gap-2">
@@ -2796,7 +3100,7 @@ function App() {
                 <div className="mb-6">
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold">SỐ LƯỢNG KẾT QUẢ</p>
                   <div className="grid grid-cols-3 gap-2">
-                    {(ecomSubTab === 'pattern-replace' ? [1, 2] : [1, 2, 3]).map((count) => (
+                    {[1, 2, 3].map((count) => (
                       <button
                         key={count}
                         onClick={() => setEcomImageCount(count)}
@@ -2818,27 +3122,61 @@ function App() {
                   </div>
                 )}
 
-                {ecomSubTab !== 'pattern-replace' && (
-                  <div className="pt-4 space-y-4">
-                    <button 
-                      onClick={handleEcomGenerate}
-                      disabled={!ecomProductImage || isEcomGenerating}
-                      className="w-full py-4 rounded-xl bg-editor-accent text-black font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isEcomGenerating ? (
-                        <><Loader2 className="animate-spin" size={20} /> Đang xử lý...</>
-                      ) : (
-                        <><Sparkles size={20} /> Gen ảnh TMĐT</>
-                      )}
-                    </button>
-                  </div>
-                )}
+                <div className="pt-4 space-y-4">
+                  <button 
+                    onClick={handleEcomGenerate}
+                    disabled={!ecomProductImage || isEcomGenerating}
+                    className="w-full py-4 rounded-xl bg-editor-accent text-black font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isEcomGenerating ? (
+                      <><Loader2 className="animate-spin" size={20} /> Đang xử lý...</>
+                    ) : (
+                      <><Sparkles size={20} /> Gen ảnh TMĐT</>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {(ecomSubTab === 'thay' || ecomSubTab === 'pattern-replace') && globalError && (
+               <div className="mt-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-3 text-red-400 text-xs">
+                 <p>{globalError}</p>
+               </div>
+            )}
               </div>
             </div>
           {/* Right panel: Results */}
           <div className="lg:col-span-8 flex flex-col gap-4">
             <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
-              {selectedEcomGrid ? (
+              {ecomSubTab === 'thay' ? (
+                <div className="flex flex-col items-center justify-center w-full h-full">
+                  <h3 className="text-xl font-bold text-white mb-6 uppercase tracking-widest text-editor-accent">KẾT QUẢ THAY ĐỔI</h3>
+                  <div className="w-full max-w-2xl aspect-[3/4] border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center bg-black/30 overflow-hidden relative">
+                    {ecomThayResult ? (
+                      <img src={ecomThayResult} alt="Thay Result" className="w-full h-full object-contain" />
+                    ) : (
+                      <div className="flex flex-col items-center gap-4 text-gray-500">
+                        <ImageIcon size={64} className="opacity-50" />
+                        <p className="font-bold tracking-widest uppercase text-sm">CHƯA CÓ KẾT QUẢ</p>
+                        <p className="text-xs max-w-xs text-center">Tải lên 2 ảnh và bấm BẮT ĐẦU THAY để xem kết quả.</p>
+                      </div>
+                    )}
+                  </div>
+                  {ecomThayResult && (
+                    <button 
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.href = ecomThayResult;
+                        link.download = `thay-result-${Date.now()}.png`;
+                        link.click();
+                      }}
+                      className="mt-6 px-6 py-3 bg-[#d4ff00] text-black font-bold rounded-xl flex items-center gap-2 hover:bg-[#b0d600] transition"
+                    >
+                      <Download size={20} /> Tải Kết Quả
+                    </button>
+                  )}
+                </div>
+              ) : selectedEcomGrid ? (
                 <div className="flex flex-col items-center">
                   {ecomBoxes.length > 0 ? (
                     <div className="w-full flex flex-col items-center">
@@ -3070,6 +3408,17 @@ function App() {
                         >
                           <Crop size={14} /> Chọn Tách
                         </button>
+                        {ecomSubTab === 'gen-new' && (
+                          <button 
+                            onClick={() => {
+                              setEcomTemplateImage(res);
+                              setEcomSubTab('clone-template');
+                            }}
+                            className="px-4 py-2 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-2 w-32 justify-center text-xs hover:bg-indigo-600 transition-colors"
+                          >
+                            <Copy size={14} /> Dùng làm Mẫu
+                          </button>
+                        )}
                         <button 
                           onClick={() => {
                             const link = document.createElement('a');
