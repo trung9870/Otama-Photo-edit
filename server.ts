@@ -128,28 +128,93 @@ async function startServer() {
         
         let inputUrls: string[] = [];
         try {
-          const uploadBase64ToTmpFiles = async (b64: string): Promise<string> => {
+          // Try KIE.AI's own File Upload API first (most reliable for KIE.AI tasks),
+          // then fall back to third-party temp hosts if KIE upload fails.
+          const uploadBase64WithFallback = async (b64: string): Promise<string> => {
             const buffer = Buffer.from(b64, 'base64');
-            const formData = new FormData();
-            formData.append('file', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
-            const uploadRes = await fetch('https://tmpfiles.org/api/v1/upload', {
-              method: 'POST',
-              body: formData
-            });
-            const uploadData = await uploadRes.json();
-            const pageUrl = uploadData?.data?.url;
-            if (!pageUrl) throw new Error("No URL returned");
-            return pageUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/').replace('http://', 'https://');
+
+            const uploadToKieAi = async (): Promise<string> => {
+              const res = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  base64Data: `data:image/jpeg;base64,${b64}`,
+                  uploadPath: 'images/base64',
+                  fileName: `image-${Date.now()}.jpg`
+                })
+              });
+              const data: any = await res.json();
+              const url = data?.data?.downloadUrl;
+              if (!res.ok || !url) {
+                throw new Error(`status ${res.status}: ${JSON.stringify(data).slice(0, 200)}`);
+              }
+              return url;
+            };
+
+            const uploadToCatbox = async (): Promise<string> => {
+              const formData = new FormData();
+              formData.append('reqtype', 'fileupload');
+              formData.append('fileToUpload', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
+              const res = await fetch('https://catbox.moe/user/api.php', { method: 'POST', body: formData });
+              const text = (await res.text()).trim();
+              if (!res.ok || !text.startsWith('https://')) {
+                throw new Error(`${res.status} ${text.slice(0, 100)}`);
+              }
+              return text;
+            };
+
+            const uploadToTmpFiles = async (): Promise<string> => {
+              const formData = new FormData();
+              formData.append('file', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
+              const res = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: formData });
+              const data: any = await res.json();
+              const pageUrl = data?.data?.url;
+              if (!pageUrl) throw new Error(`no URL: ${JSON.stringify(data).slice(0, 200)}`);
+              return pageUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/').replace('http://', 'https://');
+            };
+
+            const uploadTo0x0 = async (): Promise<string> => {
+              const formData = new FormData();
+              formData.append('file', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
+              const res = await fetch('https://0x0.st', { method: 'POST', body: formData });
+              const text = (await res.text()).trim();
+              if (!res.ok || !text.startsWith('https://')) {
+                throw new Error(`${res.status} ${text.slice(0, 100)}`);
+              }
+              return text;
+            };
+
+            const hosts: Array<{ name: string; fn: () => Promise<string> }> = [
+              { name: 'kie.ai', fn: uploadToKieAi },
+              { name: 'catbox.moe', fn: uploadToCatbox },
+              { name: 'tmpfiles.org', fn: uploadToTmpFiles },
+              { name: '0x0.st', fn: uploadTo0x0 },
+            ];
+            const errors: string[] = [];
+            for (const host of hosts) {
+              try {
+                const url = await host.fn();
+                console.log(`[upload] Success via ${host.name}: ${url}`);
+                return url;
+              } catch (err: any) {
+                console.warn(`[upload] ${host.name} failed: ${err.message}`);
+                errors.push(`${host.name}: ${err.message}`);
+              }
+            }
+            throw new Error(`Tất cả host ảnh tạm đều fail. ${errors.join(' | ')}`);
           };
 
           if (templateBase64) {
             // Upload both parallelly. Prompt rule: Template is Image 1, Product is Image 2.
             inputUrls = await Promise.all([
-              uploadBase64ToTmpFiles(templateBase64),
-              uploadBase64ToTmpFiles(imageBase64)
+              uploadBase64WithFallback(templateBase64),
+              uploadBase64WithFallback(imageBase64)
             ]);
           } else {
-            inputUrls = [await uploadBase64ToTmpFiles(imageBase64)];
+            inputUrls = [await uploadBase64WithFallback(imageBase64)];
           }
         } catch (e: any) {
            return res.status(500).json({ error: "Lỗi tải ảnh tĩnh lên máy chủ tạm: " + e.message });
@@ -257,7 +322,7 @@ async function startServer() {
   // API endpoint for AI analysis (using owner's key)
   app.post("/api/analyze", async (req, res) => {
     try {
-      const { imageBase64 } = req.body;
+      const { imageBase64, mode } = req.body;
       const apiKey = process.env.GEMINI_API_KEY;
 
       if (!apiKey) {
@@ -265,6 +330,65 @@ async function startServer() {
       }
 
       const ai = new GoogleGenAI({ apiKey });
+
+      const analyzeMode: 'fashion' | 'bedding' = mode === 'bedding' ? 'bedding' : 'fashion';
+
+      const FASHION_PROMPT = "Analyze this image and generate a detailed prompt for recreating a similar product photo. Focus on: styling, angle, lighting, background, props, and technical details. IMPORTANT: Do not describe the specific product shown in the image (e.g., don't say 'denim shorts'). Instead, use a generic placeholder like 'the product' or 'main subject' so this prompt can be reused for any item. Output ONLY the JSON object.";
+
+      const BEDDING_PROMPT = `Bạn là copywriter chuyên ngành chăn ga gối Việt Nam, 10 năm kinh nghiệm
+viết content Shopee/TikTok Shop. Brand: ngọt ngào, gần gũi, hướng đến
+phụ nữ 22-40 tuổi.
+
+[Phân tích ảnh sản phẩm đính kèm]
+
+NHIỆM VỤ:
+Tạo 8 cặp HEADLINE + BODY tiếng Việt cho trang chi tiết sản phẩm.
+Mỗi cặp tương ứng 1 ảnh, mỗi ảnh 1 selling point.
+
+ĐIỂM MẠNH ĐÃ CÓ SẴN (có thể để trống):
+{
+  -
+  -
+  -
+}
+→ Nếu có, đưa các điểm này vào 8 cặp đầu tiên, viết rõ và sâu hơn.
+→ Còn thiếu thì tự đề xuất từ phân tích ảnh.
+
+YÊU CẦU MỖI CẶP:
+- HEADLINE: 3-5 từ IN HOA, mạnh, dễ nhớ.
+  Ví dụ tốt: "ÔM TRỌN AN TÂM", "MỀM NHƯ MÂY", "MÁT CẢ ĐÊM HÈ"
+  Ví dụ tệ: "SẢN PHẨM CHẤT LƯỢNG CAO", "TỐI ƯU HOÁ TRẢI NGHIỆM"
+
+- BODY: tối đa 12 từ, văn nói tự nhiên, đúng cách người Việt nói.
+  Ví dụ tốt: "Cotton chải mịn — da nhạy cảm vẫn dùng yên tâm"
+  Ví dụ tệ: "Sản phẩm được sản xuất từ chất liệu cao cấp đảm bảo"
+
+- KHÔNG dùng Hán-Việt cứng: "hoạt tính", "tăng cường", "tối ưu", "đảm bảo"
+- KHÔNG dịch word-by-word từ tiếng Trung
+- DÙNG cảm xúc thật: ngọt, mềm, êm, ôm, mát, ấm, nhẹ nhàng
+
+8 GÓC NHÌN ĐA DẠNG (chọn 8, không lặp ý):
+1. Cảm giác khi dùng (mềm, mát, êm, ôm)
+2. Chất liệu vải / ruột bông
+3. Kích thước — phù hợp ai (người cao, gia đình, bé)
+4. Công năng đa dụng (nếu có)
+5. Độ bền — giặt nhiều lần vẫn đẹp
+6. Công nghệ in / dệt / nhuộm
+7. Chi tiết tinh tế (đường may, khoá kéo, viền, nhãn)
+8. Giá trị cảm xúc (quà tặng, decor phòng, không gian)
+
+ĐẦU RA — CHÍNH XÁC FORMAT NÀY, KHÔNG THÊM GÌ:
+
+图 1: HEADLINE "..." / BODY "..."
+图 2: HEADLINE "..." / BODY "..."
+图 3: HEADLINE "..." / BODY "..."
+图 4: HEADLINE "..." / BODY "..."
+图 5: HEADLINE "..." / BODY "..."
+图 6: HEADLINE "..." / BODY "..."
+图 7: HEADLINE "..." / BODY "..."
+图 8: HEADLINE "..." / BODY "..."`;
+
+      const promptText = analyzeMode === 'bedding' ? BEDDING_PROMPT : FASHION_PROMPT;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -276,14 +400,10 @@ async function startServer() {
                 mimeType: "image/jpeg",
               },
             },
-            { 
-              text: "Analyze this image and generate a detailed prompt for recreating a similar product photo. Focus on: styling, angle, lighting, background, props, and technical details. IMPORTANT: Do not describe the specific product shown in the image (e.g., don't say 'denim shorts'). Instead, use a generic placeholder like 'the product' or 'main subject' so this prompt can be reused for any item. Output ONLY the JSON object." 
-            }
+            { text: promptText }
           ],
         },
-        config: {
-          responseMimeType: "application/json"
-        }
+        config: analyzeMode === 'fashion' ? { responseMimeType: "application/json" } : {}
       });
 
       const resultText = response.text;

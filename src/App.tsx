@@ -43,7 +43,8 @@ import {
   Wand2,
   ZoomIn,
   MessageSquare,
-  Languages
+  Languages,
+  Bed
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -161,6 +162,13 @@ interface SavedModel {
   createdAt: any;
 }
 
+interface SavedRoom {
+  id: string;
+  imageUrl: string;
+  uid: string;
+  createdAt: any;
+}
+
 const DEFAULT_GEN_PROMPTS: SavedPrompt[] = [
   { 
     id: 'g1', 
@@ -252,6 +260,7 @@ function App() {
   });
   const [selectedEcomPromptId, setSelectedEcomPromptId] = useState<string>('e1');
   const [ecomPromptText, setEcomPromptText] = useState<string>(defaultEcomPrompts[0].prompt);
+  const [ecomSupplementaryPrompt, setEcomSupplementaryPrompt] = useState<string>('');
 
   useEffect(() => {
     if (selectedEcomPromptId !== 'manual') {
@@ -308,7 +317,13 @@ function App() {
   const [ecomThayPrompt, setEcomThayPrompt] = useState<string>("Thay thế toàn bộ chăn ga gối trên giường bằng họa tiết và chất liệu từ ảnh sản phẩm. Giữ nguyên ánh sáng, nếp gấp và góc nhìn của giường. Output ONLY the resulting image.");
   const ecomThayModelInputRef = useRef<HTMLInputElement>(null);
   const ecomThayProductInputRef = useRef<HTMLInputElement>(null);
-  
+  const [thayDragOver, setThayDragOver] = useState<'model' | 'product' | null>(null);
+  const [thayPasteTarget, setThayPasteTarget] = useState<'model' | 'product'>('model');
+
+  // Generic upload drop-zone state — used by all standalone upload boxes
+  const [pasteTargetId, setPasteTargetId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+
   // Pattern Replace State
   const [patternSourceImage, setPatternSourceImage] = useState<string | null>(null);
   const [generatedPattern, setGeneratedPattern] = useState<string | null>(null);
@@ -341,6 +356,9 @@ function App() {
   const [isSavingAnalyzed, setIsSavingAnalyzed] = useState(false);
   const [savePromptName, setSavePromptName] = useState('');
   const analyzeFileInputRef = useRef<HTMLInputElement>(null);
+  const [analyzeMode, setAnalyzeMode] = useState<'fashion' | 'bedding'>('fashion');
+  const [analyzeDragOver, setAnalyzeDragOver] = useState(false);
+  const [analyzedCopied, setAnalyzedCopied] = useState(false);
 
   // Try-On State
   const [tryOnModelImage, setTryOnModelImage] = useState<string | null>(null);
@@ -362,6 +380,10 @@ function App() {
   const [savedModels, setSavedModels] = useState<SavedModel[]>([]);
   const [isSavingModel, setIsSavingModel] = useState(false);
   const modelListFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [savedRooms, setSavedRooms] = useState<SavedRoom[]>([]);
+  const [isSavingRoom, setIsSavingRoom] = useState(false);
+  const roomListFileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedPromptId, setSelectedPromptId] = useState<string>('');
   const [aiPrompt, setAiPrompt] = useState<string>('');
@@ -735,6 +757,262 @@ function App() {
     // Reset input
     e.target.value = '';
   };
+
+  // Sync Saved Rooms
+  useEffect(() => {
+    if (!isAuthReady || !user) {
+      setSavedRooms([]);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'rooms'),
+      where('uid', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const rooms = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as SavedRoom[];
+
+      const sortedRooms = rooms.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis?.() || 0;
+        const timeB = b.createdAt?.toMillis?.() || 0;
+        return timeB - timeA;
+      });
+
+      setSavedRooms(sortedRooms);
+    }, (error) => {
+      console.error("Rooms sync error:", error);
+      if (error.message.includes('index')) {
+        setGlobalError("Hệ thống đang khởi tạo dữ liệu (thiếu index). Vui lòng thử lại sau vài phút.");
+      }
+    });
+
+    return () => unsubscribe();
+  }, [isAuthReady, user]);
+
+  const handleSaveRoom = async (imageUrl: string) => {
+    if (!user) {
+      setGlobalError("Vui lòng đăng nhập để lưu phòng/giường mẫu.");
+      return;
+    }
+    if (savedRooms.length >= 5) {
+      setGlobalError("Bạn chỉ có thể lưu tối đa 5 phòng/giường mẫu. Vui lòng xóa bớt để thêm mới.");
+      return;
+    }
+
+    setIsSavingRoom(true);
+    setGlobalError(null);
+
+    try {
+      const resizedImage = await new Promise<string>((resolve, reject) => {
+        let imageUrlToLoad = imageUrl;
+        if (imageUrlToLoad.startsWith("http")) {
+          imageUrlToLoad = `/api/proxy-image?url=${encodeURIComponent(imageUrlToLoad)}`;
+        }
+
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const MAX_HEIGHT = 800;
+            let width = img.width;
+            let height = img.height;
+
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.7));
+          } catch (e) {
+            reject(e);
+          }
+        };
+        img.onerror = () => reject(new Error("Không thể tải ảnh để xử lý."));
+        img.src = imageUrlToLoad;
+      });
+
+      const roomId = `room-${Date.now()}`;
+      await setDoc(doc(db, 'rooms', roomId), {
+        id: roomId,
+        imageUrl: resizedImage,
+        uid: user.uid,
+        createdAt: Timestamp.now()
+      });
+      console.log("Room saved successfully:", roomId);
+    } catch (error: any) {
+      console.error("Save room error:", error);
+      let msg = "Không thể lưu phòng/giường mẫu.";
+      if (error.message?.includes('permission')) msg = "Bạn không có quyền lưu ảnh (lỗi bảo mật).";
+      if (error.message?.includes('quota')) msg = "Hệ thống hết dung lượng lưu trữ tạm thời.";
+      setGlobalError(msg);
+    } finally {
+      setIsSavingRoom(false);
+    }
+  };
+
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, 'rooms', roomId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'rooms');
+    }
+  };
+
+  const handleRoomListUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const result = ev.target?.result as string;
+        if (result) handleSaveRoom(result);
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  };
+
+  const loadFileToThay = (file: File, target: 'model' | 'product') => {
+    if (!file.type.startsWith('image/')) {
+      setGlobalError("File không phải ảnh hợp lệ.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      if (!result) return;
+      if (target === 'model') setEcomThayModelImage(result);
+      else setEcomThayProductImage(result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Paste (Ctrl+V) listener for Phân Tích Ảnh tab
+  useEffect(() => {
+    if (activeTab !== 'analyze') return;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            const reader = new FileReader();
+            reader.onload = (ev) => setAnalyzeImage(ev.target?.result as string);
+            reader.readAsDataURL(file);
+          }
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [activeTab]);
+
+  // Refs map for generic upload boxes (used by paste setters)
+  const uploadSettersRef = useRef<Record<string, (dataUrl: string) => void>>({});
+
+  // Generic drop-handlers helper. Also registers the setter so global paste can route to it.
+  const makeDropHandlers = (id: string, setter: (dataUrl: string) => void) => {
+    uploadSettersRef.current[id] = setter;
+    return {
+      onDragEnter: (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setDragOverId(id); },
+      onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); },
+      onDragLeave: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOverId((prev: string | null) => (prev === id ? null : prev));
+      },
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOverId(null);
+        setPasteTargetId(id);
+        const file = e.dataTransfer.files?.[0];
+        if (file && file.type.startsWith('image/')) {
+          const r = new FileReader();
+          r.onload = (ev) => setter(ev.target?.result as string);
+          r.readAsDataURL(file);
+        }
+      },
+    };
+  };
+
+  // Global paste listener — routes to whichever upload box was last clicked
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (!pasteTargetId) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      const setter = uploadSettersRef.current[pasteTargetId];
+      if (!setter) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            const r = new FileReader();
+            r.onload = (ev) => setter(ev.target?.result as string);
+            r.readAsDataURL(file);
+          }
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [pasteTargetId]);
+
+  // Paste (Ctrl+V) listener for THAY tab — routes pasted image to last-clicked box
+  useEffect(() => {
+    if (ecomSubTab !== 'thay') return;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            loadFileToThay(file, thayPasteTarget);
+          }
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [ecomSubTab, thayPasteTarget]);
 
   const handleLogin = async () => {
     try {
@@ -1252,7 +1530,7 @@ function App() {
         const response = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64 })
+          body: JSON.stringify({ imageBase64: base64, mode: analyzeMode })
         });
 
         if (response.ok) {
@@ -1362,9 +1640,16 @@ function App() {
 
   const useAnalyzedPrompt = () => {
     if (!analyzedPrompt) return;
-    setAiPrompt(analyzedPrompt);
-    setActiveTab('generate');
-    setGlobalError("Đã áp dụng prompt! Chuyển sang tab Gen ảnh.");
+    if (analyzeMode === 'bedding') {
+      setEcomSupplementaryPrompt(analyzedPrompt);
+      setAppMode('ecom');
+      setEcomSubTab('gen-new');
+      setGlobalError("Đã áp dụng vào BỔ SUNG PROMPT của Ecom > Gen new.");
+    } else {
+      setAiPrompt(analyzedPrompt);
+      setActiveTab('generate');
+      setGlobalError("Đã áp dụng prompt! Chuyển sang tab Gen ảnh.");
+    }
     setTimeout(() => setGlobalError(null), 3000);
   };
 
@@ -1631,6 +1916,11 @@ function App() {
       }
       config = MODEL_CONFIG['gpt2']; // force GPT2
       templateB64 = ecomTemplateImage!.split(',')[1];
+    }
+
+    // Gộp prompt bổ sung (chỉ áp dụng cho Gen new)
+    if (ecomSubTab === 'gen-new' && ecomSupplementaryPrompt.trim()) {
+      currentPrompt = `${currentPrompt}\n\n[YÊU CẦU BỔ SUNG — ƯU TIÊN CAO]:\n${ecomSupplementaryPrompt.trim()}`;
     }
 
     try {
@@ -2440,9 +2730,11 @@ function App() {
                 <div className="flex flex-col gap-4">
                   <div>
                     <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">1. ẢNH TEMPLATE MẪU</p>
-                    <div 
-                      className="w-full aspect-square border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
+                    <div
+                      {...makeDropHandlers('ecom-template', setEcomTemplateImage)}
+                      className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${dragOverId === 'ecom-template' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
                       onClick={() => {
+                        setPasteTargetId('ecom-template');
                         if (ecomTemplateFileInputRef.current) ecomTemplateFileInputRef.current.click();
                       }}
                     >
@@ -2470,9 +2762,11 @@ function App() {
 
                   <div>
                     <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">2. ẢNH SẢN PHẨM (GỐC)</p>
-                    <div 
-                      className="w-full aspect-square border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
+                    <div
+                      {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
+                      className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${dragOverId === 'ecom-product' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
                       onClick={() => {
+                        setPasteTargetId('ecom-product');
                         if (ecomFileInputRef.current) ecomFileInputRef.current.click();
                       }}
                     >
@@ -2536,9 +2830,11 @@ function App() {
                       <span className="w-5 h-5 rounded-full bg-editor-accent text-black flex items-center justify-center text-xs">1</span>
                       TẠO PATTERN TỪ ẢNH MẪU
                     </h3>
-                    <div 
-                      className="w-full aspect-square border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
+                    <div
+                      {...makeDropHandlers('pattern-source', (s) => { setPatternSourceImage(s); setGeneratedPattern(null); })}
+                      className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${dragOverId === 'pattern-source' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
                       onClick={() => {
+                        setPasteTargetId('pattern-source');
                         if (patternSourceFileInputRef.current) patternSourceFileInputRef.current.click();
                       }}
                     >
@@ -2607,9 +2903,11 @@ function App() {
                       <span className="w-5 h-5 rounded-full bg-editor-accent text-black flex items-center justify-center text-xs">2</span>
                       ÁP DỤNG LÊN SẢN PHẨM MẪU
                     </h3>
-                    <div 
-                      className="w-full aspect-square border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
+                    <div
+                      {...makeDropHandlers('pattern-mockup', setPatternMockupImage)}
+                      className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${dragOverId === 'pattern-mockup' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
                       onClick={() => {
+                        setPasteTargetId('pattern-mockup');
                         if (patternMockupFileInputRef.current) patternMockupFileInputRef.current.click();
                       }}
                     >
@@ -2645,10 +2943,31 @@ function App() {
                 <div className="flex flex-col gap-6">
                   {/* Upload Model */}
                   <div>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">1. ẢNH GIƯỜNG ĐÍCH (MODEL)</p>
-                    <div 
-                      className="w-full aspect-[3/4] border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
-                      onClick={() => ecomThayModelInputRef.current?.click()}
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold flex items-center gap-2">
+                      <span>1. ẢNH GIƯỜNG ĐÍCH (MODEL)</span>
+                      {thayPasteTarget === 'model' && (
+                        <span className="text-[9px] text-editor-accent normal-case tracking-normal font-medium">• Ctrl+V để dán</span>
+                      )}
+                    </p>
+                    <div
+                      className={`w-full aspect-[3/4] border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${
+                        thayDragOver === 'model' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'
+                      }`}
+                      onClick={() => {
+                        setThayPasteTarget('model');
+                        ecomThayModelInputRef.current?.click();
+                      }}
+                      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver('model'); }}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver(null); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setThayDragOver(null);
+                        setThayPasteTarget('model');
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) loadFileToThay(file, 'model');
+                      }}
                     >
                       {ecomThayModelImage ? (
                         <>
@@ -2660,18 +2979,93 @@ function App() {
                       ) : (
                         <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
                           <Upload size={32} />
-                          <span className="text-sm font-medium">Tải ảnh Giường Đích</span>
+                          <span className="text-sm font-medium">Tải, kéo thả hoặc Ctrl+V ảnh Giường Đích</span>
                         </div>
                       )}
+                    </div>
+
+                    {/* Saved Rooms List */}
+                    <div className="flex flex-col gap-2 mt-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Giường đã lưu ({savedRooms.length}/5)</p>
+                        {savedRooms.length < 5 && (
+                          <button
+                            onClick={() => {
+                              if (!user) {
+                                handleLogin();
+                              } else {
+                                roomListFileInputRef.current?.click();
+                              }
+                            }}
+                            disabled={isSavingRoom}
+                            className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
+                          >
+                            {isSavingRoom ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
+                            THÊM MỚI
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-5 gap-2">
+                        {savedRooms.map((room) => (
+                          <div
+                            key={room.id}
+                            className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all cursor-pointer group ${
+                              ecomThayModelImage === room.imageUrl ? 'border-editor-accent' : 'border-editor-border hover:border-gray-600'
+                            }`}
+                            onClick={() => setEcomThayModelImage(room.imageUrl)}
+                          >
+                            <img src={room.imageUrl} alt="Saved Room" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteRoom(room.id);
+                              }}
+                              className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
+                        ))}
+                        {Array.from({ length: 5 - savedRooms.length }).map((_, i) => (
+                          <div
+                            key={`empty-room-${i}`}
+                            className="aspect-[3/4] rounded-lg border-2 border-dashed border-editor-border flex items-center justify-center bg-black/20"
+                          >
+                            <Bed size={16} className="text-gray-700" />
+                          </div>
+                        ))}
+                      </div>
+                      <input type="file" ref={roomListFileInputRef} className="hidden" accept="image/*" onChange={handleRoomListUpload} />
                     </div>
                   </div>
 
                   {/* Upload Product */}
                   <div>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">2. ẢNH CHĂN GA NGUỒN (PRODUCT)</p>
-                    <div 
-                      className="w-full aspect-[3/4] border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group bg-black/20"
-                      onClick={() => ecomThayProductInputRef.current?.click()}
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold flex items-center gap-2">
+                      <span>2. ẢNH CHĂN GA NGUỒN (PRODUCT)</span>
+                      {thayPasteTarget === 'product' && (
+                        <span className="text-[9px] text-editor-accent normal-case tracking-normal font-medium">• Ctrl+V để dán</span>
+                      )}
+                    </p>
+                    <div
+                      className={`w-full aspect-[3/4] border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${
+                        thayDragOver === 'product' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'
+                      }`}
+                      onClick={() => {
+                        setThayPasteTarget('product');
+                        ecomThayProductInputRef.current?.click();
+                      }}
+                      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver('product'); }}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver(null); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setThayDragOver(null);
+                        setThayPasteTarget('product');
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) loadFileToThay(file, 'product');
+                      }}
                     >
                       {ecomThayProductImage ? (
                         <>
@@ -2683,7 +3077,7 @@ function App() {
                       ) : (
                         <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
                           <Upload size={32} />
-                          <span className="text-sm font-medium">Tải ảnh Chăn Ga Nguồn</span>
+                          <span className="text-sm font-medium">Tải, kéo thả hoặc Ctrl+V ảnh Chăn Ga Nguồn</span>
                         </div>
                       )}
                     </div>
@@ -2729,9 +3123,11 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <div 
-                  className="w-full aspect-square border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center cursor-pointer hover:border-editor-accent overflow-hidden transition-colors relative group"
+                <div
+                  {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
+                  className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group ${dragOverId === 'ecom-product' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
                   onClick={() => {
+                    setPasteTargetId('ecom-product');
                     if (ecomFileInputRef.current) ecomFileInputRef.current.click();
                   }}
                 >
@@ -2745,7 +3141,7 @@ function App() {
                   ) : (
                     <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent">
                       <Upload size={32} />
-                      <span className="text-sm font-medium">Click để tải ảnh sản phẩm</span>
+                      <span className="text-sm font-medium">Click, kéo thả hoặc Ctrl+V ảnh sản phẩm</span>
                     </div>
                   )}
                 </div>
@@ -2991,7 +3387,7 @@ function App() {
                   )}
 
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-4">NỘI DUNG PROMPT HIỆN TẠI</p>
-                  <textarea 
+                  <textarea
                     value={ecomPromptText}
                     onChange={(e) => {
                       setEcomPromptText(e.target.value);
@@ -3000,8 +3396,29 @@ function App() {
                       }
                     }}
                     placeholder="Mô tả nội dung..."
-                    className="w-full h-24 bg-editor-border/10 border border-editor-border rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-editor-accent resize-none placeholder-gray-600 mb-6"
+                    className="w-full h-24 bg-editor-border/10 border border-editor-border rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-editor-accent resize-none placeholder-gray-600 mb-4"
                   />
+
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-editor-accent uppercase tracking-widest font-bold">+ Bổ sung prompt (tuỳ chọn)</p>
+                    {ecomSupplementaryPrompt && (
+                      <button
+                        onClick={() => setEcomSupplementaryPrompt('')}
+                        className="text-[10px] text-gray-500 hover:text-red-400 font-bold"
+                      >
+                        XOÁ
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    value={ecomSupplementaryPrompt}
+                    onChange={(e) => setEcomSupplementaryPrompt(e.target.value)}
+                    placeholder="VD: Sản phẩm là chăn ga họa tiết hoa cúc xanh navy, phong cách Hàn Quốc tối giản, không có chữ Trung Quốc trên ảnh..."
+                    className="w-full h-24 bg-editor-accent/5 border border-editor-accent/40 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-editor-accent resize-none placeholder-gray-600 mb-2"
+                  />
+                  <p className="text-[10px] text-gray-500 mb-6">
+                    Khi gen, phần này sẽ được nối vào cuối prompt mặc định với độ ưu tiên cao.
+                  </p>
                 </div>
 
               </div>
@@ -3991,12 +4408,47 @@ function App() {
                 <Scan className="text-editor-accent" />
                 Tải ảnh mẫu để phân tích
               </h2>
-              <div 
+
+              <div>
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">Loại phân tích</p>
+                <div className="flex bg-[#252525] p-1 rounded-lg">
+                  <button
+                    onClick={() => setAnalyzeMode('fashion')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${analyzeMode === 'fashion' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                  >
+                    FASHION
+                  </button>
+                  <button
+                    onClick={() => setAnalyzeMode('bedding')}
+                    className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${analyzeMode === 'bedding' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                  >
+                    BEDDING
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-500 mt-2">
+                  {analyzeMode === 'fashion'
+                    ? 'Sinh prompt tả phong cách chụp (JSON) — dùng để gen ảnh giống style.'
+                    : 'Sinh 8 cặp HEADLINE + BODY tiếng Việt cho trang chi tiết chăn ga.'}
+                </p>
+              </div>
+
+              <div
                 onClick={() => analyzeFileInputRef.current?.click()}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`glass-panel aspect-video flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-editor-accent transition-all relative overflow-hidden ${isDragging ? 'border-editor-accent bg-editor-accent/5' : ''}`}
+                onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setAnalyzeDragOver(true); }}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setAnalyzeDragOver(false); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setAnalyzeDragOver(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && file.type.startsWith('image/')) {
+                    const r = new FileReader();
+                    r.onload = (ev) => setAnalyzeImage(ev.target?.result as string);
+                    r.readAsDataURL(file);
+                  }
+                }}
+                className={`glass-panel aspect-video flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-editor-accent transition-all relative overflow-hidden ${analyzeDragOver ? 'border-editor-accent bg-editor-accent/10' : ''}`}
               >
                 {analyzeImage ? (
                   <>
@@ -4055,7 +4507,32 @@ function App() {
                 <Sparkles className="text-editor-accent" />
                 Kết quả Prompt
               </h2>
-              <div className="glass-panel flex-1 min-h-[300px] p-4 font-mono text-xs overflow-auto bg-black/20">
+              <div className="glass-panel flex-1 min-h-[300px] p-4 font-mono text-xs overflow-auto bg-black/20 relative">
+                {analyzedPrompt && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(analyzedPrompt);
+                        setAnalyzedCopied(true);
+                        setTimeout(() => setAnalyzedCopied(false), 1800);
+                      } catch (err) {
+                        console.error('Copy failed:', err);
+                      }
+                    }}
+                    className={`absolute top-2 right-2 z-10 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${
+                      analyzedCopied
+                        ? 'bg-green-500 text-black'
+                        : 'bg-editor-border/60 text-white hover:bg-editor-accent hover:text-black'
+                    }`}
+                    title="Sao chép kết quả"
+                  >
+                    {analyzedCopied ? (
+                      <><CheckCircle2 size={12} /> ĐÃ COPY</>
+                    ) : (
+                      <><Copy size={12} /> COPY</>
+                    )}
+                  </button>
+                )}
                 {analyzedPrompt ? (
                   <pre className="whitespace-pre-wrap text-editor-accent">{analyzedPrompt}</pre>
                 ) : (
@@ -4155,20 +4632,10 @@ function App() {
                 {/* Model Image Upload */}
                 <div className="flex flex-col gap-3">
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Ảnh người mẫu (Model)</p>
-                  <div 
-                    onClick={() => modelFileInputRef.current?.click()}
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const file = e.dataTransfer.files[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => setTryOnModelImage(ev.target?.result as string);
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                    className={`aspect-[3/4] glass-panel relative overflow-hidden flex items-center justify-center cursor-pointer transition-all border-dashed border-2 ${tryOnModelImage ? 'border-editor-accent' : 'border-editor-border hover:border-editor-accent'}`}
+                  <div
+                    onClick={() => { setPasteTargetId('tryon-model'); modelFileInputRef.current?.click(); }}
+                    {...makeDropHandlers('tryon-model', setTryOnModelImage)}
+                    className={`aspect-[3/4] glass-panel relative overflow-hidden flex items-center justify-center cursor-pointer transition-all border-dashed border-2 ${dragOverId === 'tryon-model' ? 'border-editor-accent bg-editor-accent/10' : tryOnModelImage ? 'border-editor-accent' : 'border-editor-border hover:border-editor-accent'}`}
                   >
                     {tryOnModelImage ? (
                       <img src={tryOnModelImage} alt="Model" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
@@ -4256,19 +4723,9 @@ function App() {
                     )}
                   </div>
                   <div 
-                    onClick={() => productFileInputRef.current?.click()}
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const file = e.dataTransfer.files[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => setTryOnProductImage(ev.target?.result as string);
-                        reader.readAsDataURL(file);
-                      }
-                    }}
-                    className={`aspect-[3/4] glass-panel relative overflow-hidden flex items-center justify-center cursor-pointer transition-all border-dashed border-2 ${tryOnProductImage ? 'border-editor-accent' : 'border-editor-border hover:border-editor-accent'}`}
+                    onClick={() => { setPasteTargetId('tryon-product'); productFileInputRef.current?.click(); }}
+                    {...makeDropHandlers('tryon-product', setTryOnProductImage)}
+                    className={`aspect-[3/4] glass-panel relative overflow-hidden flex items-center justify-center cursor-pointer transition-all border-dashed border-2 ${dragOverId === 'tryon-product' ? 'border-editor-accent bg-editor-accent/10' : tryOnProductImage ? 'border-editor-accent' : 'border-editor-border hover:border-editor-accent'}`}
                   >
                     {tryOnProductImage ? (
                       <>
