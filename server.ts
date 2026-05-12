@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({ path: ['.env.local', '.env'] });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,6 +45,16 @@ async function startServer() {
       const defaultApiKey = process.env.GEMINI_API_KEY;
 
       const runKieImageTask = async (inputUrls: string[], prompt: string, apiKey: string, aspectRatio: string, imageSize: string) => {
+        // Kie.ai gpt-image-2 constraints:
+        //   - aspect_ratio chỉ chấp nhận '1:1', '9:16', 'auto'
+        //   - khi aspect_ratio = 'auto' → resolution BẮT BUỘC = '1K'
+        //   - khi aspect_ratio = '1:1' và yêu cầu 4K → tự giảm về 2K (4K không hỗ trợ)
+        const finalAspectRatio = aspectRatio === '1:1' ? '1:1' : (aspectRatio === '9:16' ? '9:16' : 'auto');
+        const requestedSize = (imageSize || '1K').toUpperCase();
+        const finalResolution = finalAspectRatio === 'auto'
+          ? '1K'
+          : (finalAspectRatio === '1:1' && requestedSize === '4K' ? '2K' : requestedSize);
+
         const createRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
           method: 'POST',
           headers: {
@@ -56,8 +66,8 @@ async function startServer() {
             input: {
               prompt: prompt,
               input_urls: inputUrls,
-              aspect_ratio: aspectRatio === '1:1' ? '1:1' : (aspectRatio === '9:16' ? '9:16' : 'auto'),
-              resolution: (aspectRatio === '1:1' && (imageSize || '1K').toUpperCase() === '4K') ? '2K' : (aspectRatio === 'auto' ? '1K' : (imageSize || '1K').toUpperCase())
+              aspect_ratio: finalAspectRatio,
+              resolution: finalResolution
             }
           })
         });
@@ -258,44 +268,51 @@ async function startServer() {
 
       const ai = new GoogleGenAI(aiOptions);
 
-      const response = await ai.models.generateContent({
-        model: modelId,
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                data: imageBase64,
-                mimeType: "image/jpeg",
-              },
-            },
-            { text: prompt },
-          ],
-        },
-        config: {
-          imageConfig: {
-            aspectRatio: aspectRatio || "1:1",
-            imageSize: imageSize || "1K",
-            numberOfImages: numberOfImages || 1
-          } as any
-        }
-      });
+      const count = numberOfImages && typeof numberOfImages === 'number' && numberOfImages > 0 ? numberOfImages : 1;
 
-      // Extract images from response
-      const candidates = response.candidates;
-      const imagesBase64: string[] = [];
-      
-      if (candidates && candidates[0].content.parts) {
-        for (const part of candidates[0].content.parts) {
-          if (part.inlineData) {
-            imagesBase64.push(part.inlineData.data);
+      const callGeminiOnce = async (variantIdx: number): Promise<string[]> => {
+        const variedPrompt = prompt + ' '.repeat(variantIdx);
+        const response = await ai.models.generateContent({
+          model: modelId,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  data: imageBase64,
+                  mimeType: "image/jpeg",
+                },
+              },
+              { text: variedPrompt },
+            ],
+          },
+          config: {
+            imageConfig: {
+              aspectRatio: aspectRatio || "1:1",
+              imageSize: imageSize || "1K",
+              numberOfImages: 1
+            } as any
+          }
+        });
+
+        const out: string[] = [];
+        for (const cand of response.candidates || []) {
+          for (const part of cand.content?.parts || []) {
+            if (part.inlineData) out.push(part.inlineData.data);
           }
         }
-      }
+        return out;
+      };
+
+      const results = await Promise.all(
+        Array.from({ length: count }).map((_, i) => callGeminiOnce(i))
+      );
+      const imagesBase64: string[] = results.flat();
+      console.log(`[server] Gemini returned ${imagesBase64.length} image(s) for ${count} requested`);
 
       if (imagesBase64.length > 0) {
-        return res.json({ 
+        return res.json({
           imageBase64: imagesBase64[0], // Keep backward compatibility for single image
-          imagesBase64 
+          imagesBase64
         });
       }
 
@@ -390,21 +407,43 @@ YÊU CẦU MỖI CẶP:
 
       const promptText = analyzeMode === 'bedding' ? BEDDING_PROMPT : FASHION_PROMPT;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                data: imageBase64,
-                mimeType: "image/jpeg",
+      const modelsToTry = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.0-flash"];
+      const maxAttempts = 3;
+      let response: any = null;
+      let lastError: any = null;
+
+      outer: for (const modelName of modelsToTry) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            response = await ai.models.generateContent({
+              model: modelName,
+              contents: {
+                parts: [
+                  {
+                    inlineData: {
+                      data: imageBase64,
+                      mimeType: "image/jpeg",
+                    },
+                  },
+                  { text: promptText }
+                ],
               },
-            },
-            { text: promptText }
-          ],
-        },
-        config: analyzeMode === 'fashion' ? { responseMimeType: "application/json" } : {}
-      });
+              config: analyzeMode === 'fashion' ? { responseMimeType: "application/json" } : {}
+            });
+            console.log(`[server] analyze succeeded with ${modelName} (attempt ${attempt})`);
+            break outer;
+          } catch (e: any) {
+            lastError = e;
+            const msg = e?.message || '';
+            const isOverload = msg.includes('high demand') || msg.includes('UNAVAILABLE') || msg.includes('overloaded') || msg.includes('503');
+            console.warn(`[server] analyze ${modelName} attempt ${attempt} failed: ${msg.slice(0, 120)}`);
+            if (!isOverload) throw e;
+            if (attempt < maxAttempts) await new Promise(r => setTimeout(r, attempt * 1500));
+          }
+        }
+      }
+
+      if (!response) throw lastError || new Error('Analyze failed after retries');
 
       const resultText = response.text;
       if (!resultText) {
@@ -418,6 +457,8 @@ YÊU CẦU MỖI CẶP:
       let errorMessage = error.message || "Internal Server Error";
       if (errorMessage.includes("API key not valid") || errorMessage.includes("API_KEY_INVALID")) {
         errorMessage = "API key không hợp lệ. Vui lòng kiểm tra lại.";
+      } else if (errorMessage.includes("high demand") || errorMessage.includes("UNAVAILABLE") || errorMessage.includes("overloaded") || errorMessage.includes("503")) {
+        errorMessage = "Google Gemini đang quá tải (server bị overload). Đã thử 3 model và 3 lần retry vẫn không được. Vui lòng đợi 1-2 phút rồi thử lại.";
       } else if (errorMessage.includes("prepayment credits are depleted") || errorMessage.includes("429")) {
         errorMessage = "API key đã hết tín dụng. Vui lòng nạp thêm hoặc đổi API key khác.";
       } else if (typeof errorMessage === 'string' && errorMessage.startsWith('{')) {

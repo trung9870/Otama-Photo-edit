@@ -44,7 +44,9 @@ import {
   ZoomIn,
   MessageSquare,
   Languages,
-  Bed
+  Bed,
+  Pencil,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -290,11 +292,25 @@ function App() {
   const [ecomBoxes, setEcomBoxes] = useState<{id: string, cropUrl: string}[]>([]);
   const [selectedBoxIds, setSelectedBoxIds] = useState<string[]>([]);
   const [enhanceAspectRatio, setEnhanceAspectRatio] = useState<string>('9:16');
+  const [enhanceModel, setEnhanceModel] = useState<'banana-pro' | 'banana-2'>('banana-2');
   const [isDetectingBoxes, setIsDetectingBoxes] = useState(false);
   const [ecomProductImage, setEcomProductImage] = useState<string | null>(null);
   const [ecomModel, setEcomModel] = useState<ModelType>('gpt2');
   const [ecomAspectRatio, setEcomAspectRatio] = useState<string>('9:16');
   const [ecomImageSize, setEcomImageSize] = useState<string>('1k');
+
+  // Auto-correct ecomImageSize khi model/aspect-ratio thay đổi khiến size hiện tại không khả dụng
+  useEffect(() => {
+    const availableSizes: string[] = ecomModel === 'gpt2'
+      ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
+        : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
+        : ['1k'])
+      : ['1k', '2k', '4k'];
+    if (!availableSizes.includes(ecomImageSize)) {
+      setEcomImageSize(availableSizes[availableSizes.length - 1]);
+    }
+  }, [ecomModel, ecomAspectRatio]);
+
   const [ecomImageCount, setEcomImageCount] = useState<number>(3);
   const [isEcomGenerating, setIsEcomGenerating] = useState(false);
   const [ecomResults, setEcomResults] = useState<string[]>([]);
@@ -319,6 +335,10 @@ function App() {
   const ecomThayProductInputRef = useRef<HTMLInputElement>(null);
   const [thayDragOver, setThayDragOver] = useState<'model' | 'product' | null>(null);
   const [thayPasteTarget, setThayPasteTarget] = useState<'model' | 'product'>('model');
+  const [isEditingSavedRooms, setIsEditingSavedRooms] = useState(false);
+  const [draftDeletedRoomIds, setDraftDeletedRoomIds] = useState<Set<string>>(new Set());
+  const [isEditingSavedModels, setIsEditingSavedModels] = useState(false);
+  const [draftDeletedModelIds, setDraftDeletedModelIds] = useState<Set<string>>(new Set());
 
   // Generic upload drop-zone state — used by all standalone upload boxes
   const [pasteTargetId, setPasteTargetId] = useState<string | null>(null);
@@ -2426,7 +2446,7 @@ function App() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  modelId: 'gemini-3-pro-image-preview', // Force Banana Pro
+                  modelId: enhanceModel === 'banana-pro' ? 'gemini-3-pro-image-preview' : 'gemini-3.1-flash-image-preview',
                   prompt: 'High-resolution upscale of this product image. Preserve all details, colors, and the original composition. Enhance sharpness, clarity and remove any compression artifacts. Professional studio quality.',
                   imageBase64: base64Data,
                   aspectRatio: enhanceAspectRatio,
@@ -2498,7 +2518,7 @@ function App() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  modelId: 'gemini-3-pro-image-preview', // Force Banana Pro
+                  modelId: 'gemini-3.1-flash-image-preview', // Force Banana 2 (free tier)
                   prompt: 'Translate all Chinese text in this image into Vietnamese. Keep the exact same layout, background, font style, formatting and colors. Only change the text to Vietnamese.',
                   imageBase64: base64Data,
                   aspectRatio: enhanceAspectRatio,
@@ -2940,153 +2960,15 @@ function App() {
                   </div>
                 </div>
               ) : ecomSubTab === 'thay' ? (
-                <div className="flex flex-col gap-6">
-                  {/* Upload Model */}
-                  <div>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold flex items-center gap-2">
-                      <span>1. ẢNH GIƯỜNG ĐÍCH (MODEL)</span>
-                      {thayPasteTarget === 'model' && (
-                        <span className="text-[9px] text-editor-accent normal-case tracking-normal font-medium">• Ctrl+V để dán</span>
-                      )}
-                    </p>
-                    <div
-                      className={`w-full aspect-[3/4] border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${
-                        thayDragOver === 'model' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'
-                      }`}
-                      onClick={() => {
-                        setThayPasteTarget('model');
-                        ecomThayModelInputRef.current?.click();
-                      }}
-                      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver('model'); }}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver(null); }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setThayDragOver(null);
-                        setThayPasteTarget('model');
-                        const file = e.dataTransfer.files?.[0];
-                        if (file) loadFileToThay(file, 'model');
-                      }}
-                    >
-                      {ecomThayModelImage ? (
-                        <>
-                          <img src={ecomThayModelImage} alt="Model" className="w-full h-full object-contain" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="text-white font-bold text-xs">Thay đổi</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
-                          <Upload size={32} />
-                          <span className="text-sm font-medium">Tải, kéo thả hoặc Ctrl+V ảnh Giường Đích</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Saved Rooms List */}
-                    <div className="flex flex-col gap-2 mt-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Giường đã lưu ({savedRooms.length}/5)</p>
-                        {savedRooms.length < 5 && (
-                          <button
-                            onClick={() => {
-                              if (!user) {
-                                handleLogin();
-                              } else {
-                                roomListFileInputRef.current?.click();
-                              }
-                            }}
-                            disabled={isSavingRoom}
-                            className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
-                          >
-                            {isSavingRoom ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
-                            THÊM MỚI
-                          </button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-5 gap-2">
-                        {savedRooms.map((room) => (
-                          <div
-                            key={room.id}
-                            className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all cursor-pointer group ${
-                              ecomThayModelImage === room.imageUrl ? 'border-editor-accent' : 'border-editor-border hover:border-gray-600'
-                            }`}
-                            onClick={() => setEcomThayModelImage(room.imageUrl)}
-                          >
-                            <img src={room.imageUrl} alt="Saved Room" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteRoom(room.id);
-                              }}
-                              className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                            >
-                              <Trash2 size={10} />
-                            </button>
-                          </div>
-                        ))}
-                        {Array.from({ length: 5 - savedRooms.length }).map((_, i) => (
-                          <div
-                            key={`empty-room-${i}`}
-                            className="aspect-[3/4] rounded-lg border-2 border-dashed border-editor-border flex items-center justify-center bg-black/20"
-                          >
-                            <Bed size={16} className="text-gray-700" />
-                          </div>
-                        ))}
-                      </div>
-                      <input type="file" ref={roomListFileInputRef} className="hidden" accept="image/*" onChange={handleRoomListUpload} />
-                    </div>
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-2 text-editor-accent mb-1">
+                    <Sparkles size={18} />
+                    <h3 className="font-bold text-sm uppercase tracking-widest">Cấu hình Thay Đồ</h3>
                   </div>
 
-                  {/* Upload Product */}
-                  <div>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold flex items-center gap-2">
-                      <span>2. ẢNH CHĂN GA NGUỒN (PRODUCT)</span>
-                      {thayPasteTarget === 'product' && (
-                        <span className="text-[9px] text-editor-accent normal-case tracking-normal font-medium">• Ctrl+V để dán</span>
-                      )}
-                    </p>
-                    <div
-                      className={`w-full aspect-[3/4] border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${
-                        thayDragOver === 'product' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'
-                      }`}
-                      onClick={() => {
-                        setThayPasteTarget('product');
-                        ecomThayProductInputRef.current?.click();
-                      }}
-                      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver('product'); }}
-                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver(null); }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setThayDragOver(null);
-                        setThayPasteTarget('product');
-                        const file = e.dataTransfer.files?.[0];
-                        if (file) loadFileToThay(file, 'product');
-                      }}
-                    >
-                      {ecomThayProductImage ? (
-                        <>
-                          <img src={ecomThayProductImage} alt="Product" className="w-full h-full object-contain" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="text-white font-bold text-xs">Thay đổi</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
-                          <Upload size={32} />
-                          <span className="text-sm font-medium">Tải, kéo thả hoặc Ctrl+V ảnh Chăn Ga Nguồn</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Settings */}
                   <div>
                     <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">CHỌN MÔ HÌNH AI</p>
-                    <div className="flex bg-[#252525] p-1 rounded-lg mb-4">
+                    <div className="flex bg-[#252525] p-1 rounded-lg">
                       <button
                         onClick={() => setEcomThayModel('banana-pro')}
                         className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${ecomThayModel === 'banana-pro' ? 'bg-[#d4ff00] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
@@ -3100,27 +2982,35 @@ function App() {
                         BANANA 2
                       </button>
                     </div>
+                  </div>
 
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold mt-4">NỘI DUNG PROMPT</p>
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">NỘI DUNG PROMPT</p>
                     <textarea
                       value={ecomThayPrompt}
                       onChange={(e) => setEcomThayPrompt(e.target.value)}
                       className="w-full h-32 bg-[#252525] text-white p-3 rounded-lg border border-white/10 focus:border-editor-accent focus:outline-none resize-none text-sm"
                       placeholder="Mô tả cách thay thế..."
                     />
-
-                    <button
-                      onClick={handleEcomThay}
-                      disabled={!ecomThayModelImage || !ecomThayProductImage || isEcomThayGenerating}
-                      className="w-full mt-4 py-3 bg-[#8b9d29] text-black rounded-xl font-bold hover:bg-[#a5ba30] transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
-                    >
-                      {isEcomThayGenerating ? (
-                        <><Loader2 className="animate-spin" size={20} /> ĐANG XỬ LÝ...</>
-                      ) : (
-                        <><Shirt size={20} /> BẮT ĐẦU THAY</>
-                      )}
-                    </button>
                   </div>
+
+                  <button
+                    onClick={handleEcomThay}
+                    disabled={!ecomThayModelImage || !ecomThayProductImage || isEcomThayGenerating}
+                    className="w-full py-3 bg-[#8b9d29] text-black rounded-xl font-bold hover:bg-[#a5ba30] transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
+                  >
+                    {isEcomThayGenerating ? (
+                      <><Loader2 className="animate-spin" size={20} /> ĐANG XỬ LÝ...</>
+                    ) : (
+                      <><Shirt size={20} /> BẮT ĐẦU THAY</>
+                    )}
+                  </button>
+
+                  {(!ecomThayModelImage || !ecomThayProductImage) && (
+                    <p className="text-[10px] text-gray-500 text-center">
+                      👉 Tải ảnh Giường Đích & Chăn Ga ở khu vực bên phải
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div
@@ -3498,19 +3388,35 @@ function App() {
                 <div className="mb-6">
                   <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold">CHẤT LƯỢNG ẢNH</p>
                   <div className="grid grid-cols-3 gap-2">
-                    {['1k', '2k', '4k'].map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => setEcomImageSize(size)}
-                        className={`py-2 rounded-xl border text-center transition-all ${
-                          ecomImageSize === size 
-                            ? 'border-editor-accent bg-editor-accent/5 text-editor-accent' 
-                            : 'border-editor-border hover:border-gray-600 text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        <span className="text-[11px] font-bold uppercase">{size}</span>
-                      </button>
-                    ))}
+                    {(() => {
+                      // Compute available sizes based on Kie.ai constraints for GPT2
+                      const availableSizes: string[] = ecomModel === 'gpt2'
+                        ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
+                          : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
+                          : ['1k']) // 3:4, 4:3, 16:9
+                        : ['1k', '2k', '4k']; // Banana Pro / Banana 2 hỗ trợ đủ
+
+                      return ['1k', '2k', '4k'].map((size) => {
+                        const isAvailable = availableSizes.includes(size);
+                        return (
+                          <button
+                            key={size}
+                            onClick={() => isAvailable && setEcomImageSize(size)}
+                            disabled={!isAvailable}
+                            title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
+                            className={`py-2 rounded-xl border text-center transition-all ${
+                              !isAvailable
+                                ? 'border-editor-border/30 bg-black/40 text-gray-700 cursor-not-allowed opacity-40'
+                                : ecomImageSize === size
+                                  ? 'border-editor-accent bg-editor-accent/5 text-editor-accent'
+                                  : 'border-editor-border hover:border-gray-600 text-gray-400 hover:text-white'
+                            }`}
+                          >
+                            <span className="text-[11px] font-bold uppercase">{size}</span>
+                          </button>
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
 
@@ -3566,32 +3472,281 @@ function App() {
           <div className="lg:col-span-8 flex flex-col gap-4">
             <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
               {ecomSubTab === 'thay' ? (
-                <div className="flex flex-col items-center justify-center w-full h-full">
-                  <h3 className="text-xl font-bold text-white mb-6 uppercase tracking-widest text-editor-accent">KẾT QUẢ THAY ĐỔI</h3>
-                  <div className="w-full max-w-2xl aspect-[3/4] border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center bg-black/30 overflow-hidden relative">
-                    {ecomThayResult ? (
-                      <img src={ecomThayResult} alt="Thay Result" className="w-full h-full object-contain" />
-                    ) : (
-                      <div className="flex flex-col items-center gap-4 text-gray-500">
-                        <ImageIcon size={64} className="opacity-50" />
-                        <p className="font-bold tracking-widest uppercase text-sm">CHƯA CÓ KẾT QUẢ</p>
-                        <p className="text-xs max-w-xs text-center">Tải lên 2 ảnh và bấm BẮT ĐẦU THAY để xem kết quả.</p>
+                <div className="flex flex-col gap-6 w-full">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* 1. Model Image */}
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold flex items-center gap-2">
+                        <span>1. ẢNH GIƯỜNG ĐÍCH (MODEL)</span>
+                        {thayPasteTarget === 'model' && (
+                          <span className="text-[9px] text-editor-accent normal-case tracking-normal font-medium">• Ctrl+V</span>
+                        )}
+                      </p>
+                      <div
+                        className={`w-full aspect-[3/4] border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${
+                          thayDragOver === 'model' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'
+                        }`}
+                        onClick={() => {
+                          setThayPasteTarget('model');
+                          ecomThayModelInputRef.current?.click();
+                        }}
+                        onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver('model'); }}
+                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver(null); }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setThayDragOver(null);
+                          setThayPasteTarget('model');
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) loadFileToThay(file, 'model');
+                        }}
+                      >
+                        {ecomThayModelImage ? (
+                          <>
+                            <img src={ecomThayModelImage} alt="Model" className="w-full h-full object-contain" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="text-white font-bold text-xs">Thay đổi</span>
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setZoomImage(ecomThayModelImage); }}
+                              className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10"
+                              title="Phóng to"
+                            >
+                              <ZoomIn size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
+                            <Bed size={32} />
+                            <span className="text-xs font-medium">Tải ảnh Giường Đích</span>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+
+                    {/* 2. Product Image */}
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold flex items-center gap-2">
+                        <span>2. ẢNH CHĂN GA (PRODUCT)</span>
+                        {thayPasteTarget === 'product' && (
+                          <span className="text-[9px] text-editor-accent normal-case tracking-normal font-medium">• Ctrl+V</span>
+                        )}
+                      </p>
+                      <div
+                        className={`w-full aspect-[3/4] border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${
+                          thayDragOver === 'product' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'
+                        }`}
+                        onClick={() => {
+                          setThayPasteTarget('product');
+                          ecomThayProductInputRef.current?.click();
+                        }}
+                        onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver('product'); }}
+                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setThayDragOver(null); }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setThayDragOver(null);
+                          setThayPasteTarget('product');
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) loadFileToThay(file, 'product');
+                        }}
+                      >
+                        {ecomThayProductImage ? (
+                          <>
+                            <img src={ecomThayProductImage} alt="Product" className="w-full h-full object-contain" />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="text-white font-bold text-xs">Thay đổi</span>
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setZoomImage(ecomThayProductImage); }}
+                              className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10"
+                              title="Phóng to"
+                            >
+                              <ZoomIn size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
+                            <Shirt size={32} />
+                            <span className="text-xs font-medium">Tải ảnh Chăn Ga</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 3. Result */}
+                    <div className="flex flex-col gap-2">
+                      <p className="text-[10px] text-editor-accent uppercase tracking-widest font-bold">KẾT QUẢ THAY ĐỔI (RESULT)</p>
+                      <div className="w-full aspect-[3/4] border-2 border-dashed border-editor-border rounded-xl flex items-center justify-center bg-black/30 overflow-hidden relative">
+                        {isEcomThayGenerating ? (
+                          <>
+                            <div className="animate-pulse absolute inset-0 bg-gray-800/20" />
+                            <div className="flex flex-col items-center gap-3 relative z-10">
+                              <Loader2 className="animate-spin text-editor-accent" size={40} />
+                              <p className="text-editor-accent text-xs font-bold uppercase tracking-widest animate-pulse">Đang thay đồ...</p>
+                              <p className="text-gray-400 text-[10px] max-w-[180px] text-center">AI đang xử lý, 30s — 2 phút.</p>
+                            </div>
+                          </>
+                        ) : ecomThayResult ? (
+                          <>
+                            <img src={ecomThayResult} alt="Thay Result" className="w-full h-full object-contain" />
+                            <button
+                              onClick={() => setZoomImage(ecomThayResult)}
+                              className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10"
+                              title="Phóng to"
+                            >
+                              <ZoomIn size={14} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = ecomThayResult;
+                                link.download = `thay-result-${Date.now()}.png`;
+                                link.click();
+                              }}
+                              className="absolute bottom-3 right-3 p-3 bg-editor-accent text-black rounded-full shadow-lg hover:scale-110 transition-transform"
+                              title="Tải ảnh về"
+                            >
+                              <Download size={18} />
+                            </button>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center gap-3 text-gray-500 px-4 text-center">
+                            <ImageIcon size={40} className="opacity-50" />
+                            <p className="font-bold tracking-widest uppercase text-[10px]">CHƯA CÓ KẾT QUẢ</p>
+                            <p className="text-[10px] opacity-70">Tải 2 ảnh & bấm Bắt Đầu Thay</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  {ecomThayResult && (
-                    <button 
-                      onClick={() => {
-                        const link = document.createElement('a');
-                        link.href = ecomThayResult;
-                        link.download = `thay-result-${Date.now()}.png`;
-                        link.click();
-                      }}
-                      className="mt-6 px-6 py-3 bg-[#d4ff00] text-black font-bold rounded-xl flex items-center gap-2 hover:bg-[#b0d600] transition"
-                    >
-                      <Download size={20} /> Tải Kết Quả
-                    </button>
-                  )}
+
+                  {/* Saved rooms — full width below */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Giường đã lưu ({savedRooms.length}/5)</p>
+                      <div className="flex items-center gap-3">
+                        {isEditingSavedRooms ? (
+                          <>
+                            <button
+                              onClick={async () => {
+                                for (const id of draftDeletedRoomIds) {
+                                  await handleDeleteRoom(id);
+                                }
+                                setDraftDeletedRoomIds(new Set());
+                                setIsEditingSavedRooms(false);
+                              }}
+                              className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1"
+                            >
+                              <Check size={10} /> LƯU
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDraftDeletedRoomIds(new Set());
+                                setIsEditingSavedRooms(false);
+                              }}
+                              className="text-[10px] text-gray-400 font-bold hover:underline flex items-center gap-1"
+                            >
+                              <X size={10} /> HỦY
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {savedRooms.length > 0 && (
+                              <button
+                                onClick={() => setIsEditingSavedRooms(true)}
+                                className="text-[10px] text-gray-400 font-bold hover:text-editor-accent hover:underline flex items-center gap-1"
+                              >
+                                <Pencil size={10} /> CHỈNH SỬA
+                              </button>
+                            )}
+                            {savedRooms.length < 5 && (
+                              <button
+                                onClick={() => {
+                                  if (!user) {
+                                    handleLogin();
+                                  } else {
+                                    roomListFileInputRef.current?.click();
+                                  }
+                                }}
+                                disabled={isSavingRoom}
+                                className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
+                              >
+                                {isSavingRoom ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
+                                THÊM MỚI
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-5 gap-2 max-w-md">
+                      {savedRooms.map((room) => {
+                        const isMarkedForDelete = draftDeletedRoomIds.has(room.id);
+                        return (
+                          <div
+                            key={room.id}
+                            className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all group ${
+                              isMarkedForDelete
+                                ? 'border-red-500 opacity-50'
+                                : ecomThayModelImage === room.imageUrl ? 'border-editor-accent cursor-pointer' : 'border-editor-border hover:border-gray-600 cursor-pointer'
+                            }`}
+                            onClick={() => {
+                              if (!isEditingSavedRooms) {
+                                setEcomThayModelImage(room.imageUrl);
+                              }
+                            }}
+                          >
+                            <img src={room.imageUrl} alt="Saved Room" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            {isEditingSavedRooms ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDraftDeletedRoomIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(room.id)) next.delete(room.id);
+                                    else next.add(room.id);
+                                    return next;
+                                  });
+                                }}
+                                className={`absolute top-1 right-1 p-1 rounded-md transition-colors ${isMarkedForDelete ? 'bg-red-500 text-white' : 'bg-black/70 hover:bg-red-500 text-white'}`}
+                                title={isMarkedForDelete ? 'Bỏ chọn xóa' : 'Đánh dấu xóa'}
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setZoomImage(room.imageUrl);
+                                }}
+                                className="absolute top-1 right-1 p-1 bg-black/70 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black"
+                                title="Phóng to"
+                              >
+                                <ZoomIn size={10} />
+                              </button>
+                            )}
+                            {isMarkedForDelete && (
+                              <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center pointer-events-none">
+                                <span className="text-[9px] font-bold text-white bg-red-600 px-2 py-0.5 rounded">SẼ XÓA</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {Array.from({ length: 5 - savedRooms.length }).map((_, i) => (
+                        <div
+                          key={`empty-room-${i}`}
+                          className="aspect-[3/4] rounded-lg border-2 border-dashed border-editor-border flex items-center justify-center bg-black/20"
+                        >
+                          <Bed size={16} className="text-gray-700" />
+                        </div>
+                      ))}
+                    </div>
+                    <input type="file" ref={roomListFileInputRef} className="hidden" accept="image/*" onChange={handleRoomListUpload} />
+                  </div>
                 </div>
               ) : selectedEcomGrid ? (
                 <div className="flex flex-col items-center">
@@ -3625,25 +3780,43 @@ function App() {
                         })}
                       </div>
                       <div className="flex flex-wrap items-center gap-4 mb-8">
-                        <button 
+                        <button
                           onClick={() => {
                             if (ecomFinalImages.length > 0) {
                               if (!window.confirm("Phân tích lại sẽ xóa các kết quả đã tạo. Bạn có chắc chắn?")) return;
                             }
-                            setEcomBoxes([]); 
-                            setSelectedBoxIds([]); 
-                            setEcomFinalImages([]); 
+                            setEcomBoxes([]);
+                            setSelectedBoxIds([]);
+                            setEcomFinalImages([]);
                           }}
                           className="px-6 py-3 bg-gray-800 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-gray-700 transition"
                           disabled={isEcomEnhancing}
                         >
                           Phân tích lại
                         </button>
-                        
+
+                        <button
+                          onClick={() => {
+                            if (selectedBoxIds.length === ecomBoxes.length) {
+                              setSelectedBoxIds([]);
+                            } else {
+                              setSelectedBoxIds(ecomBoxes.map(b => b.id));
+                            }
+                          }}
+                          disabled={isEcomEnhancing || ecomBoxes.length === 0}
+                          className="px-4 py-3 bg-editor-border/30 border border-editor-border text-white text-sm font-bold rounded-xl flex items-center gap-2 hover:bg-editor-border/50 transition disabled:opacity-50"
+                        >
+                          {selectedBoxIds.length === ecomBoxes.length && ecomBoxes.length > 0 ? (
+                            <><X size={16} /> Bỏ chọn tất cả</>
+                          ) : (
+                            <><Check size={16} /> Chọn tất cả ({ecomBoxes.length})</>
+                          )}
+                        </button>
+
                         <div className="flex items-center gap-3 bg-editor-border/20 px-4 py-2 rounded-xl border border-editor-border/50">
-                          <span className="text-sm font-medium text-gray-300">Tỉ lệ xuất:</span>
-                          <select 
-                            value={enhanceAspectRatio} 
+                          <span className="text-sm font-medium text-gray-300">Tỉ lệ:</span>
+                          <select
+                            value={enhanceAspectRatio}
                             onChange={(e) => setEnhanceAspectRatio(e.target.value)}
                             className="bg-gray-900 border border-editor-border text-white text-sm rounded-lg py-1.5 px-3 focus:ring-editor-accent focus:border-editor-accent outline-none"
                             disabled={isEcomEnhancing}
@@ -3656,7 +3829,29 @@ function App() {
                           </select>
                         </div>
 
-                        <button 
+                        <div className="flex items-center gap-3 bg-editor-border/20 px-4 py-2 rounded-xl border border-editor-border/50">
+                          <span className="text-sm font-medium text-gray-300">Model:</span>
+                          <div className="flex bg-gray-900 p-1 rounded-lg gap-1">
+                            <button
+                              onClick={() => setEnhanceModel('banana-2')}
+                              disabled={isEcomEnhancing}
+                              className={`px-3 py-1 text-xs font-bold rounded transition-all ${enhanceModel === 'banana-2' ? 'bg-editor-accent text-black' : 'text-gray-400 hover:text-white'}`}
+                              title="Free, nhanh, chất lượng đủ"
+                            >
+                              Banana 2 (Free)
+                            </button>
+                            <button
+                              onClick={() => setEnhanceModel('banana-pro')}
+                              disabled={isEcomEnhancing}
+                              className={`px-3 py-1 text-xs font-bold rounded transition-all ${enhanceModel === 'banana-pro' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                              title="Tốn phí, chi tiết hơn, chậm hơn"
+                            >
+                              Banana Pro ($)
+                            </button>
+                          </div>
+                        </div>
+
+                        <button
                           onClick={handleEnhanceSelectedBoxes}
                           disabled={isEcomEnhancing || selectedBoxIds.length === 0}
                           className="px-6 py-3 bg-editor-accent text-black font-bold rounded-xl flex items-center gap-2 hover:opacity-90 transition disabled:opacity-50"
@@ -3676,7 +3871,30 @@ function App() {
                               <h3 className="font-bold text-white text-lg flex items-center gap-2">
                                 <Sparkles size={20} className="text-editor-accent" /> Kết quả Tách Ảnh ({ecomFinalImages.length})
                               </h3>
-                              <div className="flex gap-3">
+                              <div className="flex gap-3 flex-wrap">
+                                {(() => {
+                                  const readyResults = ecomFinalImages.filter(img => !img.loading);
+                                  const allSelected = readyResults.length > 0 && readyResults.every(img => selectedResultIds.includes(img.id));
+                                  return (
+                                    <button
+                                      onClick={() => {
+                                        if (allSelected) {
+                                          setSelectedResultIds([]);
+                                        } else {
+                                          setSelectedResultIds(readyResults.map(img => img.id));
+                                        }
+                                      }}
+                                      disabled={readyResults.length === 0}
+                                      className="px-4 py-2 bg-editor-border/30 border border-editor-border text-white text-xs font-bold rounded-lg hover:bg-editor-border/50 transition flex items-center gap-2 disabled:opacity-50"
+                                    >
+                                      {allSelected ? (
+                                        <><X size={14} /> Bỏ chọn tất cả</>
+                                      ) : (
+                                        <><Check size={14} /> Chọn tất cả ({readyResults.length})</>
+                                      )}
+                                    </button>
+                                  );
+                                })()}
                                 {selectedResultIds.length > 0 && (
                                   <button onClick={async () => {
                                     const zip = new JSZip();
@@ -4638,7 +4856,16 @@ function App() {
                     className={`aspect-[3/4] glass-panel relative overflow-hidden flex items-center justify-center cursor-pointer transition-all border-dashed border-2 ${dragOverId === 'tryon-model' ? 'border-editor-accent bg-editor-accent/10' : tryOnModelImage ? 'border-editor-accent' : 'border-editor-border hover:border-editor-accent'}`}
                   >
                     {tryOnModelImage ? (
-                      <img src={tryOnModelImage} alt="Model" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                      <>
+                        <img src={tryOnModelImage} alt="Model" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setZoomImage(tryOnModelImage); }}
+                          className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10"
+                          title="Phóng to"
+                        >
+                          <ZoomIn size={14} />
+                        </button>
+                      </>
                     ) : (
                       <div className="flex flex-col items-center gap-2">
                         <UserIcon size={32} className="text-gray-500" />
@@ -4647,51 +4874,122 @@ function App() {
                     )}
                   </div>
                   <input type="file" ref={modelFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleTryOnUpload(e, 'model')} />
-                  
+
                   {/* Saved Models List */}
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Người mẫu đã lưu ({savedModels.length}/5)</p>
-                      {savedModels.length < 5 && (
-                        <button 
-                          onClick={() => {
-                            if (!user) {
-                              handleLogin();
-                            } else {
-                              modelListFileInputRef.current?.click();
-                            }
-                          }}
-                          disabled={isSavingModel}
-                          className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
-                        >
-                          {isSavingModel ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
-                          THÊM MỚI
-                        </button>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {isEditingSavedModels ? (
+                          <>
+                            <button
+                              onClick={async () => {
+                                for (const id of draftDeletedModelIds) {
+                                  await handleDeleteModel(id);
+                                }
+                                setDraftDeletedModelIds(new Set());
+                                setIsEditingSavedModels(false);
+                              }}
+                              className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1"
+                            >
+                              <Check size={10} /> LƯU
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDraftDeletedModelIds(new Set());
+                                setIsEditingSavedModels(false);
+                              }}
+                              className="text-[10px] text-gray-400 font-bold hover:underline flex items-center gap-1"
+                            >
+                              <X size={10} /> HỦY
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {savedModels.length > 0 && (
+                              <button
+                                onClick={() => setIsEditingSavedModels(true)}
+                                className="text-[10px] text-gray-400 font-bold hover:text-editor-accent hover:underline flex items-center gap-1"
+                              >
+                                <Pencil size={10} /> CHỈNH SỬA
+                              </button>
+                            )}
+                            {savedModels.length < 5 && (
+                              <button
+                                onClick={() => {
+                                  if (!user) {
+                                    handleLogin();
+                                  } else {
+                                    modelListFileInputRef.current?.click();
+                                  }
+                                }}
+                                disabled={isSavingModel}
+                                className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
+                              >
+                                {isSavingModel ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
+                                THÊM MỚI
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-5 gap-2">
-                      {savedModels.map((model) => (
-                        <div 
-                          key={model.id}
-                          className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all cursor-pointer group ${
-                            tryOnModelImage === model.imageUrl ? 'border-editor-accent' : 'border-editor-border hover:border-gray-600'
-                          }`}
-                          onClick={() => setTryOnModelImage(model.imageUrl)}
-                        >
-                          <img src={model.imageUrl} alt="Saved Model" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteModel(model.id);
+                      {savedModels.map((model) => {
+                        const isMarkedForDelete = draftDeletedModelIds.has(model.id);
+                        return (
+                          <div
+                            key={model.id}
+                            className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all group ${
+                              isMarkedForDelete
+                                ? 'border-red-500 opacity-50'
+                                : tryOnModelImage === model.imageUrl ? 'border-editor-accent cursor-pointer' : 'border-editor-border hover:border-gray-600 cursor-pointer'
+                            }`}
+                            onClick={() => {
+                              if (!isEditingSavedModels) {
+                                setTryOnModelImage(model.imageUrl);
+                              }
                             }}
-                            className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
                           >
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
-                      ))}
+                            <img src={model.imageUrl} alt="Saved Model" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            {isEditingSavedModels ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDraftDeletedModelIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(model.id)) next.delete(model.id);
+                                    else next.add(model.id);
+                                    return next;
+                                  });
+                                }}
+                                className={`absolute top-1 right-1 p-1 rounded-md transition-colors ${isMarkedForDelete ? 'bg-red-500 text-white' : 'bg-black/70 hover:bg-red-500 text-white'}`}
+                                title={isMarkedForDelete ? 'Bỏ chọn xóa' : 'Đánh dấu xóa'}
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setZoomImage(model.imageUrl);
+                                }}
+                                className="absolute top-1 right-1 p-1 bg-black/70 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black"
+                                title="Phóng to"
+                              >
+                                <ZoomIn size={10} />
+                              </button>
+                            )}
+                            {isMarkedForDelete && (
+                              <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center pointer-events-none">
+                                <span className="text-[9px] font-bold text-white bg-red-600 px-2 py-0.5 rounded">SẼ XÓA</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                       {Array.from({ length: 5 - savedModels.length }).map((_, i) => (
-                        <div 
+                        <div
                           key={`empty-${i}`}
                           className="aspect-[3/4] rounded-lg border-2 border-dashed border-editor-border flex items-center justify-center bg-black/20"
                         >
@@ -4736,6 +5034,13 @@ function App() {
                             <span className="text-[10px] text-editor-accent font-bold uppercase tracking-widest">Đang tạo nền trắng...</span>
                           </div>
                         )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setZoomImage(tryOnProductImage); }}
+                          className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10"
+                          title="Phóng to"
+                        >
+                          <ZoomIn size={14} />
+                        </button>
                       </>
                     ) : (
                       <div className="flex flex-col items-center gap-2">
@@ -4781,8 +5086,15 @@ function App() {
                     ) : tryOnResult ? (
                       <>
                         <img src={tryOnResult} alt="Result" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                        <button
+                          onClick={() => setZoomImage(tryOnResult)}
+                          className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10"
+                          title="Phóng to"
+                        >
+                          <ZoomIn size={14} />
+                        </button>
                         <div className="absolute bottom-4 right-4 flex flex-col gap-2">
-                          <button 
+                          <button
                             onClick={() => {
                               const link = document.createElement('a');
                               link.href = tryOnResult!;
@@ -4794,7 +5106,7 @@ function App() {
                           >
                             <Download size={20} />
                           </button>
-                          <button 
+                          <button
                             onClick={() => {
                               setTryOnModelImage(tryOnResult);
                               setTryOnResult(null);
