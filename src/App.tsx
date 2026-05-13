@@ -1034,12 +1034,59 @@ function App() {
     return () => window.removeEventListener('paste', handlePaste);
   }, [ecomSubTab, thayPasteTarget]);
 
-  const handleLogin = async () => {
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleLogin = () => {
+    setLoginError(null);
+    setShowLoginModal(true);
+  };
+
+  const handleGoogleLogin = async () => {
+    setLoginError(null);
+    setLoginLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
+      setShowLoginModal(false);
     } catch (error: any) {
-      console.error("Login error:", error);
-      setGlobalError(`Lỗi đăng nhập: ${error.message}`);
+      console.error("Google login error:", error);
+      setLoginError(`Lỗi đăng nhập Google: ${error.message}`);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginEmail || !loginPassword) {
+      setLoginError("Vui lòng nhập đủ email và mật khẩu.");
+      return;
+    }
+    setLoginError(null);
+    setLoginLoading(true);
+    try {
+      const { signInWithEmailAndPassword } = await import('firebase/auth');
+      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      setShowLoginModal(false);
+      setLoginEmail('');
+      setLoginPassword('');
+    } catch (error: any) {
+      console.error("Email login error:", error);
+      const code = error.code || '';
+      let msg = error.message || 'Lỗi không xác định';
+      if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+        msg = 'Email hoặc mật khẩu không đúng.';
+      } else if (code === 'auth/invalid-email') {
+        msg = 'Email không hợp lệ.';
+      } else if (code === 'auth/too-many-requests') {
+        msg = 'Sai mật khẩu nhiều lần. Vui lòng đợi vài phút.';
+      }
+      setLoginError(msg);
+    } finally {
+      setLoginLoading(false);
     }
   };
 
@@ -5458,6 +5505,113 @@ function App() {
                 </div>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Login Modal */}
+      <AnimatePresence>
+        {showLoginModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => !loginLoading && setShowLoginModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#1a1a1f] border border-editor-border rounded-2xl p-8 w-full max-w-md shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <LogIn size={20} className="text-editor-accent" /> Đăng nhập
+                </h2>
+                <button
+                  onClick={() => !loginLoading && setShowLoginModal(false)}
+                  disabled={loginLoading}
+                  className="text-gray-500 hover:text-white p-1 disabled:opacity-50"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <button
+                onClick={handleGoogleLogin}
+                disabled={loginLoading}
+                className="w-full py-3 bg-white text-black font-bold rounded-xl flex items-center justify-center gap-3 hover:bg-gray-100 transition disabled:opacity-50 mb-4"
+              >
+                {loginLoading ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 48 48">
+                    <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8a12 12 0 0 1 0-24c3 0 5.7 1.1 7.8 3l5.7-5.7C33.6 6.1 29 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
+                    <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 16 19 13 24 13c3 0 5.7 1.1 7.8 3l5.7-5.7C33.6 6.1 29 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+                    <path fill="#4CAF50" d="M24 44c5 0 9.5-1.9 12.9-5l-6-5c-1.8 1.4-4.2 2.3-6.9 2.3-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
+                    <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6 5c-.4.4 6.5-4.7 6.5-14.7 0-1.3-.1-2.6-.4-3.9z"/>
+                  </svg>
+                )}
+                Đăng nhập bằng Google
+              </button>
+
+              <div className="flex items-center gap-3 my-4">
+                <div className="flex-1 h-px bg-editor-border" />
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest">hoặc</span>
+                <div className="flex-1 h-px bg-editor-border" />
+              </div>
+
+              <form onSubmit={handleEmailLogin} className="space-y-3">
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    disabled={loginLoading}
+                    placeholder="nhanvien@otama.vn"
+                    className="w-full bg-[#252525] text-white p-3 rounded-lg border border-white/10 focus:border-editor-accent focus:outline-none text-sm"
+                    autoComplete="email"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Mật khẩu</label>
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    disabled={loginLoading}
+                    placeholder="••••••••"
+                    className="w-full bg-[#252525] text-white p-3 rounded-lg border border-white/10 focus:border-editor-accent focus:outline-none text-sm"
+                    autoComplete="current-password"
+                  />
+                </div>
+
+                {loginError && (
+                  <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs p-3 rounded-lg">
+                    {loginError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loginLoading}
+                  className="w-full py-3 bg-editor-accent text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50"
+                >
+                  {loginLoading ? (
+                    <><Loader2 size={18} className="animate-spin" /> Đang đăng nhập...</>
+                  ) : (
+                    <><LogIn size={18} /> Đăng nhập bằng Email</>
+                  )}
+                </button>
+              </form>
+
+              <p className="text-[10px] text-gray-500 text-center mt-4">
+                Tài khoản nhân viên do quản trị viên (Sếp) cấp.
+              </p>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
