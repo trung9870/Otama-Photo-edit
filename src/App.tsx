@@ -709,42 +709,40 @@ function App() {
     return () => { unsubUser(); unsubDefault(); };
   }, [isAuthReady, user]);
 
-  // Sync Saved Models
+  // Sync Saved Models — merge personal (uid === me) + shared (isShared === true)
   useEffect(() => {
     if (!isAuthReady || !user) {
       setSavedModels([]);
       return;
     }
 
-    // Removing orderBy to avoid composite index requirement for now
-    const q = query(
-      collection(db, 'models'),
-      where('uid', '==', user.uid)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const models = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as SavedModel[];
-      
-      // Sort on client side instead
-      const sortedModels = models.sort((a, b) => {
+    let personal: SavedModel[] = [];
+    let shared: SavedModel[] = [];
+    const merge = () => {
+      const map = new Map<string, SavedModel>();
+      [...personal, ...shared].forEach(m => map.set(m.id, m));
+      const list = Array.from(map.values()).sort((a, b) => {
         const timeA = a.createdAt?.toMillis?.() || 0;
         const timeB = b.createdAt?.toMillis?.() || 0;
         return timeB - timeA;
       });
-      
-      setSavedModels(sortedModels);
-    }, (error) => {
-      console.error("Models sync error:", error);
-      // Don't throw here to avoid crashing, but log it
-      if (error.message.includes('index')) {
-        setGlobalError("Hệ thống đang khởi tạo dữ liệu (thiếu index). Vui lòng thử lại sau vài phút.");
-      }
-    });
+      setSavedModels(list);
+    };
 
-    return () => unsubscribe();
+    const personalQ = query(collection(db, 'models'), where('uid', '==', user.uid));
+    const sharedQ = query(collection(db, 'models'), where('isShared', '==', true));
+
+    const unsubPersonal = onSnapshot(personalQ, (snap) => {
+      personal = snap.docs.map(d => ({ id: d.id, ...d.data() })) as SavedModel[];
+      merge();
+    }, (err) => console.error("Models personal sync error:", err));
+
+    const unsubShared = onSnapshot(sharedQ, (snap) => {
+      shared = snap.docs.map(d => ({ id: d.id, ...d.data() })) as SavedModel[];
+      merge();
+    }, (err) => console.error("Models shared sync error:", err));
+
+    return () => { unsubPersonal(); unsubShared(); };
   }, [isAuthReady, user]);
 
   const handleSaveModel = async (imageUrl: string) => {
@@ -752,8 +750,9 @@ function App() {
       setGlobalError("Vui lòng đăng nhập để lưu người mẫu.");
       return;
     }
-    if (savedModels.length >= 5) {
-      setGlobalError("Bạn chỉ có thể lưu tối đa 5 người mẫu. Vui lòng xóa bớt để thêm mới.");
+    const personalModelCount = savedModels.filter(m => m.uid === user.uid && !m.isShared).length;
+    if (personalModelCount >= 5) {
+      setGlobalError("Kho cá nhân đã đầy (5/5). Vui lòng xóa bớt người mẫu cá nhân để thêm mới.");
       return;
     }
 
@@ -837,39 +836,40 @@ function App() {
     e.target.value = '';
   };
 
-  // Sync Saved Rooms
+  // Sync Saved Rooms — merge personal (uid === me) + shared (isShared === true)
   useEffect(() => {
     if (!isAuthReady || !user) {
       setSavedRooms([]);
       return;
     }
 
-    const q = query(
-      collection(db, 'rooms'),
-      where('uid', '==', user.uid)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const rooms = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as SavedRoom[];
-
-      const sortedRooms = rooms.sort((a, b) => {
+    let personal: SavedRoom[] = [];
+    let shared: SavedRoom[] = [];
+    const merge = () => {
+      const map = new Map<string, SavedRoom>();
+      [...personal, ...shared].forEach(r => map.set(r.id, r));
+      const list = Array.from(map.values()).sort((a, b) => {
         const timeA = a.createdAt?.toMillis?.() || 0;
         const timeB = b.createdAt?.toMillis?.() || 0;
         return timeB - timeA;
       });
+      setSavedRooms(list);
+    };
 
-      setSavedRooms(sortedRooms);
-    }, (error) => {
-      console.error("Rooms sync error:", error);
-      if (error.message.includes('index')) {
-        setGlobalError("Hệ thống đang khởi tạo dữ liệu (thiếu index). Vui lòng thử lại sau vài phút.");
-      }
-    });
+    const personalQ = query(collection(db, 'rooms'), where('uid', '==', user.uid));
+    const sharedQ = query(collection(db, 'rooms'), where('isShared', '==', true));
 
-    return () => unsubscribe();
+    const unsubPersonal = onSnapshot(personalQ, (snap) => {
+      personal = snap.docs.map(d => ({ id: d.id, ...d.data() })) as SavedRoom[];
+      merge();
+    }, (err) => console.error("Rooms personal sync error:", err));
+
+    const unsubShared = onSnapshot(sharedQ, (snap) => {
+      shared = snap.docs.map(d => ({ id: d.id, ...d.data() })) as SavedRoom[];
+      merge();
+    }, (err) => console.error("Rooms shared sync error:", err));
+
+    return () => { unsubPersonal(); unsubShared(); };
   }, [isAuthReady, user]);
 
   const handleSaveRoom = async (imageUrl: string) => {
@@ -877,8 +877,9 @@ function App() {
       setGlobalError("Vui lòng đăng nhập để lưu phòng/giường mẫu.");
       return;
     }
-    if (savedRooms.length >= 5) {
-      setGlobalError("Bạn chỉ có thể lưu tối đa 5 phòng/giường mẫu. Vui lòng xóa bớt để thêm mới.");
+    const personalRoomCount = savedRooms.filter(r => r.uid === user.uid && !r.isShared).length;
+    if (personalRoomCount >= 5) {
+      setGlobalError("Kho cá nhân đã đầy (5/5). Vui lòng xóa bớt giường cá nhân để thêm mới.");
       return;
     }
 
@@ -944,6 +945,48 @@ function App() {
       await deleteDoc(doc(db, 'rooms', roomId));
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'rooms');
+    }
+  };
+
+  const toggleSyncRoom = async (room: SavedRoom) => {
+    if (!isAdmin) {
+      alert("Chỉ Admin mới có quyền đồng bộ giường lên kho chung.");
+      return;
+    }
+    const newIsShared = !room.isShared;
+    if (newIsShared) {
+      const sharedCount = savedRooms.filter(r => r.isShared).length;
+      if (sharedCount >= 5) {
+        alert("Kho chung đã đầy (5/5). Vui lòng bỏ đồng bộ 1 giường trước khi thêm.");
+        return;
+      }
+    }
+    try {
+      await setDoc(doc(db, 'rooms', room.id), { isShared: newIsShared }, { merge: true });
+    } catch (error: any) {
+      console.error("Toggle sync room error:", error);
+      alert("Có lỗi khi đồng bộ: " + error.message);
+    }
+  };
+
+  const toggleSyncModel = async (model: SavedModel) => {
+    if (!isAdmin) {
+      alert("Chỉ Admin mới có quyền đồng bộ người mẫu lên kho chung.");
+      return;
+    }
+    const newIsShared = !model.isShared;
+    if (newIsShared) {
+      const sharedCount = savedModels.filter(m => m.isShared).length;
+      if (sharedCount >= 5) {
+        alert("Kho chung đã đầy (5/5). Vui lòng bỏ đồng bộ 1 người mẫu trước khi thêm.");
+        return;
+      }
+    }
+    try {
+      await setDoc(doc(db, 'models', model.id), { isShared: newIsShared }, { merge: true });
+    } catch (error: any) {
+      console.error("Toggle sync model error:", error);
+      alert("Có lỗi khi đồng bộ: " + error.message);
     }
   };
 
@@ -3786,53 +3829,141 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Saved rooms — full width below */}
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Giường đã lưu ({savedRooms.length}/5)</p>
-                      <div className="flex items-center gap-3">
-                        {isEditingSavedRooms ? (
-                          <>
+                  {/* Saved rooms — 2 sections: SHARED + PERSONAL */}
+                  {(() => {
+                    const sharedRooms = savedRooms.filter(r => r.isShared);
+                    const personalRooms = savedRooms.filter(r => !r.isShared && r.uid === user?.uid);
+                    const renderRoomCell = (room: SavedRoom, allowEdit: boolean) => {
+                      const isMarkedForDelete = draftDeletedRoomIds.has(room.id);
+                      return (
+                        <div
+                          key={room.id}
+                          className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all group ${
+                            isMarkedForDelete
+                              ? 'border-red-500 opacity-50'
+                              : ecomThayModelImage === room.imageUrl ? 'border-editor-accent cursor-pointer' : 'border-editor-border hover:border-gray-600 cursor-pointer'
+                          }`}
+                          onClick={() => {
+                            if (!isEditingSavedRooms) {
+                              setEcomThayModelImage(room.imageUrl);
+                            }
+                          }}
+                        >
+                          <img src={room.imageUrl} alt="Saved Room" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          {isEditingSavedRooms && allowEdit ? (
                             <button
-                              onClick={async () => {
-                                for (const id of draftDeletedRoomIds) {
-                                  await handleDeleteRoom(id);
-                                }
-                                setDraftDeletedRoomIds(new Set());
-                                setIsEditingSavedRooms(false);
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (room.isShared && !window.confirm("Giường này đang chia sẻ cho cả công ty. Xóa sẽ làm nhân viên mất quyền dùng. Tiếp tục?")) return;
+                                setDraftDeletedRoomIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(room.id)) next.delete(room.id);
+                                  else next.add(room.id);
+                                  return next;
+                                });
                               }}
-                              className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1"
+                              className={`absolute top-1 right-1 p-1 rounded-md transition-colors ${isMarkedForDelete ? 'bg-red-500 text-white' : 'bg-black/70 hover:bg-red-500 text-white'}`}
+                              title={isMarkedForDelete ? 'Bỏ chọn xóa' : 'Đánh dấu xóa'}
                             >
-                              <Check size={10} /> LƯU
+                              <Trash2 size={10} />
                             </button>
-                            <button
-                              onClick={() => {
-                                setDraftDeletedRoomIds(new Set());
-                                setIsEditingSavedRooms(false);
-                              }}
-                              className="text-[10px] text-gray-400 font-bold hover:underline flex items-center gap-1"
-                            >
-                              <X size={10} /> HỦY
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            {savedRooms.length > 0 && (
+                          ) : (
+                            <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {isAdmin && !isEditingSavedRooms && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleSyncRoom(room); }}
+                                  className={`p-1 rounded-md ${room.isShared ? 'bg-blue-500 text-white' : 'bg-black/70 text-white hover:bg-blue-500'}`}
+                                  title={room.isShared ? 'Bỏ chia sẻ' : 'Chia sẻ cho cả công ty'}
+                                >
+                                  <Globe size={10} />
+                                </button>
+                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setZoomImage(room.imageUrl); }}
+                                className="p-1 bg-black/70 text-white rounded-md hover:bg-black"
+                                title="Phóng to"
+                              >
+                                <ZoomIn size={10} />
+                              </button>
+                            </div>
+                          )}
+                          {room.isShared && (
+                            <div className="absolute top-1 left-1 px-1 py-0.5 bg-blue-500/80 rounded text-[7px] font-bold text-white">CHUNG</div>
+                          )}
+                          {isMarkedForDelete && (
+                            <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center pointer-events-none">
+                              <span className="text-[9px] font-bold text-white bg-red-600 px-2 py-0.5 rounded">SẼ XÓA</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    };
+
+                    return (
+                      <div className="flex flex-col gap-4">
+                        {/* Edit toggle (one for both sections) */}
+                        <div className="flex items-center justify-end gap-3">
+                          {isEditingSavedRooms ? (
+                            <>
+                              <button
+                                onClick={async () => {
+                                  for (const id of draftDeletedRoomIds) {
+                                    await handleDeleteRoom(id);
+                                  }
+                                  setDraftDeletedRoomIds(new Set());
+                                  setIsEditingSavedRooms(false);
+                                }}
+                                className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1"
+                              >
+                                <Check size={10} /> LƯU
+                              </button>
+                              <button
+                                onClick={() => { setDraftDeletedRoomIds(new Set()); setIsEditingSavedRooms(false); }}
+                                className="text-[10px] text-gray-400 font-bold hover:underline flex items-center gap-1"
+                              >
+                                <X size={10} /> HỦY
+                              </button>
+                            </>
+                          ) : (
+                            (personalRooms.length > 0 || (isAdmin && sharedRooms.length > 0)) && (
                               <button
                                 onClick={() => setIsEditingSavedRooms(true)}
                                 className="text-[10px] text-gray-400 font-bold hover:text-editor-accent hover:underline flex items-center gap-1"
                               >
                                 <Pencil size={10} /> CHỈNH SỬA
                               </button>
-                            )}
-                            {savedRooms.length < 5 && (
+                            )
+                          )}
+                        </div>
+
+                        {/* SECTION 1: GIƯỜNG CHUNG OTAMA */}
+                        <div className="flex flex-col gap-2">
+                          <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold flex items-center gap-1">
+                            <Globe size={10} /> Giường chung Otama ({sharedRooms.length}/5)
+                          </p>
+                          <div className="grid grid-cols-5 gap-2 max-w-md">
+                            {sharedRooms.map(r => renderRoomCell(r, isAdmin))}
+                            {Array.from({ length: 5 - sharedRooms.length }).map((_, i) => (
+                              <div key={`empty-shared-${i}`} className="aspect-[3/4] rounded-lg border-2 border-dashed border-blue-500/30 flex items-center justify-center bg-blue-500/5">
+                                <Bed size={16} className="text-blue-500/40" />
+                              </div>
+                            ))}
+                          </div>
+                          {isAdmin && sharedRooms.length < 5 && !isEditingSavedRooms && (
+                            <p className="text-[9px] text-gray-500">💡 Để thêm vào kho chung: upload vào kho cá nhân → hover ảnh → bấm 🌍 Đồng bộ</p>
+                          )}
+                        </div>
+
+                        {/* SECTION 2: GIƯỜNG CÁ NHÂN */}
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold flex items-center gap-1">
+                              <UserIcon size={10} /> Giường cá nhân ({personalRooms.length}/5)
+                            </p>
+                            {personalRooms.length < 5 && !isEditingSavedRooms && (
                               <button
                                 onClick={() => {
-                                  if (!user) {
-                                    handleLogin();
-                                  } else {
-                                    roomListFileInputRef.current?.click();
-                                  }
+                                  if (!user) { handleLogin(); } else { roomListFileInputRef.current?.click(); }
                                 }}
                                 disabled={isSavingRoom}
                                 className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
@@ -3841,75 +3972,20 @@ function App() {
                                 THÊM MỚI
                               </button>
                             )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-5 gap-2 max-w-md">
-                      {savedRooms.map((room) => {
-                        const isMarkedForDelete = draftDeletedRoomIds.has(room.id);
-                        return (
-                          <div
-                            key={room.id}
-                            className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all group ${
-                              isMarkedForDelete
-                                ? 'border-red-500 opacity-50'
-                                : ecomThayModelImage === room.imageUrl ? 'border-editor-accent cursor-pointer' : 'border-editor-border hover:border-gray-600 cursor-pointer'
-                            }`}
-                            onClick={() => {
-                              if (!isEditingSavedRooms) {
-                                setEcomThayModelImage(room.imageUrl);
-                              }
-                            }}
-                          >
-                            <img src={room.imageUrl} alt="Saved Room" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            {isEditingSavedRooms ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDraftDeletedRoomIds((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(room.id)) next.delete(room.id);
-                                    else next.add(room.id);
-                                    return next;
-                                  });
-                                }}
-                                className={`absolute top-1 right-1 p-1 rounded-md transition-colors ${isMarkedForDelete ? 'bg-red-500 text-white' : 'bg-black/70 hover:bg-red-500 text-white'}`}
-                                title={isMarkedForDelete ? 'Bỏ chọn xóa' : 'Đánh dấu xóa'}
-                              >
-                                <Trash2 size={10} />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setZoomImage(room.imageUrl);
-                                }}
-                                className="absolute top-1 right-1 p-1 bg-black/70 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black"
-                                title="Phóng to"
-                              >
-                                <ZoomIn size={10} />
-                              </button>
-                            )}
-                            {isMarkedForDelete && (
-                              <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center pointer-events-none">
-                                <span className="text-[9px] font-bold text-white bg-red-600 px-2 py-0.5 rounded">SẼ XÓA</span>
-                              </div>
-                            )}
                           </div>
-                        );
-                      })}
-                      {Array.from({ length: 5 - savedRooms.length }).map((_, i) => (
-                        <div
-                          key={`empty-room-${i}`}
-                          className="aspect-[3/4] rounded-lg border-2 border-dashed border-editor-border flex items-center justify-center bg-black/20"
-                        >
-                          <Bed size={16} className="text-gray-700" />
+                          <div className="grid grid-cols-5 gap-2 max-w-md">
+                            {personalRooms.map(r => renderRoomCell(r, true))}
+                            {Array.from({ length: 5 - personalRooms.length }).map((_, i) => (
+                              <div key={`empty-personal-${i}`} className="aspect-[3/4] rounded-lg border-2 border-dashed border-editor-border flex items-center justify-center bg-black/20">
+                                <Bed size={16} className="text-gray-700" />
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                    <input type="file" ref={roomListFileInputRef} className="hidden" accept="image/*" onChange={handleRoomListUpload} />
-                  </div>
+                        <input type="file" ref={roomListFileInputRef} className="hidden" accept="image/*" onChange={handleRoomListUpload} />
+                      </div>
+                    );
+                  })()}
                 </div>
               ) : selectedEcomGrid ? (
                 <div className="flex flex-col items-center">
@@ -5060,53 +5136,140 @@ function App() {
                   </div>
                   <input type="file" ref={modelFileInputRef} className="hidden" accept="image/*" onChange={(e) => handleTryOnUpload(e, 'model')} />
 
-                  {/* Saved Models List */}
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Người mẫu đã lưu ({savedModels.length}/5)</p>
-                      <div className="flex items-center gap-3">
-                        {isEditingSavedModels ? (
-                          <>
+                  {/* Saved Models List — 2 sections: SHARED + PERSONAL */}
+                  {(() => {
+                    const sharedModels = savedModels.filter(m => m.isShared);
+                    const personalModels = savedModels.filter(m => !m.isShared && m.uid === user?.uid);
+                    const renderModelCell = (model: SavedModel, allowEdit: boolean) => {
+                      const isMarkedForDelete = draftDeletedModelIds.has(model.id);
+                      return (
+                        <div
+                          key={model.id}
+                          className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all group ${
+                            isMarkedForDelete
+                              ? 'border-red-500 opacity-50'
+                              : tryOnModelImage === model.imageUrl ? 'border-editor-accent cursor-pointer' : 'border-editor-border hover:border-gray-600 cursor-pointer'
+                          }`}
+                          onClick={() => {
+                            if (!isEditingSavedModels) {
+                              setTryOnModelImage(model.imageUrl);
+                            }
+                          }}
+                        >
+                          <img src={model.imageUrl} alt="Saved Model" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          {isEditingSavedModels && allowEdit ? (
                             <button
-                              onClick={async () => {
-                                for (const id of draftDeletedModelIds) {
-                                  await handleDeleteModel(id);
-                                }
-                                setDraftDeletedModelIds(new Set());
-                                setIsEditingSavedModels(false);
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (model.isShared && !window.confirm("Người mẫu này đang chia sẻ cho cả công ty. Xóa sẽ làm nhân viên mất quyền dùng. Tiếp tục?")) return;
+                                setDraftDeletedModelIds((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(model.id)) next.delete(model.id);
+                                  else next.add(model.id);
+                                  return next;
+                                });
                               }}
-                              className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1"
+                              className={`absolute top-1 right-1 p-1 rounded-md transition-colors ${isMarkedForDelete ? 'bg-red-500 text-white' : 'bg-black/70 hover:bg-red-500 text-white'}`}
+                              title={isMarkedForDelete ? 'Bỏ chọn xóa' : 'Đánh dấu xóa'}
                             >
-                              <Check size={10} /> LƯU
+                              <Trash2 size={10} />
                             </button>
-                            <button
-                              onClick={() => {
-                                setDraftDeletedModelIds(new Set());
-                                setIsEditingSavedModels(false);
-                              }}
-                              className="text-[10px] text-gray-400 font-bold hover:underline flex items-center gap-1"
-                            >
-                              <X size={10} /> HỦY
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            {savedModels.length > 0 && (
+                          ) : (
+                            <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {isAdmin && !isEditingSavedModels && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleSyncModel(model); }}
+                                  className={`p-1 rounded-md ${model.isShared ? 'bg-blue-500 text-white' : 'bg-black/70 text-white hover:bg-blue-500'}`}
+                                  title={model.isShared ? 'Bỏ chia sẻ' : 'Chia sẻ cho cả công ty'}
+                                >
+                                  <Globe size={10} />
+                                </button>
+                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setZoomImage(model.imageUrl); }}
+                                className="p-1 bg-black/70 text-white rounded-md hover:bg-black"
+                                title="Phóng to"
+                              >
+                                <ZoomIn size={10} />
+                              </button>
+                            </div>
+                          )}
+                          {model.isShared && (
+                            <div className="absolute top-1 left-1 px-1 py-0.5 bg-blue-500/80 rounded text-[7px] font-bold text-white">CHUNG</div>
+                          )}
+                          {isMarkedForDelete && (
+                            <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center pointer-events-none">
+                              <span className="text-[9px] font-bold text-white bg-red-600 px-2 py-0.5 rounded">SẼ XÓA</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    };
+
+                    return (
+                      <div className="flex flex-col gap-4">
+                        <div className="flex items-center justify-end gap-3">
+                          {isEditingSavedModels ? (
+                            <>
+                              <button
+                                onClick={async () => {
+                                  for (const id of draftDeletedModelIds) {
+                                    await handleDeleteModel(id);
+                                  }
+                                  setDraftDeletedModelIds(new Set());
+                                  setIsEditingSavedModels(false);
+                                }}
+                                className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1"
+                              >
+                                <Check size={10} /> LƯU
+                              </button>
+                              <button
+                                onClick={() => { setDraftDeletedModelIds(new Set()); setIsEditingSavedModels(false); }}
+                                className="text-[10px] text-gray-400 font-bold hover:underline flex items-center gap-1"
+                              >
+                                <X size={10} /> HỦY
+                              </button>
+                            </>
+                          ) : (
+                            (personalModels.length > 0 || (isAdmin && sharedModels.length > 0)) && (
                               <button
                                 onClick={() => setIsEditingSavedModels(true)}
                                 className="text-[10px] text-gray-400 font-bold hover:text-editor-accent hover:underline flex items-center gap-1"
                               >
                                 <Pencil size={10} /> CHỈNH SỬA
                               </button>
-                            )}
-                            {savedModels.length < 5 && (
+                            )
+                          )}
+                        </div>
+
+                        {/* SECTION 1: NGƯỜI MẪU CHUNG OTAMA */}
+                        <div className="flex flex-col gap-2">
+                          <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold flex items-center gap-1">
+                            <Globe size={10} /> Người mẫu chung Otama ({sharedModels.length}/5)
+                          </p>
+                          <div className="grid grid-cols-5 gap-2">
+                            {sharedModels.map(m => renderModelCell(m, isAdmin))}
+                            {Array.from({ length: 5 - sharedModels.length }).map((_, i) => (
+                              <div key={`empty-shared-${i}`} className="aspect-[3/4] rounded-lg border-2 border-dashed border-blue-500/30 flex items-center justify-center bg-blue-500/5">
+                                <UserIcon size={16} className="text-blue-500/40" />
+                              </div>
+                            ))}
+                          </div>
+                          {isAdmin && sharedModels.length < 5 && !isEditingSavedModels && (
+                            <p className="text-[9px] text-gray-500">💡 Để thêm vào kho chung: upload vào kho cá nhân → hover ảnh → bấm 🌍 Đồng bộ</p>
+                          )}
+                        </div>
+
+                        {/* SECTION 2: NGƯỜI MẪU CÁ NHÂN */}
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold flex items-center gap-1">
+                              <UserIcon size={10} /> Người mẫu cá nhân ({personalModels.length}/5)
+                            </p>
+                            {personalModels.length < 5 && !isEditingSavedModels && (
                               <button
                                 onClick={() => {
-                                  if (!user) {
-                                    handleLogin();
-                                  } else {
-                                    modelListFileInputRef.current?.click();
-                                  }
+                                  if (!user) { handleLogin(); } else { modelListFileInputRef.current?.click(); }
                                 }}
                                 disabled={isSavingModel}
                                 className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
@@ -5115,75 +5278,20 @@ function App() {
                                 THÊM MỚI
                               </button>
                             )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-5 gap-2">
-                      {savedModels.map((model) => {
-                        const isMarkedForDelete = draftDeletedModelIds.has(model.id);
-                        return (
-                          <div
-                            key={model.id}
-                            className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 transition-all group ${
-                              isMarkedForDelete
-                                ? 'border-red-500 opacity-50'
-                                : tryOnModelImage === model.imageUrl ? 'border-editor-accent cursor-pointer' : 'border-editor-border hover:border-gray-600 cursor-pointer'
-                            }`}
-                            onClick={() => {
-                              if (!isEditingSavedModels) {
-                                setTryOnModelImage(model.imageUrl);
-                              }
-                            }}
-                          >
-                            <img src={model.imageUrl} alt="Saved Model" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            {isEditingSavedModels ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDraftDeletedModelIds((prev) => {
-                                    const next = new Set(prev);
-                                    if (next.has(model.id)) next.delete(model.id);
-                                    else next.add(model.id);
-                                    return next;
-                                  });
-                                }}
-                                className={`absolute top-1 right-1 p-1 rounded-md transition-colors ${isMarkedForDelete ? 'bg-red-500 text-white' : 'bg-black/70 hover:bg-red-500 text-white'}`}
-                                title={isMarkedForDelete ? 'Bỏ chọn xóa' : 'Đánh dấu xóa'}
-                              >
-                                <Trash2 size={10} />
-                              </button>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setZoomImage(model.imageUrl);
-                                }}
-                                className="absolute top-1 right-1 p-1 bg-black/70 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black"
-                                title="Phóng to"
-                              >
-                                <ZoomIn size={10} />
-                              </button>
-                            )}
-                            {isMarkedForDelete && (
-                              <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center pointer-events-none">
-                                <span className="text-[9px] font-bold text-white bg-red-600 px-2 py-0.5 rounded">SẼ XÓA</span>
-                              </div>
-                            )}
                           </div>
-                        );
-                      })}
-                      {Array.from({ length: 5 - savedModels.length }).map((_, i) => (
-                        <div
-                          key={`empty-${i}`}
-                          className="aspect-[3/4] rounded-lg border-2 border-dashed border-editor-border flex items-center justify-center bg-black/20"
-                        >
-                          <UserIcon size={16} className="text-gray-700" />
+                          <div className="grid grid-cols-5 gap-2">
+                            {personalModels.map(m => renderModelCell(m, true))}
+                            {Array.from({ length: 5 - personalModels.length }).map((_, i) => (
+                              <div key={`empty-personal-${i}`} className="aspect-[3/4] rounded-lg border-2 border-dashed border-editor-border flex items-center justify-center bg-black/20">
+                                <UserIcon size={16} className="text-gray-700" />
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                    <input type="file" ref={modelListFileInputRef} className="hidden" accept="image/*" onChange={handleModelListUpload} />
-                  </div>
+                        <input type="file" ref={modelListFileInputRef} className="hidden" accept="image/*" onChange={handleModelListUpload} />
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Product Image Upload */}
