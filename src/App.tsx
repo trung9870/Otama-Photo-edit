@@ -224,6 +224,40 @@ const MODEL_CONFIG = {
 
 type ModelType = keyof typeof MODEL_CONFIG;
 
+// Poll an array of Kie.ai task IDs until each completes (or fails / times out).
+// Returns the resulting image URLs in the same order as taskIds.
+// Each poll request hits /api/generate-check (~1s), so a Vercel function
+// timeout never applies to the long-running KIE task itself.
+async function pollKieTasks(taskIds: string[], clientKieApiKey?: string): Promise<string[]> {
+  const pollSingle = async (taskId: string): Promise<string> => {
+    const MAX_ATTEMPTS = 120; // ~6 minutes at 3s interval
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const params = new URLSearchParams({ taskId });
+      if (clientKieApiKey) params.set('clientKieApiKey', clientKieApiKey);
+      let res: Response;
+      try {
+        res = await fetch(`/api/generate-check?${params.toString()}`);
+      } catch {
+        continue; // transient network error → retry
+      }
+      if (!res.ok) continue;
+      const data = await res.json().catch(() => null);
+      if (!data) continue;
+      if (data.status === 'success') {
+        if (!data.url) throw new Error('Kie.ai task xong nhưng không có URL ảnh.');
+        return data.url as string;
+      }
+      if (data.status === 'failed') {
+        throw new Error(data.error || 'Kie.ai task failed');
+      }
+      // status === 'pending' → keep polling
+    }
+    throw new Error('Timeout: Kie.ai task chạy quá lâu (>6 phút). Vui lòng thử lại.');
+  };
+  return Promise.all(taskIds.map(pollSingle));
+}
+
 export default function AppWrapper() {
   return (
     <ErrorBoundary>
@@ -2163,7 +2197,11 @@ function App() {
 
         if (response.ok) {
           const data = await response.json();
-          if (data.isUrl) {
+          if (data.isAsync && Array.isArray(data.taskIds)) {
+            // KIE async: poll each task until done. Each poll is fast → no Vercel timeout.
+            const urls = await pollKieTasks(data.taskIds, kieApiKey);
+            generatedImages = urls;
+          } else if (data.isUrl) {
             generatedImages = data.imagesBase64;
           } else if (data.imagesBase64 && Array.isArray(data.imagesBase64)) {
             generatedImages = data.imagesBase64.map((b64: string) => `data:image/png;base64,${b64}`);
@@ -2276,7 +2314,10 @@ function App() {
       if (response.ok) {
         const data = await response.json();
         let finalImage = "";
-        if (data.isUrl && data.imagesBase64?.length > 0) {
+        if (data.isAsync && Array.isArray(data.taskIds) && data.taskIds.length > 0) {
+          const urls = await pollKieTasks(data.taskIds, kieApiKey);
+          finalImage = urls[0];
+        } else if (data.isUrl && data.imagesBase64?.length > 0) {
           finalImage = data.imagesBase64[0];
         } else if (Array.isArray(data.imagesBase64) && data.imagesBase64.length > 0) {
           finalImage = `data:image/png;base64,${data.imagesBase64[0]}`;
@@ -2398,7 +2439,10 @@ function App() {
       if (response.ok) {
         const data = await response.json();
         let generatedImages: string[] = [];
-        if (data.isUrl) {
+        if (data.isAsync && Array.isArray(data.taskIds)) {
+          const urls = await pollKieTasks(data.taskIds, kieApiKey);
+          generatedImages = urls;
+        } else if (data.isUrl) {
           generatedImages = data.imagesBase64;
         } else if (data.imagesBase64 && Array.isArray(data.imagesBase64)) {
           generatedImages = data.imagesBase64.map((b64: string) => `data:image/png;base64,${b64}`);

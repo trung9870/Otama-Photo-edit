@@ -5,6 +5,7 @@
   "framework": "vite",
   "functions": {
     "api/generate.ts": { "maxDuration": 60 },
+    "api/generate-check.ts": { "maxDuration": 10 },
     "api/analyze.ts": { "maxDuration": 60 },
     "api/detect-grid.ts": { "maxDuration": 60 }
   }

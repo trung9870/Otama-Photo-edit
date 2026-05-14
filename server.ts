@@ -7,6 +7,7 @@ import {
   handleProxy,
   handleProxyImage,
   handleGenerate,
+  handleGenerateCheck,
   handleAnalyze,
   handleDetectGrid
 } from "./api/_lib/handlers";
@@ -25,6 +26,7 @@ async function startServer() {
   app.get("/api/proxy", (req, res) => handleProxy(req as any, res as any));
   app.get("/api/proxy-image", (req, res) => handleProxyImage(req as any, res as any));
   app.post("/api/generate", (req, res) => handleGenerate(req as any, res as any));
+  app.get("/api/generate-check", (req, res) => handleGenerateCheck(req as any, res as any));
   app.post("/api/analyze", (req, res) => handleAnalyze(req as any, res as any));
   app.post("/api/detect-grid", (req, res) => handleDetectGrid(req as any, res as any));
 

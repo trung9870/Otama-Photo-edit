@@ -73,7 +73,8 @@ export async function handleProxyImage(req: Req, res: Res) {
 }
 
 // ============== Kie.ai helpers ==============
-async function runKieImageTask(inputUrls: string[], prompt: string, apiKey: string, aspectRatio: string, imageSize: string) {
+// Create a task and return the taskId immediately (no polling).
+async function createKieImageTask(inputUrls: string[], prompt: string, apiKey: string, aspectRatio: string, imageSize: string): Promise<string> {
   const finalAspectRatio = aspectRatio === '1:1' ? '1:1' : (aspectRatio === '9:16' ? '9:16' : 'auto');
   const requestedSize = (imageSize || '1K').toUpperCase();
   const finalResolution = finalAspectRatio === 'auto'
@@ -93,33 +94,35 @@ async function runKieImageTask(inputUrls: string[], prompt: string, apiKey: stri
   if (createData?.code !== 200) throw new Error(createData?.msg || "Lỗi khi gọi Kie.ai (createTask)");
   const taskId = createData?.data?.taskId;
   if (!taskId) throw new Error("Kie.ai không trả về taskId.");
+  return taskId;
+}
 
-  let maxAttempts = 120;
-  while (maxAttempts > 0) {
-    await new Promise(r => setTimeout(r, 3000));
-    const pollRes = await fetch(`https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` }
-    });
-    if (!pollRes.ok) { maxAttempts--; continue; }
-    const taskData = await pollRes.json();
-    if (taskData?.code !== 200 && taskData?.code !== undefined) throw new Error(taskData?.msg || "Lỗi get task Kie.ai");
-    const status = taskData?.data?.status || taskData?.data?.state;
-    if (status === 'success' || status === 'COMPLETED' || status === 'done' || status === 'SUCCESS') {
-      let outUrl = taskData?.data?.result_url || taskData?.data?.output_uri || taskData?.data?.output_url || taskData?.data?.images?.[0];
-      if (!outUrl && taskData?.data?.resultJson) {
-        try {
-          const rj = JSON.parse(taskData.data.resultJson);
-          outUrl = rj.resultUrls?.[0] || rj.images?.[0] || rj.url;
-        } catch {}
-      }
-      return outUrl;
-    } else if (status === 'fail' || status === 'failed' || status === 'error' || status === 'FAILED' || status === 'ERROR') {
-      throw new Error("Kie task failed: " + (taskData?.data?.failMsg || taskData?.data?.error_message || taskData?.data?.failed_reason || "Lỗi tạo ảnh"));
-    }
-    if (maxAttempts === 1) throw new Error("Timeout polling Kie.ai task. Mẫu: " + JSON.stringify(taskData));
-    maxAttempts--;
+// Single poll iteration — returns the current status without waiting.
+async function pollKieTaskOnce(taskId: string, apiKey: string): Promise<{ status: 'pending' | 'success' | 'failed'; url?: string; error?: string }> {
+  const pollRes = await fetch(`https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`, {
+    headers: { 'Authorization': `Bearer ${apiKey}` }
+  });
+  if (!pollRes.ok) return { status: 'pending' };
+  const taskData: any = await pollRes.json();
+  if (taskData?.code !== 200 && taskData?.code !== undefined) {
+    return { status: 'failed', error: taskData?.msg || "Lỗi get task Kie.ai" };
   }
-  throw new Error("Timeout polling Kie.ai task");
+  const status = taskData?.data?.status || taskData?.data?.state;
+  if (status === 'success' || status === 'COMPLETED' || status === 'done' || status === 'SUCCESS') {
+    let outUrl = taskData?.data?.result_url || taskData?.data?.output_uri || taskData?.data?.output_url || taskData?.data?.images?.[0];
+    if (!outUrl && taskData?.data?.resultJson) {
+      try {
+        const rj = JSON.parse(taskData.data.resultJson);
+        outUrl = rj.resultUrls?.[0] || rj.images?.[0] || rj.url;
+      } catch {}
+    }
+    return { status: 'success', url: outUrl };
+  }
+  if (status === 'fail' || status === 'failed' || status === 'error' || status === 'FAILED' || status === 'ERROR') {
+    const errMsg = taskData?.data?.failMsg || taskData?.data?.error_message || taskData?.data?.failed_reason || "Lỗi tạo ảnh";
+    return { status: 'failed', error: "Kie task failed: " + errMsg };
+  }
+  return { status: 'pending' };
 }
 
 async function uploadBase64WithFallback(b64: string, apiKey: string): Promise<string> {
@@ -211,15 +214,18 @@ export async function handleGenerate(req: Req, res: Res) {
 
       const count = numberOfImages && typeof numberOfImages === 'number' && numberOfImages > 0 ? numberOfImages : 1;
       try {
-        const promises = Array.from({ length: count }).map((_, i) => {
-          const variedPrompt = prompt + ' '.repeat(i);
-          return runKieImageTask(inputUrls, variedPrompt, apiKey, aspectRatio, imageSize);
-        });
-        const urls = await Promise.all(promises);
-        console.log("[api] Generated urls:", urls);
-        return res.json({ imageBase64: urls[0], imagesBase64: urls, isUrl: true });
+        // Create N tasks in parallel, return taskIds immediately.
+        // Client will poll /api/generate-check to track each task's completion.
+        const taskIds = await Promise.all(
+          Array.from({ length: count }).map((_, i) => {
+            const variedPrompt = prompt + ' '.repeat(i);
+            return createKieImageTask(inputUrls, variedPrompt, apiKey, aspectRatio, imageSize);
+          })
+        );
+        console.log("[api] Created Kie taskIds:", taskIds);
+        return res.json({ taskIds, isAsync: true });
       } catch (e: any) {
-        console.error("[api] Kie.ai parallel error:", e);
+        console.error("[api] Kie.ai createTask error:", e);
         return res.status(500).json({ error: e.message || "Lỗi khi gọi Kie.ai" });
       }
     }
@@ -277,6 +283,24 @@ export async function handleGenerate(req: Req, res: Res) {
   } catch (error: any) {
     console.error("[api] AI Error:", error);
     return res.status(500).json({ error: formatGeminiError(error.message || "Internal Server Error") });
+  }
+}
+
+// ============== /api/generate-check ==============
+// Polls a single Kie.ai task once and returns its current status.
+// Client calls this every few seconds until status is 'success' or 'failed'.
+export async function handleGenerateCheck(req: Req, res: Res) {
+  try {
+    const taskId = (req.query?.taskId as string) || req.body?.taskId;
+    const clientKieApiKey = (req.query?.clientKieApiKey as string) || req.body?.clientKieApiKey;
+    if (!taskId) return res.status(400).json({ error: "Missing taskId" });
+    const apiKey = clientKieApiKey || process.env.KIE_API_KEY;
+    if (!apiKey) return res.status(401).json({ error: "Chưa cấu hình API key cho GPT2 (Kie.ai). Vui lòng liên hệ Admin." });
+    const result = await pollKieTaskOnce(taskId, apiKey);
+    return res.json(result);
+  } catch (error: any) {
+    console.error("[api] Generate-check error:", error);
+    return res.status(500).json({ error: error.message || "Internal Server Error" });
   }
 }
 
