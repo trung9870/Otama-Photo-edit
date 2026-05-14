@@ -745,15 +745,27 @@ function App() {
     return () => { unsubPersonal(); unsubShared(); };
   }, [isAuthReady, user]);
 
-  const handleSaveModel = async (imageUrl: string) => {
+  const handleSaveModel = async (imageUrl: string, asShared: boolean = false) => {
     if (!user) {
       setGlobalError("Vui lòng đăng nhập để lưu người mẫu.");
       return;
     }
-    const personalModelCount = savedModels.filter(m => m.uid === user.uid && !m.isShared).length;
-    if (personalModelCount >= 5) {
-      setGlobalError("Kho cá nhân đã đầy (5/5). Vui lòng xóa bớt người mẫu cá nhân để thêm mới.");
+    if (asShared && !isAdmin) {
+      setGlobalError("Chỉ Admin mới được thêm vào kho chung.");
       return;
+    }
+    if (asShared) {
+      const sharedCount = savedModels.filter(m => m.isShared).length;
+      if (sharedCount >= 5) {
+        setGlobalError("Kho chung đã đầy (5/5). Vui lòng xóa bớt người mẫu chung trước.");
+        return;
+      }
+    } else {
+      const personalModelCount = savedModels.filter(m => m.uid === user.uid && !m.isShared).length;
+      if (personalModelCount >= 5) {
+        setGlobalError("Kho cá nhân đã đầy (5/5). Vui lòng xóa bớt người mẫu cá nhân để thêm mới.");
+        return;
+      }
     }
 
     setIsSavingModel(true);
@@ -799,9 +811,10 @@ function App() {
         id: modelId,
         imageUrl: resizedImage,
         uid: user.uid,
+        isShared: asShared,
         createdAt: Timestamp.now()
       });
-      console.log("Model saved successfully:", modelId);
+      console.log("Model saved successfully:", modelId, asShared ? "(shared)" : "(personal)");
     } catch (error: any) {
       console.error("Save model error:", error);
       let msg = "Không thể lưu người mẫu.";
@@ -822,17 +835,19 @@ function App() {
     }
   };
 
+  const [pendingUploadAsSharedModel, setPendingUploadAsSharedModel] = useState(false);
   const handleModelListUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    const asShared = pendingUploadAsSharedModel;
     if (file) {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const result = ev.target?.result as string;
-        if (result) handleSaveModel(result);
+        if (result) handleSaveModel(result, asShared);
       };
       reader.readAsDataURL(file);
     }
-    // Reset input
+    setPendingUploadAsSharedModel(false);
     e.target.value = '';
   };
 
@@ -872,15 +887,27 @@ function App() {
     return () => { unsubPersonal(); unsubShared(); };
   }, [isAuthReady, user]);
 
-  const handleSaveRoom = async (imageUrl: string) => {
+  const handleSaveRoom = async (imageUrl: string, asShared: boolean = false) => {
     if (!user) {
       setGlobalError("Vui lòng đăng nhập để lưu phòng/giường mẫu.");
       return;
     }
-    const personalRoomCount = savedRooms.filter(r => r.uid === user.uid && !r.isShared).length;
-    if (personalRoomCount >= 5) {
-      setGlobalError("Kho cá nhân đã đầy (5/5). Vui lòng xóa bớt giường cá nhân để thêm mới.");
+    if (asShared && !isAdmin) {
+      setGlobalError("Chỉ Admin mới được thêm vào kho chung.");
       return;
+    }
+    if (asShared) {
+      const sharedCount = savedRooms.filter(r => r.isShared).length;
+      if (sharedCount >= 5) {
+        setGlobalError("Kho chung đã đầy (5/5). Vui lòng xóa bớt giường chung trước.");
+        return;
+      }
+    } else {
+      const personalRoomCount = savedRooms.filter(r => r.uid === user.uid && !r.isShared).length;
+      if (personalRoomCount >= 5) {
+        setGlobalError("Kho cá nhân đã đầy (5/5). Vui lòng xóa bớt giường cá nhân để thêm mới.");
+        return;
+      }
     }
 
     setIsSavingRoom(true);
@@ -925,9 +952,10 @@ function App() {
         id: roomId,
         imageUrl: resizedImage,
         uid: user.uid,
+        isShared: asShared,
         createdAt: Timestamp.now()
       });
-      console.log("Room saved successfully:", roomId);
+      console.log("Room saved successfully:", roomId, asShared ? "(shared)" : "(personal)");
     } catch (error: any) {
       console.error("Save room error:", error);
       let msg = "Không thể lưu phòng/giường mẫu.";
@@ -990,16 +1018,19 @@ function App() {
     }
   };
 
+  const [pendingUploadAsSharedRoom, setPendingUploadAsSharedRoom] = useState(false);
   const handleRoomListUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    const asShared = pendingUploadAsSharedRoom;
     if (file) {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const result = ev.target?.result as string;
-        if (result) handleSaveRoom(result);
+        if (result) handleSaveRoom(result, asShared);
       };
       reader.readAsDataURL(file);
     }
+    setPendingUploadAsSharedRoom(false);
     e.target.value = '';
   };
 
@@ -3938,20 +3969,43 @@ function App() {
 
                         {/* SECTION 1: GIƯỜNG CHUNG OTAMA */}
                         <div className="flex flex-col gap-2">
-                          <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold flex items-center gap-1">
-                            <Globe size={10} /> Giường chung Otama ({sharedRooms.length}/5)
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold flex items-center gap-1">
+                              <Globe size={10} /> Giường chung Otama ({sharedRooms.length}/5)
+                            </p>
+                            {isAdmin && sharedRooms.length < 5 && !isEditingSavedRooms && (
+                              <button
+                                onClick={() => {
+                                  if (!user) { handleLogin(); return; }
+                                  setPendingUploadAsSharedRoom(true);
+                                  roomListFileInputRef.current?.click();
+                                }}
+                                disabled={isSavingRoom}
+                                className="text-[10px] text-blue-400 font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
+                              >
+                                {isSavingRoom ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
+                                THÊM VÀO KHO CHUNG
+                              </button>
+                            )}
+                          </div>
                           <div className="grid grid-cols-5 gap-2 max-w-md">
                             {sharedRooms.map(r => renderRoomCell(r, isAdmin))}
                             {Array.from({ length: 5 - sharedRooms.length }).map((_, i) => (
-                              <div key={`empty-shared-${i}`} className="aspect-[3/4] rounded-lg border-2 border-dashed border-blue-500/30 flex items-center justify-center bg-blue-500/5">
-                                <Bed size={16} className="text-blue-500/40" />
+                              <div
+                                key={`empty-shared-${i}`}
+                                onClick={() => {
+                                  if (!isAdmin || isEditingSavedRooms) return;
+                                  if (!user) { handleLogin(); return; }
+                                  setPendingUploadAsSharedRoom(true);
+                                  roomListFileInputRef.current?.click();
+                                }}
+                                className={`aspect-[3/4] rounded-lg border-2 border-dashed border-blue-500/30 flex items-center justify-center bg-blue-500/5 ${isAdmin && !isEditingSavedRooms ? 'cursor-pointer hover:border-blue-500 hover:bg-blue-500/10' : ''}`}
+                                title={isAdmin && !isEditingSavedRooms ? 'Bấm để thêm vào kho chung' : ''}
+                              >
+                                {isAdmin && !isEditingSavedRooms ? <Plus size={16} className="text-blue-500/60" /> : <Bed size={16} className="text-blue-500/40" />}
                               </div>
                             ))}
                           </div>
-                          {isAdmin && sharedRooms.length < 5 && !isEditingSavedRooms && (
-                            <p className="text-[9px] text-gray-500">💡 Để thêm vào kho chung: upload vào kho cá nhân → hover ảnh → bấm 🌍 Đồng bộ</p>
-                          )}
                         </div>
 
                         {/* SECTION 2: GIƯỜNG CÁ NHÂN */}
@@ -5244,20 +5298,43 @@ function App() {
 
                         {/* SECTION 1: NGƯỜI MẪU CHUNG OTAMA */}
                         <div className="flex flex-col gap-2">
-                          <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold flex items-center gap-1">
-                            <Globe size={10} /> Người mẫu chung Otama ({sharedModels.length}/5)
-                          </p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold flex items-center gap-1">
+                              <Globe size={10} /> Người mẫu chung Otama ({sharedModels.length}/5)
+                            </p>
+                            {isAdmin && sharedModels.length < 5 && !isEditingSavedModels && (
+                              <button
+                                onClick={() => {
+                                  if (!user) { handleLogin(); return; }
+                                  setPendingUploadAsSharedModel(true);
+                                  modelListFileInputRef.current?.click();
+                                }}
+                                disabled={isSavingModel}
+                                className="text-[10px] text-blue-400 font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
+                              >
+                                {isSavingModel ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
+                                THÊM VÀO KHO CHUNG
+                              </button>
+                            )}
+                          </div>
                           <div className="grid grid-cols-5 gap-2">
                             {sharedModels.map(m => renderModelCell(m, isAdmin))}
                             {Array.from({ length: 5 - sharedModels.length }).map((_, i) => (
-                              <div key={`empty-shared-${i}`} className="aspect-[3/4] rounded-lg border-2 border-dashed border-blue-500/30 flex items-center justify-center bg-blue-500/5">
-                                <UserIcon size={16} className="text-blue-500/40" />
+                              <div
+                                key={`empty-shared-${i}`}
+                                onClick={() => {
+                                  if (!isAdmin || isEditingSavedModels) return;
+                                  if (!user) { handleLogin(); return; }
+                                  setPendingUploadAsSharedModel(true);
+                                  modelListFileInputRef.current?.click();
+                                }}
+                                className={`aspect-[3/4] rounded-lg border-2 border-dashed border-blue-500/30 flex items-center justify-center bg-blue-500/5 ${isAdmin && !isEditingSavedModels ? 'cursor-pointer hover:border-blue-500 hover:bg-blue-500/10' : ''}`}
+                                title={isAdmin && !isEditingSavedModels ? 'Bấm để thêm vào kho chung' : ''}
+                              >
+                                {isAdmin && !isEditingSavedModels ? <Plus size={16} className="text-blue-500/60" /> : <UserIcon size={16} className="text-blue-500/40" />}
                               </div>
                             ))}
                           </div>
-                          {isAdmin && sharedModels.length < 5 && !isEditingSavedModels && (
-                            <p className="text-[9px] text-gray-500">💡 Để thêm vào kho chung: upload vào kho cá nhân → hover ảnh → bấm 🌍 Đồng bộ</p>
-                          )}
                         </div>
 
                         {/* SECTION 2: NGƯỜI MẪU CÁ NHÂN */}
