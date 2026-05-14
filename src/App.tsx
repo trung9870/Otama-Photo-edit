@@ -3208,15 +3208,21 @@ function App() {
                         <Edit2 size={12} />
                         NHẬP THỦ CÔNG
                       </button>
-                      {isAdmin && (
-                        <button 
-                          onClick={() => setIsAddingEcomPrompt(true)}
-                          className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
-                        >
-                          <Plus size={12} />
-                          THÊM MỚI
-                        </button>
-                      )}
+                      <button
+                        onClick={() => {
+                          if (!isAdmin) {
+                            // Non-admin: always start fresh to avoid accidentally
+                            // re-saving a curated prompt's content under their name
+                            setEcomPromptText('');
+                            setNewEcomPromptName('');
+                          }
+                          setIsAddingEcomPrompt(true);
+                        }}
+                        className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                      >
+                        <Plus size={12} />
+                        THÊM MỚI
+                      </button>
                     </div>
                   </div>
 
