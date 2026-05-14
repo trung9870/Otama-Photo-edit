@@ -240,9 +240,15 @@ export async function handleGenerate(req: Req, res: Res) {
 
     const callGeminiOnce = async (variantIdx: number): Promise<string[]> => {
       const variedPrompt = prompt + ' '.repeat(variantIdx);
+      const parts: any[] = [];
+      if (templateBase64) {
+        parts.push({ inlineData: { data: templateBase64, mimeType: "image/jpeg" } });
+      }
+      parts.push({ inlineData: { data: imageBase64, mimeType: "image/jpeg" } });
+      parts.push({ text: variedPrompt });
       const response = await ai.models.generateContent({
         model: modelId,
-        contents: { parts: [{ inlineData: { data: imageBase64, mimeType: "image/jpeg" } }, { text: variedPrompt }] },
+        contents: { parts },
         config: {
           imageConfig: {
             aspectRatio: aspectRatio || "1:1",

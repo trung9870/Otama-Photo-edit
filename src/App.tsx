@@ -2311,94 +2311,39 @@ function App() {
     setEcomThayResult(null);
 
     try {
-      const apiKey = hasPersonalKey ? (process.env.API_KEY || '') : googleApiKey;
-      if (!apiKey && !hasPersonalKey) {
-        if (window.aistudio) {
-          const hasKey = await window.aistudio.hasSelectedApiKey();
-          if (!hasKey) {
-            await window.aistudio.openSelectKey();
-          }
-        } else {
-          throw new Error("Vui lòng thiết lập API Key trong phần Cài đặt.");
-        }
-      }
-
       const modelB64 = ecomThayModelImage.split(',')[1];
       const productB64 = ecomThayProductImage.split(',')[1];
       const actualModelId = MODEL_CONFIG[ecomThayModel]?.id || 'gemini-3-pro-image-preview';
 
-      const callThay = async (currentApiKey: string) => {
-        const ai = new GoogleGenAI({ apiKey: currentApiKey });
-        return await ai.models.generateContent({
-          model: actualModelId,
-          contents: {
-            parts: [
-              { text: `Virtual Try-On Task: ${ecomThayPrompt}` },
-              { inlineData: { data: modelB64, mimeType: 'image/jpeg' } },
-              { inlineData: { data: productB64, mimeType: 'image/jpeg' } }
-            ]
-          },
-          config: {
-            imageConfig: {
-              aspectRatio: "3:4",
-              imageSize: "1K"
-            }
-          }
-        });
-      };
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelId: actualModelId,
+          prompt: `Virtual Try-On Task: ${ecomThayPrompt}`,
+          imageBase64: productB64,
+          templateBase64: modelB64,
+          aspectRatio: "3:4",
+          imageSize: "1K",
+          numberOfImages: 1,
+          clientGoogleApiKey: googleApiKey
+        })
+      });
 
-      let response;
-      try {
-        response = await callThay(apiKey);
-      } catch (err: any) {
-        const isAuthError = err.message?.includes("400") || err.message?.includes("403") || 
-                           err.message?.toLowerCase().includes("permission") || 
-                           err.message?.toLowerCase().includes("api key not valid");
-                           
-        if (isAuthError) {
-          if (window.aistudio) {
-            const hasKey = await window.aistudio.hasSelectedApiKey();
-            if (!hasKey) {
-              await window.aistudio.openSelectKey();
-              const updatedHasKey = await window.aistudio.hasSelectedApiKey();
-              setHasPersonalKey(updatedHasKey);
-              const newApiKey = process.env.API_KEY || '';
-              if (newApiKey) {
-                response = await callThay(newApiKey);
-              } else {
-                throw new Error("Vui lòng chọn API Key cá nhân để thực hiện THAY.");
-              }
-            } else {
-              throw err;
-            }
-          } else {
-            throw new Error("API Key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại ở mục Cài Đặt.");
-          }
-        } else {
-          throw err;
-        }
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Lỗi server" }));
+        throw new Error(err.error || "Lỗi server");
       }
 
-      let foundImage = false;
-      for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-          setEcomThayResult(`data:image/png;base64,${part.inlineData.data}`);
-          foundImage = true;
-          break;
-        }
+      const data = await response.json();
+      const b64 = data.imagesBase64?.[0] || data.imageBase64;
+      if (!b64) {
+        throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
       }
-      
-      if (!foundImage) {
-        if (response.text) {
-          console.warn("AI returned text instead of image:", response.text);
-          throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
-        } else {
-          throw new Error("AI không trả về kết quả hợp lệ.");
-        }
-      }
+      setEcomThayResult(`data:image/png;base64,${b64}`);
     } catch (err: any) {
       console.error(err);
-      setGlobalError(err.message || "Có lỗi xảy ra khi gọi Google API.");
+      setGlobalError(err.message || "Có lỗi xảy ra khi thực hiện THAY.");
     } finally {
       setIsEcomThayGenerating(false);
     }
