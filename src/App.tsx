@@ -1301,7 +1301,24 @@ function App() {
       return;
     }
     try {
-      await setDoc(doc(db, 'prompts', p.id), { 
+      await setDoc(doc(db, 'prompts', p.id), {
+        isDefault: true
+      }, { merge: true });
+      alert("Đã đồng bộ Prompt này lên danh sách chung cho mọi người.");
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `prompts/${p.id}`);
+      alert("Có lỗi xảy ra khi đồng bộ.");
+    }
+  };
+
+  const toggleSyncGenPrompt = async (p: SavedPrompt, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isAdmin) {
+      alert("Chỉ Admin mới có quyền đồng bộ Prompt.");
+      return;
+    }
+    try {
+      await setDoc(doc(db, 'prompts', p.id), {
         isDefault: true
       }, { merge: true });
       alert("Đã đồng bộ Prompt này lên danh sách chung cho mọi người.");
@@ -4660,29 +4677,39 @@ function App() {
                         key={p.id}
                         onClick={() => selectPrompt(p.id)}
                         className={`group flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
-                          selectedPromptId === p.id 
-                            ? 'border-editor-accent bg-editor-accent/5' 
+                          selectedPromptId === p.id
+                            ? 'border-editor-accent bg-editor-accent/5'
                             : 'border-editor-border hover:border-gray-600'
                         }`}
                       >
                         <div className="flex items-center gap-3 overflow-hidden">
                           <div className={`shrink-0 w-2 h-2 rounded-full ${selectedPromptId === p.id ? 'bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]' : 'bg-gray-700'}`} />
-                          <div className="overflow-hidden">
+                          <div className="overflow-hidden flex items-center gap-2">
                             <p className={`text-xs font-bold truncate ${selectedPromptId === p.id ? 'text-editor-accent' : 'text-white'}`}>
                               {p.name}
                             </p>
+                            {p.isDefault && <CheckCircle2 size={14} className="text-green-500 shrink-0" title="Đã đồng bộ" />}
                           </div>
                         </div>
                         <div className="flex items-center gap-1 transition-all">
+                          {isAdmin && (
+                            <button
+                              onClick={(e) => toggleSyncGenPrompt(p, e)}
+                              className="p-1.5 transition-all text-gray-500 hover:text-blue-400"
+                              title="Đồng bộ cho mọi người"
+                            >
+                              <Globe size={12} />
+                            </button>
+                          )}
                           {(isAdmin || !p.isDefault) && (
                             <>
-                              <button 
+                              <button
                                 onClick={(e) => startEditPrompt(p, e)}
                                 className="p-1.5 hover:text-editor-accent transition-all"
                               >
                                 <Edit2 size={12} />
                               </button>
-                              <button 
+                              <button
                                 onClick={(e) => deletePrompt(p.id, e)}
                                 className="p-1.5 hover:text-red-500 transition-all"
                               >
@@ -4696,13 +4723,25 @@ function App() {
                   </div>
                 )}
 
-                <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-4">Nội dung Prompt hiện tại</p>
-                <textarea 
-                  value={aiPrompt}
-                  onChange={(e) => setAiPrompt(e.target.value)}
-                  placeholder="Mô tả nền và phong cách... (VD: phong cách anime, nền bãi biển)"
-                  className="ai-input min-h-[100px] resize-none mb-6"
-                />
+                {(isAdmin || selectedPromptId === 'manual') && (
+                  <>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-4">
+                      {selectedPromptId === 'manual' ? 'Nhập Prompt mới' : 'Nội dung Prompt hiện tại'}
+                    </p>
+                    <textarea
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="Mô tả nền và phong cách... (VD: phong cách anime, nền bãi biển)"
+                      className="ai-input min-h-[100px] resize-none mb-6"
+                    />
+                  </>
+                )}
+                {!isAdmin && selectedPromptId !== 'manual' && selectedPromptId && (
+                  <div className="bg-editor-accent/5 border border-editor-accent/30 rounded-lg px-4 py-3 mb-6 flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-editor-accent flex-shrink-0" />
+                    <p className="text-xs text-editor-accent font-bold">Đã chọn prompt — sẵn sàng Gen</p>
+                  </div>
+                )}
               </div>
 
               <div className="mt-auto space-y-4">
