@@ -1,15 +1,17 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, loadEnv} from 'vite';
+import {defineConfig} from 'vite';
 
-export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
+export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || env.GEMINI_API_KEY),
+      // SECURITY: KHÔNG inject API key vào client bundle.
+      // Mọi tham chiếu process.env.X trong client code sẽ thành "" tại build.
+      // Server (Vercel functions / Express) đọc env qua process.env thật ở Node runtime.
+      'process.env.GEMINI_API_KEY': '""',
+      'process.env.API_KEY': '""',
     },
     resolve: {
       alias: {
