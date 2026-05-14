@@ -4202,7 +4202,44 @@ function App() {
                                           <span className="px-4 py-2 bg-gray-800/80 text-white font-bold rounded-lg text-sm">Chọn</span>
                                         </div>
                                       )}
-                                      <button 
+                                      <button
+                                        className="absolute bottom-2 left-2 z-10 px-2.5 h-8 rounded-lg bg-editor-accent text-black flex items-center gap-1 hover:opacity-90 transition-opacity opacity-0 group-hover:opacity-100 font-bold text-xs pointer-events-auto"
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          let dataUrl = res.url;
+                                          if (res.url.startsWith('http')) {
+                                            try {
+                                              const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(res.url)}`;
+                                              const r = await fetch(proxyUrl);
+                                              if (!r.ok) throw new Error('fetch failed');
+                                              const blob = await r.blob();
+                                              dataUrl = await new Promise<string>((resolve) => {
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => resolve(reader.result as string);
+                                                reader.readAsDataURL(blob);
+                                              });
+                                            } catch (err) {
+                                              setGlobalError('Không tải được ảnh để chỉnh sửa tiếp.');
+                                              setTimeout(() => setGlobalError(null), 3000);
+                                              return;
+                                            }
+                                          }
+                                          setEcomProductImage(dataUrl);
+                                          setEcomResults([]);
+                                          setSelectedEcomGrid(null);
+                                          setEcomBoxes([]);
+                                          setSelectedBoxIds([]);
+                                          setEcomFinalImages([]);
+                                          setGlobalError('Đã dùng ảnh làm input mới. Viết prompt và bấm Gen tiếp.');
+                                          setTimeout(() => setGlobalError(null), 3000);
+                                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }}
+                                        title="Dùng ảnh này để chỉnh sửa / viết prompt tiếp"
+                                      >
+                                        <Edit2 size={14} />
+                                        EDIT
+                                      </button>
+                                      <button
                                         className="absolute bottom-2 right-2 z-10 w-8 h-8 rounded-lg bg-black/80 flex items-center justify-center hover:bg-black transition-colors opacity-0 group-hover:opacity-100 border border-editor-border/50 text-white hover:text-editor-accent pointer-events-auto"
                                         onClick={(e) => {
                                           e.stopPropagation();
