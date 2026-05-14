@@ -352,6 +352,7 @@ function App() {
   const [isEcomEnhancing, setIsEcomEnhancing] = useState(false);
   const [isTranslatingImages, setIsTranslatingImages] = useState(false);
   const [ecomFinalImages, setEcomFinalImages] = useState<{ id: string, url: string, loading: boolean }[]>([]);
+  const [ecomLastFinalImages, setEcomLastFinalImages] = useState<{ id: string, url: string, loading: boolean }[]>([]);
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay'>('gen-new');
@@ -2142,6 +2143,42 @@ function App() {
     }
   };
 
+  // Use a result image as the new product image input.
+  // Optionally snapshot current split results into "previous results" history
+  // so the user can still see them after switching input.
+  const useEcomImageAsInput = async (url: string, options?: { snapshot?: boolean }) => {
+    let dataUrl = url;
+    if (url.startsWith('http')) {
+      try {
+        const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+        const r = await fetch(proxyUrl);
+        if (!r.ok) throw new Error('fetch failed');
+        const blob = await r.blob();
+        dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch (err) {
+        setGlobalError('Không tải được ảnh để chỉnh sửa tiếp.');
+        setTimeout(() => setGlobalError(null), 3000);
+        return;
+      }
+    }
+    if (options?.snapshot && ecomFinalImages.length > 0) {
+      setEcomLastFinalImages(ecomFinalImages);
+    }
+    setEcomProductImage(dataUrl);
+    setEcomResults([]);
+    setSelectedEcomGrid(null);
+    setEcomBoxes([]);
+    setSelectedBoxIds([]);
+    setEcomFinalImages([]);
+    setGlobalError('Đã dùng ảnh làm input mới. Viết prompt và bấm Gen tiếp.');
+    setTimeout(() => setGlobalError(null), 3000);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleEcomGenerate = async () => {
     if (!ecomProductImage) return;
     if (ecomSubTab === 'clone-template' && !ecomTemplateImage) {
@@ -3697,6 +3734,37 @@ function App() {
           {/* Right panel: Results */}
           <div className="lg:col-span-8 flex flex-col gap-4">
             <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
+              {ecomSubTab === 'gen-new' && ecomLastFinalImages.length > 0 && (
+                <div className="mb-4 pb-4 border-b border-editor-border/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                      Ảnh tách lần trước ({ecomLastFinalImages.length})
+                    </p>
+                    <button
+                      onClick={() => setEcomLastFinalImages([])}
+                      className="text-[10px] text-gray-500 hover:text-red-400 font-bold"
+                    >
+                      XOÁ LỊCH SỬ
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    {ecomLastFinalImages.map((img, i) => (
+                      <div key={img.id} className="relative group rounded-lg overflow-hidden border border-editor-border bg-black aspect-[3/4]">
+                        <img src={img.url} alt={`Prev ${i+1}`} className="w-full h-full object-contain" />
+                        <button
+                          onClick={() => useEcomImageAsInput(img.url)}
+                          className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
+                          title="Dùng ảnh này làm input mới"
+                        >
+                          <span className="px-2 py-1 rounded bg-editor-accent text-black font-bold text-[10px] flex items-center gap-1">
+                            <Edit2 size={10} /> EDIT
+                          </span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {ecomSubTab === 'thay' ? (
                 <div className="flex flex-col gap-6 w-full">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -4248,35 +4316,9 @@ function App() {
                                       )}
                                       <button
                                         className="absolute bottom-2 left-2 z-10 px-2.5 h-8 rounded-lg bg-editor-accent text-black flex items-center gap-1 hover:opacity-90 transition-opacity opacity-0 group-hover:opacity-100 font-bold text-xs pointer-events-auto"
-                                        onClick={async (e) => {
+                                        onClick={(e) => {
                                           e.stopPropagation();
-                                          let dataUrl = res.url;
-                                          if (res.url.startsWith('http')) {
-                                            try {
-                                              const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(res.url)}`;
-                                              const r = await fetch(proxyUrl);
-                                              if (!r.ok) throw new Error('fetch failed');
-                                              const blob = await r.blob();
-                                              dataUrl = await new Promise<string>((resolve) => {
-                                                const reader = new FileReader();
-                                                reader.onloadend = () => resolve(reader.result as string);
-                                                reader.readAsDataURL(blob);
-                                              });
-                                            } catch (err) {
-                                              setGlobalError('Không tải được ảnh để chỉnh sửa tiếp.');
-                                              setTimeout(() => setGlobalError(null), 3000);
-                                              return;
-                                            }
-                                          }
-                                          setEcomProductImage(dataUrl);
-                                          setEcomResults([]);
-                                          setSelectedEcomGrid(null);
-                                          setEcomBoxes([]);
-                                          setSelectedBoxIds([]);
-                                          setEcomFinalImages([]);
-                                          setGlobalError('Đã dùng ảnh làm input mới. Viết prompt và bấm Gen tiếp.');
-                                          setTimeout(() => setGlobalError(null), 3000);
-                                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                                          useEcomImageAsInput(res.url, { snapshot: true });
                                         }}
                                         title="Dùng ảnh này để chỉnh sửa / viết prompt tiếp"
                                       >
