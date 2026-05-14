@@ -447,6 +447,7 @@ function App() {
   const [isGeneratingWhiteBg, setIsGeneratingWhiteBg] = useState(false);
   const [tryOnResult, setTryOnResult] = useState<string | null>(null);
   const [tryOnPrompt, setTryOnPrompt] = useState<string>('');
+  const [tryOnManualMode, setTryOnManualMode] = useState<boolean>(false);
   const modelFileInputRef = useRef<HTMLInputElement>(null);
   const productFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -5344,13 +5345,31 @@ function App() {
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <p className="text-[10px] text-gray-500 uppercase tracking-widest">Chọn Prompt nhanh</p>
-                        <button 
-                          onClick={() => setIsAddingPrompt(true)}
-                          className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
-                        >
-                          <Plus size={12} />
-                          THÊM MỚI
-                        </button>
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => {
+                              setTryOnManualMode(true);
+                              setTryOnPrompt('');
+                            }}
+                            className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                          >
+                            <Edit2 size={12} />
+                            NHẬP THỦ CÔNG
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (!isAdmin) {
+                                setNewPromptName('');
+                                setNewPromptText('');
+                              }
+                              setIsAddingPrompt(true);
+                            }}
+                            className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                          >
+                            <Plus size={12} />
+                            THÊM MỚI
+                          </button>
+                        </div>
                       </div>
 
                       {isAddingPrompt ? (
@@ -5394,34 +5413,53 @@ function App() {
                         </motion.div>
                       ) : (
                         <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar mb-4">
+                          {tryOnManualMode && (
+                            <div className="flex items-center gap-3 p-3 rounded-xl border border-editor-accent bg-editor-accent/5 transition-all cursor-pointer">
+                              <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]" />
+                              <p className="text-xs font-bold text-editor-accent">📝 Nhập thủ công</p>
+                            </div>
+                          )}
                           {savedTryOnPrompts.map((p) => (
                             <div
                               key={p.id}
-                              onClick={() => setTryOnPrompt(p.prompt)}
+                              onClick={() => {
+                                setTryOnPrompt(p.prompt);
+                                setTryOnManualMode(false);
+                              }}
                               className={`group flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
-                                tryOnPrompt === p.prompt 
-                                  ? 'border-editor-accent bg-editor-accent/5' 
+                                !tryOnManualMode && tryOnPrompt === p.prompt
+                                  ? 'border-editor-accent bg-editor-accent/5'
                                   : 'border-editor-border hover:border-gray-600'
                               }`}
                             >
                               <div className="flex items-center gap-3 overflow-hidden">
-                                <div className={`shrink-0 w-2 h-2 rounded-full ${tryOnPrompt === p.prompt ? 'bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]' : 'bg-gray-700'}`} />
-                                <div className="overflow-hidden">
-                                  <p className={`text-xs font-bold truncate ${tryOnPrompt === p.prompt ? 'text-editor-accent' : 'text-white'}`}>
+                                <div className={`shrink-0 w-2 h-2 rounded-full ${!tryOnManualMode && tryOnPrompt === p.prompt ? 'bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]' : 'bg-gray-700'}`} />
+                                <div className="overflow-hidden flex items-center gap-2">
+                                  <p className={`text-xs font-bold truncate ${!tryOnManualMode && tryOnPrompt === p.prompt ? 'text-editor-accent' : 'text-white'}`}>
                                     {p.name}
                                   </p>
+                                  {p.isDefault && <CheckCircle2 size={14} className="text-green-500 shrink-0" title="Đã đồng bộ" />}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                              <div className="flex items-center gap-1 transition-all">
+                                {isAdmin && (
+                                  <button
+                                    onClick={(e) => toggleSyncGenPrompt(p, e)}
+                                    className="p-1.5 transition-all text-gray-500 hover:text-blue-400"
+                                    title="Đồng bộ cho mọi người"
+                                  >
+                                    <Globe size={12} />
+                                  </button>
+                                )}
                                 {(isAdmin || !p.isDefault) && (
                                   <>
-                                    <button 
+                                    <button
                                       onClick={(e) => startEditPrompt(p, e)}
                                       className="p-1.5 hover:text-editor-accent transition-all"
                                     >
                                       <Edit2 size={12} />
                                     </button>
-                                    <button 
+                                    <button
                                       onClick={(e) => deletePrompt(p.id, e)}
                                       className="p-1.5 hover:text-red-500 transition-all"
                                     >
@@ -5436,15 +5474,25 @@ function App() {
                       )}
                     </div>
 
-                    <div>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Nội dung Prompt</p>
-                      <textarea 
-                        value={tryOnPrompt}
-                        onChange={(e) => setTryOnPrompt(e.target.value)}
-                        placeholder="Mô tả cách thay đồ... (VD: Thay chiếc áo thun này cho người mẫu, giữ nguyên tư thế)"
-                        className="ai-input min-h-[120px] resize-none"
-                      />
-                    </div>
+                    {(isAdmin || tryOnManualMode) && (
+                      <div>
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">
+                          {tryOnManualMode ? 'Nhập Prompt mới' : 'Nội dung Prompt'}
+                        </p>
+                        <textarea
+                          value={tryOnPrompt}
+                          onChange={(e) => setTryOnPrompt(e.target.value)}
+                          placeholder="Mô tả cách thay đồ... (VD: Thay chiếc áo thun này cho người mẫu, giữ nguyên tư thế)"
+                          className="ai-input min-h-[120px] resize-none"
+                        />
+                      </div>
+                    )}
+                    {!isAdmin && !tryOnManualMode && tryOnPrompt && (
+                      <div className="bg-editor-accent/5 border border-editor-accent/30 rounded-lg px-4 py-3 flex items-center gap-2">
+                        <CheckCircle2 size={14} className="text-editor-accent flex-shrink-0" />
+                        <p className="text-xs text-editor-accent font-bold">Đã chọn prompt — sẵn sàng Thay đồ</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
