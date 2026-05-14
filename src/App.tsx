@@ -323,6 +323,21 @@ function App() {
   const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay'>('gen-new');
   const [ecomTemplateImage, setEcomTemplateImage] = useState<string | null>(null);
   const [clonePromptType, setClonePromptType] = useState<'amazon' | 'taobao'>('amazon');
+
+  const DEFAULT_CLONE_PROMPTS = {
+    amazon: "请复刻图1的设计,为图二生成亚马逊视觉电商A+,越南语",
+    taobao: "请复刻图1的设计,为图二生成淘寶视觉电商A+,英文",
+  };
+  const [clonePrompts, setClonePrompts] = useState<{ amazon: string; taobao: string }>(() => {
+    try {
+      const saved = localStorage.getItem('clonePrompts');
+      if (saved) return { ...DEFAULT_CLONE_PROMPTS, ...JSON.parse(saved) };
+    } catch {}
+    return DEFAULT_CLONE_PROMPTS;
+  });
+  useEffect(() => {
+    localStorage.setItem('clonePrompts', JSON.stringify(clonePrompts));
+  }, [clonePrompts]);
   
   // THAY State
   const [ecomThayModelImage, setEcomThayModelImage] = useState<string | null>(null);
@@ -1976,11 +1991,7 @@ function App() {
     let templateB64: string | undefined = undefined;
 
     if (ecomSubTab === 'clone-template') {
-      if (clonePromptType === 'amazon') {
-        currentPrompt = "请复刻图1的设计,为图二生成亚马逊视觉电商A+,越南语";
-      } else {
-        currentPrompt = "请复刻图1的设计,为图二生成淘寶视觉电商A+,英文";
-      }
+      currentPrompt = clonePrompts[clonePromptType] || DEFAULT_CLONE_PROMPTS[clonePromptType];
       config = MODEL_CONFIG['gpt2']; // force GPT2
       templateB64 = ecomTemplateImage!.split(',')[1];
     }
@@ -2873,23 +2884,28 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="mt-2">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">3. KIỂU TEMPLATE</p>
-                    <div className="flex bg-[#252525] p-1 rounded-lg">
-                      <button
-                        onClick={() => setClonePromptType('amazon')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'amazon' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        Amazon
-                      </button>
-                      <button
-                        onClick={() => setClonePromptType('taobao')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'taobao' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        Taobao
-                      </button>
+                  {isAdmin && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">
+                          PROMPT {clonePromptType === 'amazon' ? 'AMAZON' : 'TAOBAO'} (CHỈ ADMIN)
+                        </p>
+                        <button
+                          onClick={() => setClonePrompts(prev => ({ ...prev, [clonePromptType]: DEFAULT_CLONE_PROMPTS[clonePromptType] }))}
+                          className="text-[9px] text-gray-500 hover:text-editor-accent font-bold"
+                          title="Khôi phục prompt mặc định"
+                        >
+                          ↺ MẶC ĐỊNH
+                        </button>
+                      </div>
+                      <textarea
+                        value={clonePrompts[clonePromptType]}
+                        onChange={(e) => setClonePrompts(prev => ({ ...prev, [clonePromptType]: e.target.value }))}
+                        className="w-full h-20 bg-editor-border/10 border border-editor-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-editor-accent resize-none"
+                      />
+                      <p className="text-[9px] text-gray-500 mt-1">Nhân viên không thấy prompt này, chỉ chọn loại Amazon/Taobao.</p>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : ecomSubTab === 'pattern-replace' ? (
                 <div className="flex flex-col gap-6">
