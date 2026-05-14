@@ -3325,18 +3325,30 @@ function App() {
                     </div>
                   )}
 
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-4">NỘI DUNG PROMPT HIỆN TẠI</p>
-                  <textarea
-                    value={ecomPromptText}
-                    onChange={(e) => {
-                      setEcomPromptText(e.target.value);
-                      if (selectedEcomPromptId !== 'manual') {
-                        setSelectedEcomPromptId('manual');
-                      }
-                    }}
-                    placeholder="Mô tả nội dung..."
-                    className="w-full h-24 bg-editor-border/10 border border-editor-border rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-editor-accent resize-none placeholder-gray-600 mb-4"
-                  />
+                  {(isAdmin || selectedEcomPromptId === 'manual') && (
+                    <>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-4">
+                        {selectedEcomPromptId === 'manual' ? 'NHẬP PROMPT MỚI' : 'NỘI DUNG PROMPT HIỆN TẠI'}
+                      </p>
+                      <textarea
+                        value={ecomPromptText}
+                        onChange={(e) => {
+                          setEcomPromptText(e.target.value);
+                          if (selectedEcomPromptId !== 'manual') {
+                            setSelectedEcomPromptId('manual');
+                          }
+                        }}
+                        placeholder="Mô tả nội dung..."
+                        className="w-full h-24 bg-editor-border/10 border border-editor-border rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-editor-accent resize-none placeholder-gray-600 mb-4"
+                      />
+                    </>
+                  )}
+                  {!isAdmin && selectedEcomPromptId !== 'manual' && selectedEcomPromptId && (
+                    <div className="bg-editor-accent/5 border border-editor-accent/30 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
+                      <CheckCircle2 size={14} className="text-editor-accent flex-shrink-0" />
+                      <p className="text-xs text-editor-accent font-bold">Đã chọn prompt — sẵn sàng Gen</p>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[10px] text-editor-accent uppercase tracking-widest font-bold">+ Bổ sung prompt (tuỳ chọn)</p>
