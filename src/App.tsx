@@ -2674,17 +2674,19 @@ function App() {
               </button>
             )}
           </div>
-          <button 
-            onClick={() => setIsSettingsOpen(true)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-bold transition-all ${
-              kieApiKey || googleApiKey
-                ? 'bg-green-500/10 border-green-500/30 text-green-500' 
-                : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-500'
-            }`}
-          >
-            <Settings size={12} />
-            {kieApiKey || googleApiKey ? 'Cài đặt API' : 'Thêm API Key'}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-bold transition-all ${
+                kieApiKey || googleApiKey
+                  ? 'bg-green-500/10 border-green-500/30 text-green-500'
+                  : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-500'
+              }`}
+            >
+              <Settings size={12} />
+              {kieApiKey || googleApiKey ? 'Cài đặt API' : 'Thêm API Key'}
+            </button>
+          )}
 
           {isAuthReady && (
             <div className="flex items-center gap-3 bg-editor-border/20 px-3 py-1.5 rounded-full border border-editor-border/30">

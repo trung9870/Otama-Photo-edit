@@ -188,11 +188,12 @@ export async function handleGenerate(req: Req, res: Res) {
     const { modelId, prompt, imageBase64, templateBase64, aspectRatio, imageSize, numberOfImages, clientKieApiKey, clientGoogleApiKey } = req.body;
     console.log(`[api] /generate modelId=${modelId} numberOfImages=${numberOfImages} imageSize=${imageSize} hasTemplate=${!!templateBase64}`);
 
-    const defaultApiKey = process.env.GEMINI_API_KEY;
+    const defaultGoogleKey = process.env.GEMINI_API_KEY;
+    const defaultKieKey = process.env.KIE_API_KEY;
 
     if (modelId === 'gpt-image-2-image-to-image' || modelId === 'kie-ai-gpt2') {
-      const apiKey = clientKieApiKey || defaultApiKey;
-      if (!apiKey) return res.status(401).json({ error: "Missing Kie.ai API key" });
+      const apiKey = clientKieApiKey || defaultKieKey;
+      if (!apiKey) return res.status(401).json({ error: "Chưa cấu hình API key cho GPT2 (Kie.ai). Vui lòng liên hệ Admin." });
 
       let inputUrls: string[] = [];
       try {
@@ -224,15 +225,15 @@ export async function handleGenerate(req: Req, res: Res) {
     }
 
     // Default Gemini processing
-    let activeApiKey = defaultApiKey;
+    let activeApiKey = defaultGoogleKey;
     let aiOptions: any = {};
     if (modelId === 'gemini-3-pro-image-preview' || modelId === 'gemini-3.1-flash-image-preview') {
-      activeApiKey = clientGoogleApiKey || defaultApiKey;
+      activeApiKey = clientGoogleApiKey || defaultGoogleKey;
       aiOptions = { apiKey: activeApiKey || '' };
     } else {
-      aiOptions = { apiKey: defaultApiKey || '' };
+      aiOptions = { apiKey: defaultGoogleKey || '' };
     }
-    if (!activeApiKey) return res.status(500).json({ error: "Missing required API Key for this model." });
+    if (!activeApiKey) return res.status(500).json({ error: "Chưa cấu hình API key Google. Vui lòng liên hệ Admin." });
 
     const ai = new GoogleGenAI(aiOptions);
     const count = numberOfImages && typeof numberOfImages === 'number' && numberOfImages > 0 ? numberOfImages : 1;
