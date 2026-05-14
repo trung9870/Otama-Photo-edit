@@ -335,9 +335,52 @@ function App() {
     } catch {}
     return DEFAULT_CLONE_PROMPTS;
   });
+  // Track whether the current state was synced (matches server) vs local draft
+  const [clonePromptsSynced, setClonePromptsSynced] = useState<{ amazon: boolean; taobao: boolean }>({ amazon: false, taobao: false });
+
   useEffect(() => {
     localStorage.setItem('clonePrompts', JSON.stringify(clonePrompts));
   }, [clonePrompts]);
+
+  // Subscribe to shared clone-templates from Firestore (everyone reads this)
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'clone-templates'), (snap) => {
+      const updates: Partial<{ amazon: string; taobao: string }> = {};
+      const syncedFlags: Partial<{ amazon: boolean; taobao: boolean }> = {};
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if ((d.id === 'amazon' || d.id === 'taobao') && typeof data.prompt === 'string') {
+          updates[d.id as 'amazon' | 'taobao'] = data.prompt;
+          syncedFlags[d.id as 'amazon' | 'taobao'] = true;
+        }
+      });
+      if (Object.keys(updates).length > 0) {
+        setClonePrompts(prev => ({ ...prev, ...updates }));
+        setClonePromptsSynced(prev => ({ ...prev, ...syncedFlags }));
+      }
+    }, (err) => {
+      console.warn('clone-templates subscribe failed:', err.message);
+    });
+    return () => unsub();
+  }, []);
+
+  const syncClonePrompt = async () => {
+    if (!isAdmin) {
+      alert("Chỉ Admin mới có quyền đồng bộ Prompt.");
+      return;
+    }
+    try {
+      await setDoc(doc(db, 'clone-templates', clonePromptType), {
+        prompt: clonePrompts[clonePromptType],
+        updatedAt: Timestamp.now(),
+      });
+      setClonePromptsSynced(prev => ({ ...prev, [clonePromptType]: true }));
+      alert(`Đã đồng bộ prompt ${clonePromptType.toUpperCase()} cho mọi người.`);
+    } catch (error: any) {
+      console.error("Sync clone prompt error:", error);
+      alert("Có lỗi xảy ra khi đồng bộ: " + error.message);
+    }
+  };
   
   // THAY State
   const [ecomThayModelImage, setEcomThayModelImage] = useState<string | null>(null);
@@ -2887,23 +2930,42 @@ function App() {
                   {isAdmin && (
                     <div className="mt-2">
                       <div className="flex items-center justify-between mb-2">
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">
+                        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold flex items-center gap-2">
                           PROMPT {clonePromptType === 'amazon' ? 'AMAZON' : 'TAOBAO'} (CHỈ ADMIN)
+                          {clonePromptsSynced[clonePromptType] && (
+                            <CheckCircle2 size={11} className="text-green-500" title="Đã đồng bộ" />
+                          )}
                         </p>
-                        <button
-                          onClick={() => setClonePrompts(prev => ({ ...prev, [clonePromptType]: DEFAULT_CLONE_PROMPTS[clonePromptType] }))}
-                          className="text-[9px] text-gray-500 hover:text-editor-accent font-bold"
-                          title="Khôi phục prompt mặc định"
-                        >
-                          ↺ MẶC ĐỊNH
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={syncClonePrompt}
+                            className="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 font-bold"
+                            title="Đồng bộ prompt này cho mọi người dùng"
+                          >
+                            <Globe size={10} /> ĐỒNG BỘ
+                          </button>
+                          <button
+                            onClick={() => setClonePrompts(prev => ({ ...prev, [clonePromptType]: DEFAULT_CLONE_PROMPTS[clonePromptType] }))}
+                            className="text-[9px] text-gray-500 hover:text-editor-accent font-bold"
+                            title="Khôi phục prompt mặc định"
+                          >
+                            ↺ MẶC ĐỊNH
+                          </button>
+                        </div>
                       </div>
                       <textarea
                         value={clonePrompts[clonePromptType]}
-                        onChange={(e) => setClonePrompts(prev => ({ ...prev, [clonePromptType]: e.target.value }))}
+                        onChange={(e) => {
+                          setClonePrompts(prev => ({ ...prev, [clonePromptType]: e.target.value }));
+                          setClonePromptsSynced(prev => ({ ...prev, [clonePromptType]: false }));
+                        }}
                         className="w-full h-20 bg-editor-border/10 border border-editor-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-editor-accent resize-none"
                       />
-                      <p className="text-[9px] text-gray-500 mt-1">Nhân viên không thấy prompt này, chỉ chọn loại Amazon/Taobao.</p>
+                      <p className="text-[9px] text-gray-500 mt-1">
+                        {clonePromptsSynced[clonePromptType]
+                          ? '✅ Prompt đã đồng bộ cho mọi nhân viên.'
+                          : '⚠️ Có thay đổi chưa đồng bộ. Bấm "ĐỒNG BỘ" để áp dụng cho nhân viên.'}
+                      </p>
                     </div>
                   )}
                 </div>
