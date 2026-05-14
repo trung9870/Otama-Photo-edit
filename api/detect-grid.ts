@@ -1,4 +1,4 @@
-import { handleDetectGrid } from './_lib/handlers';
+import { handleDetectGrid } from './_lib/handlers.js';
 
 export const config = { maxDuration: 60 };
 

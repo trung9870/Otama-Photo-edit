@@ -1,4 +1,4 @@
-import { handleAnalyze } from './_lib/handlers';
+import { handleAnalyze } from './_lib/handlers.js';
 
 export const config = { maxDuration: 60 };
 

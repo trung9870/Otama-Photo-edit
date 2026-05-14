@@ -1,4 +1,4 @@
-import { handleGenerate } from './_lib/handlers';
+import { handleGenerate } from './_lib/handlers.js';
 
 export const config = { maxDuration: 60 };
 
