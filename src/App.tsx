@@ -224,6 +224,35 @@ const MODEL_CONFIG = {
 
 type ModelType = keyof typeof MODEL_CONFIG;
 
+// Resize + re-encode an image data URL so the request body fits Vercel's 4.5 MB limit.
+// Keeps aspect ratio. Default 1600px long edge / JPEG 0.85 ≈ 200-400 KB per image.
+async function compressImageDataUrl(dataUrl: string, maxDim = 1600, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height / width) * maxDim);
+          width = maxDim;
+        } else {
+          width = Math.round((width / height) * maxDim);
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject(new Error('Canvas context error'));
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('Image load error'));
+    img.src = dataUrl;
+  });
+}
+
 // Poll an array of Kie.ai task IDs until each completes (or fails / times out).
 // Returns the resulting image URLs in the same order as taskIds.
 // Each poll request hits /api/generate-check (~1s), so a Vercel function
@@ -2389,8 +2418,11 @@ function App() {
     setEcomThayResult(null);
 
     try {
-      const modelB64 = ecomThayModelImage.split(',')[1];
-      const productB64 = ecomThayProductImage.split(',')[1];
+      // Compress both images before sending — Vercel's request body limit is 4.5 MB.
+      const compressedModel = await compressImageDataUrl(ecomThayModelImage, 1600, 0.85);
+      const compressedProduct = await compressImageDataUrl(ecomThayProductImage, 1600, 0.85);
+      const modelB64 = compressedModel.split(',')[1];
+      const productB64 = compressedProduct.split(',')[1];
       const actualModelId = MODEL_CONFIG[ecomThayModel]?.id || 'gemini-3-pro-image-preview';
 
       const response = await fetch('/api/generate', {
