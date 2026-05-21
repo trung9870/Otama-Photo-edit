@@ -2987,10 +2987,25 @@ function App() {
               {ecomSubTab === 'clone-template' ? (
                 <div className="flex flex-col gap-4">
                   <div>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">1. ẢNH TEMPLATE MẪU</p>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center justify-center font-bold rounded-full"
+                        style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}
+                      >
+                        1
+                      </span>
+                      <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                        Template mẫu
+                      </p>
+                    </div>
                     <div
                       {...makeDropHandlers('ecom-template', setEcomTemplateImage)}
-                      className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${dragOverId === 'ecom-template' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
+                      className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                      style={{
+                        background: dragOverId === 'ecom-template' ? 'var(--color-accent-soft)' : 'var(--color-card-secondary)',
+                        border: `2px dashed ${dragOverId === 'ecom-template' || ecomTemplateImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        borderRadius: 14,
+                      }}
                       onClick={() => {
                         setPasteTargetId('ecom-template');
                         if (ecomTemplateFileInputRef.current) ecomTemplateFileInputRef.current.click();
@@ -2999,30 +3014,48 @@ function App() {
                       {ecomTemplateImage ? (
                         <>
                           <img src={ecomTemplateImage} alt="Template" className="w-full h-full object-contain" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div
+                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+                          >
                             <span className="text-white font-bold text-xs">Thay đổi ảnh Template</span>
                           </div>
                         </>
                       ) : isStitchingImages ? (
-                        <div className="flex flex-col items-center gap-3 text-editor-accent">
+                        <div className="flex flex-col items-center gap-3" style={{ color: 'var(--color-accent)' }}>
                           <Loader2 className="animate-spin" size={32} />
-                          <span className="text-sm font-bold animate-pulse">Đang ghép ảnh...</span>
+                          <span className="text-sm font-bold animate-pulse">Đang ghép ảnh…</span>
                         </div>
                       ) : (
-                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent text-center px-4">
+                        <div className="flex flex-col items-center gap-2 text-center px-4" style={{ color: 'var(--color-text-tertiary)' }}>
                           <Upload size={32} />
-                          <span className="text-sm font-medium">Click để tải 1 ảnh hoặc ghép nhiều ảnh</span>
-                          <span className="text-[10px] opacity-60">Bạn có thể chọn nhiều ảnh cùng lúc để tự động ghép</span>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>Click để tải 1 ảnh hoặc ghép nhiều ảnh</span>
+                          <span style={{ fontSize: 11, opacity: 0.7 }}>Có thể chọn nhiều ảnh cùng lúc để tự động ghép</span>
                         </div>
                       )}
                     </div>
                   </div>
 
                   <div>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">2. ẢNH SẢN PHẨM (GỐC)</p>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center justify-center font-bold rounded-full"
+                        style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}
+                      >
+                        2
+                      </span>
+                      <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                        Sản phẩm gốc
+                      </p>
+                    </div>
                     <div
                       {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
-                      className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${dragOverId === 'ecom-product' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
+                      className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                      style={{
+                        background: dragOverId === 'ecom-product' ? 'var(--color-accent-soft)' : 'var(--color-card-secondary)',
+                        border: `2px dashed ${dragOverId === 'ecom-product' || ecomProductImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        borderRadius: 14,
+                      }}
                       onClick={() => {
                         setPasteTargetId('ecom-product');
                         if (ecomFileInputRef.current) ecomFileInputRef.current.click();
@@ -3031,35 +3064,36 @@ function App() {
                       {ecomProductImage ? (
                         <>
                           <img src={ecomProductImage} alt="Product" className="w-full h-full object-contain" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div
+                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+                          >
                             <span className="text-white font-bold text-xs">Thay đổi ảnh sản phẩm</span>
                           </div>
                         </>
                       ) : (
-                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent">
+                        <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
                           <Upload size={32} />
-                          <span className="text-sm font-medium">Click để tải ảnh Sản phẩm</span>
+                          <span style={{ fontSize: 13, fontWeight: 500 }}>Click để tải ảnh sản phẩm</span>
                         </div>
                       )}
                     </div>
                   </div>
 
                   <div className="mt-2">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">3. LOẠI TEMPLATE CẦN TẠO</p>
-                    <div className="flex bg-[#252525] p-1 rounded-lg">
-                      <button
-                        onClick={() => setClonePromptType('amazon')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'amazon' ? 'bg-editor-accent text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        Amazon
-                      </button>
-                      <button
-                        onClick={() => setClonePromptType('taobao')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'taobao' ? 'bg-editor-accent text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        Taobao
-                      </button>
-                    </div>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                      Loại template
+                    </p>
+                    <Segmented<'amazon' | 'taobao'>
+                      value={clonePromptType}
+                      onChange={(v) => setClonePromptType(v)}
+                      size="md"
+                      fullWidth
+                      options={[
+                        { value: 'amazon', label: 'Amazon A+' },
+                        { value: 'taobao', label: 'Taobao' },
+                      ]}
+                    />
                   </div>
 
                   {isAdmin && (
@@ -3105,16 +3139,34 @@ function App() {
                   )}
                 </div>
               ) : ecomSubTab === 'pattern-replace' ? (
-                <div className="flex flex-col gap-6">
-                  {/* Step 1 */}
-                  <div className="bg-editor-border/10 p-4 rounded-xl border border-editor-border">
-                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-editor-accent text-white flex items-center justify-center text-xs">1</span>
-                      TẠO PATTERN TỪ ẢNH MẪU
-                    </h3>
+                <div className="flex flex-col gap-4">
+                  {/* Step 1 — Nguồn pattern */}
+                  <div
+                    className="p-4"
+                    style={{
+                      background: 'var(--color-card-secondary)',
+                      borderRadius: 14,
+                    }}
+                  >
+                    <div className="mb-3 flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center justify-center font-bold rounded-full"
+                        style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}
+                      >
+                        1
+                      </span>
+                      <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                        Ảnh nguồn pattern
+                      </p>
+                    </div>
                     <div
                       {...makeDropHandlers('pattern-source', (s) => { setPatternSourceImage(s); setGeneratedPattern(null); })}
-                      className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${dragOverId === 'pattern-source' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
+                      className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                      style={{
+                        background: dragOverId === 'pattern-source' ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                        border: `2px dashed ${dragOverId === 'pattern-source' || patternSourceImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        borderRadius: 12,
+                      }}
                       onClick={() => {
                         setPasteTargetId('pattern-source');
                         if (patternSourceFileInputRef.current) patternSourceFileInputRef.current.click();
@@ -3123,71 +3175,116 @@ function App() {
                       {patternSourceImage ? (
                         <>
                           <img src={patternSourceImage} alt="Pattern Source" className="w-full h-full object-contain" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                            <button 
+                          <div
+                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4"
+                            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+                          >
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setIsPatternCropModalOpen(true);
                               }}
-                              className="p-3 bg-black/60 text-white rounded-md hover:bg-editor-accent hover:text-white transition-colors"
+                              className="p-3 text-white rounded-md transition-colors"
+                              style={{ background: 'rgba(0,0,0,0.6)' }}
                               title="Cắt ảnh"
                             >
-                              <Crop size={24} />
+                              <Crop size={20} />
                             </button>
-                            <div className="w-[1px] h-8 bg-white/30"></div>
-                            <button 
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setPatternSourceImage(null);
                                 setGeneratedPattern(null);
                                 if (patternSourceFileInputRef.current) patternSourceFileInputRef.current.value = '';
                               }}
-                              className="p-3 bg-black/60 text-white rounded-md hover:bg-red-500 transition-colors"
+                              className="p-3 text-white rounded-md transition-colors"
+                              style={{ background: 'rgba(0,0,0,0.6)' }}
                               title="Xóa ảnh"
                             >
-                              <Trash2 size={24} />
+                              <Trash2 size={20} />
                             </button>
                           </div>
                         </>
                       ) : (
-                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent">
-                          <Upload size={32} />
-                          <span className="text-sm font-medium text-center px-4">Tải ảnh hoa văn tham khảo</span>
+                        <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                          <Upload size={28} />
+                          <span style={{ fontSize: 12, fontWeight: 500 }}>Tải ảnh hoa văn tham khảo</span>
                         </div>
                       )}
                     </div>
-                    
-                    <button
-                      onClick={handleEcomGeneratePattern}
-                      disabled={!patternSourceImage || isGeneratingPattern}
-                      className="w-full mt-4 py-3 bg-editor-accent text-white rounded-xl font-bold hover:bg-editor-accent/90 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
-                    >
-                      {isGeneratingPattern ? (
-                        <><Loader2 className="animate-spin" size={20} /> ĐANG TẠO PATTERN 2D...</>
-                      ) : (
-                        <><Wand2 size={20} /> TẠO PATTERN 2D</>
-                      )}
-                    </button>
+                    <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 8 }}>
+                      AI sẽ trích xuất hoạ tiết & lặp seamless.
+                    </p>
+
+                    <div className="mt-3">
+                      <Button
+                        variant="filled"
+                        size="md"
+                        fullWidth
+                        icon={isGeneratingPattern ? Loader2 : Wand2}
+                        onClick={handleEcomGeneratePattern}
+                        disabled={!patternSourceImage || isGeneratingPattern}
+                      >
+                        {isGeneratingPattern ? 'Đang tạo pattern 2D…' : 'Tạo pattern 2D'}
+                      </Button>
+                    </div>
 
                     {generatedPattern && (
                       <div className="mt-4">
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">KẾT QUẢ PATTERN 2D</p>
-                        <div className="w-full aspect-square rounded-xl overflow-hidden border border-editor-accent/30 bg-black/40 relative group">
+                        <div className="mb-2 flex items-center gap-2">
+                          <span
+                            className="inline-flex items-center font-semibold rounded-full"
+                            style={{
+                              padding: '3px 9px',
+                              fontSize: 11,
+                              background: 'color-mix(in srgb, var(--color-success) 16%, transparent)',
+                              color: 'var(--color-success)',
+                            }}
+                          >
+                            <CheckCircle2 size={11} style={{ marginRight: 4 }} /> Sẵn sàng
+                          </span>
+                        </div>
+                        <div
+                          className="w-full aspect-square overflow-hidden relative group"
+                          style={{
+                            background: 'var(--color-card)',
+                            border: '0.5px solid var(--color-border-soft)',
+                            borderRadius: 12,
+                          }}
+                        >
                           <img src={generatedPattern} alt="Generated Pattern" className="w-full h-full object-cover" />
                         </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Step 2 */}
-                  <div className={`bg-editor-border/10 p-4 rounded-xl border border-editor-border transition-opacity duration-300 ${!generatedPattern ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-editor-accent text-white flex items-center justify-center text-xs">2</span>
-                      ÁP DỤNG LÊN SẢN PHẨM MẪU
-                    </h3>
+                  {/* Step 2 — Mockup */}
+                  <div
+                    className={`p-4 transition-opacity duration-300 ${!generatedPattern ? 'opacity-50 pointer-events-none' : ''}`}
+                    style={{
+                      background: 'var(--color-card-secondary)',
+                      borderRadius: 14,
+                    }}
+                  >
+                    <div className="mb-3 flex items-center gap-2">
+                      <span
+                        className="inline-flex items-center justify-center font-bold rounded-full"
+                        style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}
+                      >
+                        2
+                      </span>
+                      <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                        Mockup sản phẩm
+                      </p>
+                    </div>
                     <div
                       {...makeDropHandlers('pattern-mockup', setPatternMockupImage)}
-                      className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${dragOverId === 'pattern-mockup' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
+                      className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                      style={{
+                        background: dragOverId === 'pattern-mockup' ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                        border: `2px dashed ${dragOverId === 'pattern-mockup' || patternMockupImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                        borderRadius: 12,
+                      }}
                       onClick={() => {
                         setPasteTargetId('pattern-mockup');
                         if (patternMockupFileInputRef.current) patternMockupFileInputRef.current.click();
@@ -3196,29 +3293,33 @@ function App() {
                       {patternMockupImage ? (
                         <>
                           <img src={patternMockupImage} alt="Product Mockup" className="w-full h-full object-contain" />
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div
+                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+                          >
                             <span className="text-white font-bold text-xs">Thay đổi ảnh sản phẩm</span>
                           </div>
                         </>
                       ) : (
-                        <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent">
-                          <Upload size={32} />
-                          <span className="text-sm font-medium text-center px-4">Tải ảnh sản phẩm (mockup)</span>
+                        <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                          <Upload size={28} />
+                          <span style={{ fontSize: 12, fontWeight: 500 }}>Tải ảnh sản phẩm (mockup)</span>
                         </div>
                       )}
                     </div>
 
-                    <button
-                      onClick={handleEcomApplyPattern}
-                      disabled={!patternMockupImage || !generatedPattern || isEcomGenerating}
-                      className="w-full mt-4 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
-                    >
-                      {isEcomGenerating ? (
-                        <><Loader2 className="animate-spin" size={20} /> ĐANG ÁP DỤNG...</>
-                      ) : (
-                        <><Shirt size={20} /> ÁP DỤNG PATTERN</>
-                      )}
-                    </button>
+                    <div className="mt-3">
+                      <Button
+                        variant="filled"
+                        size="md"
+                        fullWidth
+                        icon={isEcomGenerating ? Loader2 : Shirt}
+                        onClick={handleEcomApplyPattern}
+                        disabled={!patternMockupImage || !generatedPattern || isEcomGenerating}
+                      >
+                        {isEcomGenerating ? 'Đang áp dụng…' : 'Áp pattern lên mockup'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ) : ecomSubTab === 'thay' ? (
@@ -5178,16 +5279,31 @@ function App() {
     )}
 
         {activeTab === 'analyze' && (
-          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Analyze Tab Content */}
-            <div className="flex flex-col gap-4">
-              <h2
-                className="font-bold flex items-center gap-2"
-                style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
-              >
-                <Scan style={{ color: 'var(--color-accent)' }} size={18} />
-                Tải ảnh mẫu để phân tích
-              </h2>
+          <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Analyze Tab Content — left card */}
+            <div
+              className="flex flex-col gap-4 p-6"
+              style={{
+                background: 'var(--color-card)',
+                border: '0.5px solid var(--color-border-soft)',
+                borderRadius: 18,
+                boxShadow: 'var(--shadow-card)',
+              }}
+            >
+              <div>
+                <p
+                  className="uppercase font-semibold mb-1"
+                  style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                >
+                  Ảnh mẫu
+                </p>
+                <h2
+                  className="font-bold"
+                  style={{ fontSize: 22, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
+                >
+                  Tải ảnh để AI phân tích
+                </h2>
+              </div>
 
               <div>
                 <p
@@ -5293,24 +5409,31 @@ function App() {
               </Button>
             </div>
 
-            <div className="flex flex-col gap-4">
-              <h2
-                className="font-bold flex items-center gap-2"
-                style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
-              >
-                <Sparkles style={{ color: 'var(--color-accent)' }} size={18} />
-                Kết quả Prompt
-              </h2>
-              <div
-                className="flex-1 min-h-[300px] p-4 font-mono text-xs overflow-auto relative"
-                style={{
-                  background: '#0f0f12',
-                  color: '#a8d5ff',
-                  borderRadius: 18,
-                  border: '0.5px solid var(--color-border-soft)',
-                  boxShadow: 'var(--shadow-card)',
-                }}
-              >
+            {/* Analyze right card — Kết quả Prompt JSON */}
+            <div
+              className="flex flex-col gap-4 p-6"
+              style={{
+                background: 'var(--color-card)',
+                border: '0.5px solid var(--color-border-soft)',
+                borderRadius: 18,
+                boxShadow: 'var(--shadow-card)',
+              }}
+            >
+              <div className="flex items-end justify-between">
+                <div>
+                  <p
+                    className="uppercase font-semibold mb-1"
+                    style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                  >
+                    Kết quả
+                  </p>
+                  <h2
+                    className="font-bold"
+                    style={{ fontSize: 22, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
+                  >
+                    Prompt JSON
+                  </h2>
+                </div>
                 {analyzedPrompt && (
                   <button
                     onClick={async () => {
@@ -5322,23 +5445,32 @@ function App() {
                         console.error('Copy failed:', err);
                       }
                     }}
-                    className="absolute top-2 right-2 z-10 flex items-center gap-1 font-bold transition-all hover:brightness-110"
+                    className="flex items-center gap-1 font-semibold transition-all hover:brightness-110"
                     style={{
-                      padding: '4px 10px',
-                      fontSize: 10,
-                      borderRadius: 8,
-                      background: analyzedCopied ? 'var(--color-success)' : 'rgba(255,255,255,0.10)',
-                      color: '#fff',
+                      padding: '6px 12px',
+                      fontSize: 12,
+                      borderRadius: 10,
+                      background: analyzedCopied ? 'var(--color-success)' : 'var(--color-fill)',
+                      color: analyzedCopied ? '#fff' : 'var(--color-text-secondary)',
                     }}
                     title="Sao chép kết quả"
                   >
                     {analyzedCopied ? (
-                      <><CheckCircle2 size={12} /> ĐÃ COPY</>
+                      <><CheckCircle2 size={12} /> Đã copy</>
                     ) : (
-                      <><Copy size={12} /> COPY</>
+                      <><Copy size={12} /> Copy</>
                     )}
                   </button>
                 )}
+              </div>
+              <div
+                className="flex-1 min-h-[300px] p-4 font-mono text-xs overflow-auto"
+                style={{
+                  background: '#0f0f12',
+                  color: '#a8d5ff',
+                  borderRadius: 14,
+                }}
+              >
                 {analyzedPrompt ? (
                   <pre className="whitespace-pre-wrap">{analyzedPrompt}</pre>
                 ) : (
