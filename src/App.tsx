@@ -3954,6 +3954,63 @@ function App() {
           {/* Right panel: Results */}
           <div className="lg:col-span-8 flex flex-col gap-4">
             <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
+              {showEcomPromptModal && ecomSubTab === 'gen-new' ? (
+                <div className="w-full self-stretch flex flex-col">
+                  <div className="flex items-end justify-between mb-4">
+                    <div>
+                      <h2 className="font-bold" style={{ fontSize: 22, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
+                        Tất cả Prompt Ecom
+                      </h2>
+                      <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                        {ecomSavedPrompts.length} prompt đã lưu · Chọn 1 để dùng
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={X}
+                      onClick={() => setShowEcomPromptModal(false)}
+                    >
+                      Đóng
+                    </Button>
+                  </div>
+                  <div
+                    className="flex-1 overflow-y-auto p-2 space-y-1"
+                    style={{
+                      background: 'var(--color-card-secondary)',
+                      borderRadius: 14,
+                      maxHeight: '60vh',
+                    }}
+                  >
+                    {ecomSavedPrompts.length === 0 ? (
+                      <div className="py-12 text-center" style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
+                        Chưa có prompt nào được lưu.
+                      </div>
+                    ) : (
+                      ecomSavedPrompts.map((p) => (
+                        <PromptRow
+                          key={p.id}
+                          name={p.name}
+                          active={selectedEcomPromptId === p.id}
+                          synced={p.isDefault}
+                          onClick={() => {
+                            setSelectedEcomPromptId(p.id);
+                            setEcomPromptText(p.prompt);
+                            setShowEcomPromptModal(false);
+                          }}
+                          showSync={isAdmin}
+                          onSync={(e) => toggleSyncEcomPrompt(p, e)}
+                          showEdit={isAdmin || !p.isDefault}
+                          showDelete={isAdmin || !p.isDefault}
+                          onEdit={(e) => startEditEcomPrompt(p, e)}
+                          onDelete={(e) => deleteEcomPrompt(p.id, e)}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
               {ecomSubTab === 'gen-new' && ecomLastFinalImages.length > 0 && (
                 <div className="mb-4 pb-4 border-b border-editor-border/50">
                   <div className="flex items-center justify-between mb-3">
@@ -4793,6 +4850,8 @@ function App() {
                   <ImageIcon size={64} className="opacity-20 mb-4" />
                   <p>Kết quả sẽ hiển thị ở đây</p>
                 </div>
+              )}
+                </>
               )}
             </div>
           </div>
@@ -6686,22 +6745,7 @@ function App() {
         )}
       </AnimatePresence>
 
-      {/* Prompt list full picker modals */}
-      <PromptListModal
-        open={showEcomPromptModal}
-        onClose={() => setShowEcomPromptModal(false)}
-        title="Tất cả Prompt Ecom"
-        prompts={ecomSavedPrompts}
-        selectedId={selectedEcomPromptId}
-        onSelect={(p) => {
-          setSelectedEcomPromptId(p.id);
-          setEcomPromptText((p as any).prompt);
-        }}
-        isAdmin={isAdmin}
-        onSync={(p, e) => toggleSyncEcomPrompt(p as any, e)}
-        onEdit={(p, e) => startEditEcomPrompt(p as any, e)}
-        onDelete={(id, e) => deleteEcomPrompt(id, e)}
-      />
+      {/* Prompt list full picker modals (Clothing only — Ecom uses inline panel) */}
       <PromptListModal
         open={showGenPromptModal}
         onClose={() => setShowGenPromptModal(false)}
