@@ -4705,8 +4705,11 @@ function App() {
           >
             <div className="space-y-6 flex-1 flex flex-col">
               <div>
-                <h3 className="font-bold flex items-center gap-2 mb-4">
-                  <Sparkles size={18} className="text-editor-accent" />
+                <h3
+                  className="font-bold flex items-center gap-2 mb-4"
+                  style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
+                >
+                  <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
                   Google AI Engine
                 </h3>
                 
@@ -4731,14 +4734,20 @@ function App() {
                 {/* Aspect Ratio Selector - Integrated */}
                 <div className="mb-6 space-y-3">
                   <div className="flex justify-between items-center">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest">Tỉ lệ khung hình</p>
+                    <p
+                      className="uppercase font-semibold"
+                      style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                    >
+                      Tỉ lệ khung hình
+                    </p>
                     {images.length > 1 && (
-                      <button 
+                      <button
                         onClick={() => {
                           const currentRatio = images[selectedIndex].aspectRatio;
                           setImages(prev => prev.map(img => ({ ...img, aspectRatio: currentRatio })));
                         }}
-                        className="text-[10px] text-editor-accent font-bold hover:underline"
+                        className="font-semibold hover:underline"
+                        style={{ fontSize: 11, color: 'var(--color-accent)' }}
                       >
                         ÁP DỤNG TẤT CẢ
                       </button>
@@ -4755,30 +4764,37 @@ function App() {
                 </div>
 
                 <div className="flex items-center justify-between mb-4">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest">Danh sách Prompt đã lưu</p>
+                  <p
+                    className="uppercase font-semibold"
+                    style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                  >
+                    Danh sách Prompt đã lưu
+                  </p>
                   <div className="flex gap-3">
-                    <button 
+                    <button
                       onClick={() => {
                         setSelectedPromptId('manual');
                         setAiPrompt('');
                       }}
-                      className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                      className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
+                      style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                     >
                       <Edit2 size={12} />
                       NHẬP THỦ CÔNG
                     </button>
-                    <button 
+                    <button
                       onClick={() => setIsAddingPrompt(true)}
-                      className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                      className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
+                      style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                     >
                       <Plus size={12} />
                       THÊM MỚI
                     </button>
                   </div>
                 </div>
-                
+
                 {isAddingPrompt ? (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className="p-4 rounded-xl border border-editor-accent bg-editor-accent/5 space-y-3 mb-6"
@@ -4848,21 +4864,46 @@ function App() {
 
                 {(isAdmin || selectedPromptId === 'manual') && (
                   <>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-4">
+                    <p
+                      className="uppercase font-semibold mb-3"
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--color-text-tertiary)',
+                        letterSpacing: '0.06em',
+                      }}
+                    >
                       {selectedPromptId === 'manual' ? 'Nhập Prompt mới' : 'Nội dung Prompt hiện tại'}
                     </p>
                     <textarea
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
                       placeholder="Mô tả nền và phong cách... (VD: phong cách anime, nền bãi biển)"
-                      className="ai-input min-h-[100px] resize-none mb-6"
+                      className="w-full min-h-[100px] resize-none mb-6 outline-none transition-colors p-3"
+                      style={{
+                        background: 'var(--color-fill)',
+                        color: 'var(--color-text)',
+                        borderRadius: 12,
+                        border: '0.5px solid transparent',
+                        fontSize: 13,
+                        letterSpacing: '-0.01em',
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
                     />
                   </>
                 )}
                 {!isAdmin && selectedPromptId !== 'manual' && selectedPromptId && (
-                  <div className="bg-editor-accent/5 border border-editor-accent/30 rounded-lg px-4 py-3 mb-6 flex items-center gap-2">
-                    <CheckCircle2 size={14} className="text-editor-accent flex-shrink-0" />
-                    <p className="text-xs text-editor-accent font-bold">Đã chọn prompt — sẵn sàng Gen</p>
+                  <div
+                    className="rounded-lg px-4 py-3 mb-6 flex items-center gap-2"
+                    style={{
+                      background: 'var(--color-accent-soft)',
+                      border: '0.5px solid var(--color-accent)',
+                    }}
+                  >
+                    <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+                    <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
+                      Đã chọn prompt — sẵn sàng Gen
+                    </p>
                   </div>
                 )}
               </div>
