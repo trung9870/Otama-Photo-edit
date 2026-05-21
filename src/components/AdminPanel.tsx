@@ -4,7 +4,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '../firebase';
-import { UserPlus, Shield, X, Check } from 'lucide-react';
+import { UserPlus, Shield, X, Check, Eye, EyeOff } from 'lucide-react';
 
 export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [users, setUsers] = useState<any[]>([]);
@@ -15,6 +15,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [creating, setCreating] = useState(false);
+  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'users'), (snap) => {
@@ -43,6 +44,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         uid: userCredential.user.uid,
         email: userCredential.user.email,
+        password,
         role: 'user',
         canUseClothing: true,
         canUseEcom: true,
@@ -134,6 +136,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
             <thead>
               <tr className="bg-editor-border/20 text-xs text-gray-500 uppercase tracking-wider">
                 <th className="p-4 font-bold">Email</th>
+                <th className="p-4 font-bold">Mật khẩu</th>
                 <th className="p-4 font-bold">Quyền</th>
                 <th className="p-4 font-bold">Quyền Quần áo</th>
                 <th className="p-4 font-bold">Quyền Ecom</th>
@@ -141,13 +144,31 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
             </thead>
             <tbody className="text-sm text-gray-300 divide-y divide-editor-border/50">
               {loading ? (
-                <tr><td colSpan={4} className="p-8 text-center text-gray-500">Đang tải...</td></tr>
+                <tr><td colSpan={5} className="p-8 text-center text-gray-500">Đang tải...</td></tr>
               ) : users.length === 0 ? (
-                <tr><td colSpan={4} className="p-8 text-center text-gray-500">Chưa có người dùng nào.</td></tr>
+                <tr><td colSpan={5} className="p-8 text-center text-gray-500">Chưa có người dùng nào.</td></tr>
               ) : (
                 users.map(u => (
                   <tr key={u.uid} className="hover:bg-editor-border/10 transition-colors">
                     <td className="p-4 font-mono text-xs">{u.email}</td>
+                    <td className="p-4 font-mono text-xs">
+                      {u.password ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-white">
+                            {revealed[u.uid] ? u.password : '•'.repeat(Math.min(u.password.length, 10))}
+                          </span>
+                          <button
+                            onClick={() => setRevealed(prev => ({ ...prev, [u.uid]: !prev[u.uid] }))}
+                            className="text-gray-500 hover:text-editor-accent transition"
+                            title={revealed[u.uid] ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                          >
+                            {revealed[u.uid] ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-600">—</span>
+                      )}
+                    </td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded text-xs font-bold ${u.role === 'admin' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-gray-500/20 text-gray-400'}`}>
                         {u.role || 'user'}
