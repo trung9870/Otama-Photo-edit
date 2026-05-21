@@ -892,6 +892,7 @@ function App() {
 
   const handleDeleteModel = async (modelId: string) => {
     if (!user) return;
+    if (!window.confirm('Xóa người mẫu này?\n\nHành động này không thể hoàn tác.')) return;
     try {
       await deleteDoc(doc(db, 'models', modelId));
     } catch (error) {
@@ -1033,6 +1034,7 @@ function App() {
 
   const handleDeleteRoom = async (roomId: string) => {
     if (!user) return;
+    if (!window.confirm('Xóa giường này?\n\nHành động này không thể hoàn tác.')) return;
     try {
       await deleteDoc(doc(db, 'rooms', roomId));
     } catch (error) {
@@ -1385,11 +1387,15 @@ function App() {
   const deletePrompt = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) return;
-    
+
     if (!isAdmin && (DEFAULT_GEN_PROMPTS.some(p => p.id === id) || DEFAULT_TRYON_PROMPTS.some(p => p.id === id))) {
       setGlobalError("Không thể xóa prompt mặc định.");
       return;
     }
+
+    const target = [...savedGenPrompts, ...savedTryOnPrompts].find(p => p.id === id);
+    const name = target?.name || 'prompt này';
+    if (!window.confirm(`Xóa "${name}"?\n\nHành động này không thể hoàn tác.`)) return;
 
     try {
       await deleteDoc(doc(db, 'prompts', id));
@@ -1430,11 +1436,15 @@ function App() {
   const deleteEcomPrompt = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) return;
-    
+
     if (!isAdmin && defaultEcomPrompts.some(p => p.id === id)) {
       setGlobalError("Không thể xóa prompt mặc định.");
       return;
     }
+
+    const target = ecomSavedPrompts.find(p => p.id === id);
+    const name = target?.name || 'prompt này';
+    if (!window.confirm(`Xóa "${name}"?\n\nHành động này không thể hoàn tác.`)) return;
 
     try {
       if (selectedEcomPromptId === id) {
