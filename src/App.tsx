@@ -2884,7 +2884,10 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div
+      className="min-h-screen flex flex-col"
+      style={appMode === 'clothing' ? { background: 'var(--color-bg)' } : undefined}
+    >
       <Header
         appMode={appMode}
         onModeChange={(m) => setAppMode(m)}
@@ -4473,11 +4476,17 @@ function App() {
           <>
             {/* Preview Area */}
             <div className="lg:col-span-2 flex flex-col gap-4">
-          <div 
+          <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`flex-1 glass-panel relative overflow-hidden flex items-center justify-center min-h-[400px] lg:min-h-0 transition-all ${isDragging ? 'border-editor-accent bg-editor-accent/5' : ''}`}
+            className="flex-1 relative overflow-hidden flex items-center justify-center min-h-[400px] lg:min-h-0 transition-all"
+            style={{
+              background: isDragging ? 'var(--color-accent-soft)' : 'var(--color-card)',
+              border: isDragging ? '1px solid var(--color-accent)' : '0.5px solid var(--color-border-soft)',
+              borderRadius: 18,
+              boxShadow: 'var(--shadow-card)',
+            }}
           >
             <AnimatePresence mode="wait">
               {images.length === 0 ? (
@@ -4488,12 +4497,18 @@ function App() {
                   className="flex flex-col items-center gap-4 cursor-pointer group"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <div className="w-20 h-20 rounded-2xl border-2 border-dashed border-editor-border flex items-center justify-center group-hover:border-editor-accent transition-colors">
-                    <Upload className="text-editor-border group-hover:text-editor-accent transition-colors" size={32} />
+                  <div
+                    className="w-20 h-20 rounded-2xl flex items-center justify-center transition-colors"
+                    style={{
+                      border: '2px dashed var(--color-border)',
+                      color: 'var(--color-text-tertiary)',
+                    }}
+                  >
+                    <Upload size={32} />
                   </div>
                   <div className="text-center">
-                    <p className="font-medium">Tải lên tối đa 5 ảnh</p>
-                    <p className="text-xs text-gray-500">Nhấn để mở thư viện ảnh</p>
+                    <p className="font-medium" style={{ color: 'var(--color-text)' }}>Tải lên tối đa 5 ảnh</p>
+                    <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>Nhấn để mở thư viện ảnh</p>
                   </div>
                 </motion.div>
               ) : (
@@ -4506,33 +4521,48 @@ function App() {
                   {/* Original Image Section */}
                   <div className="relative flex flex-col gap-2 h-full">
                     <div className="flex justify-between items-center">
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Ảnh gốc ban đầu</p>
-                      <button 
+                      <p
+                        className="uppercase font-semibold"
+                        style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                      >
+                        Ảnh gốc
+                      </p>
+                      <button
                         onClick={() => {
                           setIsReplacing(true);
                           fileInputRef.current?.click();
                         }}
-                        className="text-[10px] text-editor-accent font-bold hover:underline"
+                        className="font-semibold hover:underline"
+                        style={{ fontSize: 11, color: 'var(--color-accent)' }}
                       >
-                        THAY ĐỔI
+                        THAY ẢNH
                       </button>
                     </div>
-                    <div 
-                      className="flex-1 relative bg-black/20 rounded-lg overflow-hidden flex items-center justify-center border border-editor-border cursor-pointer hover:border-editor-accent transition-colors"
+                    <div
+                      className="flex-1 relative rounded-lg overflow-hidden flex items-center justify-center cursor-pointer transition-colors"
+                      style={{
+                        background: 'var(--color-card-secondary)',
+                        border: '0.5px solid var(--color-border-soft)',
+                      }}
                       onClick={() => {
                         setIsReplacing(true);
                         fileInputRef.current?.click();
                       }}
+                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-soft)')}
                     >
-                      <img 
-                        src={currentImage?.source} 
-                        alt="Original" 
+                      <img
+                        src={currentImage?.source}
+                        alt="Original"
                         className="max-w-full max-h-full object-contain"
                         referrerPolicy="no-referrer"
                       />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
+                      <div
+                        className="absolute inset-0 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity"
+                        style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+                      >
                         <div className="flex flex-col items-center gap-2">
-                          <Upload size={24} className="text-editor-accent" />
+                          <Upload size={24} className="text-white" />
                           <span className="text-[10px] font-bold text-white uppercase">Thay đổi ảnh gốc</span>
                         </div>
                       </div>
@@ -4542,52 +4572,93 @@ function App() {
                   {/* Processed Image Section */}
                   <div className="relative flex flex-col gap-2 h-full">
                     <div className="flex justify-between items-center">
-                      <p className="text-[10px] text-editor-accent uppercase tracking-widest font-bold">Ảnh đầu ra sau khi Gen</p>
+                      <p
+                        className="uppercase font-semibold"
+                        style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.06em' }}
+                      >
+                        ✨ Sau xử lý
+                      </p>
                       {currentImage?.processed && currentImage.processed !== currentImage.source && (
-                        <button 
+                        <button
                           onClick={() => handleAiEdit(selectedIndex)}
                           disabled={currentImage.isProcessing}
-                          className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1"
+                          className="font-semibold hover:underline flex items-center gap-1"
+                          style={{ fontSize: 11, color: 'var(--color-accent)' }}
                         >
                           <RotateCcw size={10} />
                           THỬ LẠI TỪ GỐC
                         </button>
                       )}
                     </div>
-                    <div className="flex-1 relative bg-black/20 rounded-lg overflow-hidden flex items-center justify-center border border-editor-border">
+                    <div
+                      className="flex-1 relative rounded-lg overflow-hidden flex items-center justify-center"
+                      style={{
+                        background: 'var(--color-card-secondary)',
+                        border: '0.5px solid var(--color-border-soft)',
+                      }}
+                    >
                       {currentImage?.processed && currentImage.processed !== currentImage.source ? (
-                        <img 
-                          src={currentImage.processed} 
-                          alt="Processed" 
+                        <img
+                          src={currentImage.processed}
+                          alt="Processed"
                           className="max-w-full max-h-full object-contain"
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="flex flex-col items-center justify-center text-gray-600 gap-2">
+                        <div
+                          className="flex flex-col items-center justify-center gap-2"
+                          style={{ color: 'var(--color-text-tertiary)' }}
+                        >
                           <ImageIcon size={32} />
-                          <p className="text-[10px] uppercase font-bold">Chưa xử lý</p>
-                          <button 
+                          <p className="uppercase font-semibold" style={{ fontSize: 10, letterSpacing: '0.06em' }}>Chưa xử lý</p>
+                          <button
                             onClick={() => handleAiEdit(selectedIndex)}
-                            className="mt-2 px-4 py-2 bg-editor-accent text-black text-[10px] font-bold rounded-full hover:opacity-90"
+                            className="mt-2 font-semibold transition-all hover:brightness-110"
+                            style={{
+                              padding: '8px 14px',
+                              fontSize: 11,
+                              background: 'var(--color-accent)',
+                              color: '#fff',
+                              borderRadius: 9999,
+                              letterSpacing: '-0.01em',
+                            }}
                           >
                             GEN ẢNH NÀY
                           </button>
                         </div>
                       )}
-                      
+
                       {/* Download Button Overlay for Result */}
                       {currentImage?.processed && currentImage.processed !== currentImage.source && !isBatchProcessing && (
-                        <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
-                          <button 
+                        <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
+                          <button
                             onClick={() => handleDownload()}
-                            className="flex items-center gap-2 px-3 py-2 bg-editor-accent text-black border border-editor-accent rounded-lg text-xs font-bold hover:opacity-90 transition-all shadow-lg"
+                            className="flex items-center gap-2 font-semibold transition-all hover:brightness-110"
+                            style={{
+                              padding: '7px 11px',
+                              fontSize: 12,
+                              background: 'var(--color-accent)',
+                              color: '#fff',
+                              borderRadius: 10,
+                              boxShadow: 'var(--shadow-pop)',
+                            }}
                           >
                             <Download size={14} />
-                            Lưu ảnh
+                            Lưu
                           </button>
-                          <button 
+                          <button
                             onClick={() => handleAiEdit(selectedIndex)}
-                            className="flex items-center gap-2 px-3 py-2 bg-black/60 text-white border border-white/20 backdrop-blur-md rounded-lg text-xs font-bold hover:bg-black/80 transition-all shadow-lg"
+                            className="flex items-center gap-2 font-semibold transition-all hover:brightness-110"
+                            style={{
+                              padding: '7px 11px',
+                              fontSize: 12,
+                              background: 'rgba(0,0,0,0.55)',
+                              backdropFilter: 'blur(12px)',
+                              color: '#fff',
+                              borderRadius: 10,
+                              boxShadow: 'var(--shadow-pop)',
+                              border: '0.5px solid rgba(255,255,255,0.18)',
+                            }}
                           >
                             <RotateCcw size={14} />
                             Gen lại
@@ -4599,25 +4670,48 @@ function App() {
                   
                   {/* Global Overlays */}
                   {currentImage?.isProcessing && (
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-4 z-20">
-                      <Loader2 className="animate-spin text-editor-accent" size={48} />
+                    <div
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-20"
+                      style={{
+                        background: 'color-mix(in srgb, var(--color-bg) 65%, transparent)',
+                        backdropFilter: 'blur(12px)',
+                      }}
+                    >
+                      <Loader2 className="animate-spin" size={48} style={{ color: 'var(--color-accent)' }} />
                       <div className="text-center">
-                        <p className="font-bold text-lg">Đang xử lý AI...</p>
-                        <p className="text-sm text-gray-400">Vui lòng đợi trong giây lát</p>
+                        <p className="font-bold" style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
+                          Đang xử lý AI…
+                        </p>
+                        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                          Vui lòng đợi trong giây lát
+                        </p>
                       </div>
                     </div>
                   )}
 
                   {currentImage?.error && (
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 p-6 text-center z-20">
-                      <AlertCircle className="text-red-500" size={48} />
+                    <div
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center z-20"
+                      style={{
+                        background: 'color-mix(in srgb, var(--color-bg) 75%, transparent)',
+                        backdropFilter: 'blur(12px)',
+                      }}
+                    >
+                      <AlertCircle size={48} style={{ color: 'var(--color-danger)' }} />
                       <div>
-                        <p className="font-bold text-lg text-red-500">Lỗi xử lý</p>
-                        <p className="text-sm text-gray-400">{currentImage.error}</p>
+                        <p className="font-bold" style={{ fontSize: 17, color: 'var(--color-danger)', letterSpacing: '-0.02em' }}>Lỗi xử lý</p>
+                        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>{currentImage.error}</p>
                       </div>
-                      <button 
+                      <button
                         onClick={handleAiEdit}
-                        className="px-4 py-2 bg-editor-border rounded-lg text-xs font-bold hover:bg-gray-700 transition-all"
+                        className="font-semibold transition-all hover:brightness-110"
+                        style={{
+                          padding: '8px 16px',
+                          fontSize: 13,
+                          background: 'var(--color-fill)',
+                          color: 'var(--color-text)',
+                          borderRadius: 10,
+                        }}
                       >
                         Thử lại
                       </button>
@@ -4638,53 +4732,98 @@ function App() {
 
           {/* Batch Strip */}
           {images.length > 0 && (
-            <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              {images.map((img, idx) => (
-                <div 
-                  key={img.id}
-                  className={`relative shrink-0 w-20 h-20 rounded-lg border-2 transition-all cursor-pointer group ${
-                    selectedIndex === idx ? 'border-editor-accent' : 'border-editor-border hover:border-gray-600'
-                  }`}
-                  onClick={() => setSelectedIndex(idx)}
-                >
-                  <img 
-                    src={img.processed || img.source} 
-                    className="w-full h-full object-cover rounded-md"
-                    alt={`Thumb ${idx}`}
-                  />
-                  {img.isProcessing && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-md">
-                      <Loader2 className="animate-spin text-editor-accent" size={16} />
-                    </div>
-                  )}
-                  {img.processed && img.processed !== img.source && !img.isProcessing && (
-                    <div className="absolute top-1 right-1 bg-editor-accent rounded-full p-0.5">
-                      <CheckCircle2 className="text-black" size={10} />
-                    </div>
-                  )}
-                  {img.error && (
-                    <div className="absolute top-1 right-1 bg-red-500 rounded-full p-0.5">
-                      <AlertCircle className="text-white" size={10} />
-                    </div>
-                  )}
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeImage(img.id);
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              {images.map((img, idx) => {
+                const active = selectedIndex === idx;
+                return (
+                  <div
+                    key={img.id}
+                    className="relative shrink-0 w-[72px] h-[72px] cursor-pointer group transition-all"
+                    style={{
+                      borderRadius: 12,
+                      border: active ? '2px solid var(--color-accent)' : '1px solid var(--color-border-soft)',
+                      overflow: 'visible',
                     }}
-                    className="absolute -top-2 -right-2 bg-black border border-editor-border rounded-full p-1 transition-opacity hover:bg-red-500 hover:border-red-500 z-10"
+                    onClick={() => setSelectedIndex(idx)}
                   >
-                    <X size={10} />
-                  </button>
-                </div>
-              ))}
+                    <img
+                      src={img.processed || img.source}
+                      className="w-full h-full object-cover"
+                      style={{ borderRadius: 10 }}
+                      alt={`Thumb ${idx}`}
+                    />
+                    {img.isProcessing && (
+                      <div
+                        className="absolute inset-0 flex items-center justify-center"
+                        style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', borderRadius: 10 }}
+                      >
+                        <Loader2 className="animate-spin" size={16} style={{ color: 'var(--color-accent)' }} />
+                      </div>
+                    )}
+                    {img.processed && img.processed !== img.source && !img.isProcessing && (
+                      <div
+                        className="absolute top-1 right-1 rounded-full p-0.5 flex items-center justify-center"
+                        style={{ background: 'var(--color-success)' }}
+                      >
+                        <CheckCircle2 className="text-white" size={11} />
+                      </div>
+                    )}
+                    {img.error && (
+                      <div
+                        className="absolute top-1 right-1 rounded-full p-0.5 flex items-center justify-center"
+                        style={{ background: 'var(--color-danger)' }}
+                      >
+                        <AlertCircle className="text-white" size={11} />
+                      </div>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeImage(img.id);
+                      }}
+                      className="absolute -top-2 -right-2 rounded-full p-1 transition-colors z-10 opacity-0 group-hover:opacity-100"
+                      style={{
+                        background: 'var(--color-card)',
+                        border: '0.5px solid var(--color-border)',
+                        color: 'var(--color-text-secondary)',
+                        boxShadow: 'var(--shadow-pop)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'var(--color-danger)';
+                        e.currentTarget.style.color = '#fff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'var(--color-card)';
+                        e.currentTarget.style.color = 'var(--color-text-secondary)';
+                      }}
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                );
+              })}
               {images.length < 5 && (
-                <button 
+                <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="shrink-0 w-20 h-20 rounded-lg border-2 border-dashed border-editor-border flex flex-col items-center justify-center gap-1 hover:border-editor-accent hover:bg-editor-accent/5 transition-all text-gray-500 hover:text-editor-accent"
+                  className="shrink-0 w-[72px] h-[72px] flex flex-col items-center justify-center gap-1 transition-colors"
+                  style={{
+                    borderRadius: 12,
+                    border: '1.5px dashed var(--color-border)',
+                    color: 'var(--color-text-tertiary)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--color-accent)';
+                    e.currentTarget.style.color = 'var(--color-accent)';
+                    e.currentTarget.style.background = 'var(--color-accent-soft)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--color-border)';
+                    e.currentTarget.style.color = 'var(--color-text-tertiary)';
+                    e.currentTarget.style.background = 'transparent';
+                  }}
                 >
                   <Upload size={16} />
-                  <span className="text-[8px] font-bold uppercase">Thêm</span>
+                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.06em' }}>THÊM</span>
                 </button>
               )}
             </div>
