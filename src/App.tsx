@@ -716,6 +716,20 @@ function App() {
     };
   }, []);
 
+  // Auto-switch appMode khi user không có quyền với mode hiện tại
+  useEffect(() => {
+    if (!user || isAdmin || !userPermissions) return;
+    const canClothing = !!userPermissions.canUseClothing;
+    const canEcom = !!userPermissions.canUseEcom;
+    const currentNotAllowed =
+      appMode === 'admin' ||
+      (appMode === 'clothing' && !canClothing) ||
+      (appMode === 'ecom' && !canEcom);
+    if (!currentNotAllowed) return;
+    if (canEcom) setAppMode('ecom');
+    else if (canClothing) setAppMode('clothing');
+  }, [user, isAdmin, userPermissions, appMode]);
+
   // Sync Prompts from Firestore
   useEffect(() => {
     if (!isAuthReady) return;
