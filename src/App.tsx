@@ -4321,36 +4321,93 @@ function App() {
               ) : selectedEcomGrid ? (
                 <div className="flex flex-col items-center">
                   {ecomBoxes.length > 0 ? (
-                    <div className="w-full flex flex-col items-center">
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                        {ecomBoxes.map((box) => {
+                    <div className="w-full flex flex-col">
+                      {/* Header: Kết quả + Dịch / Tải zip */}
+                      <div className="flex items-end justify-between mb-4">
+                        <div>
+                          <h2
+                            className="font-bold"
+                            style={{ fontSize: 22, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
+                          >
+                            Kết quả tách
+                          </h2>
+                          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                            {ecomBoxes.length} ô · Chọn các ô để gen tiếp ({selectedBoxIds.length} đã chọn)
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+                        {ecomBoxes.map((box, idx) => {
                            const isSelected = selectedBoxIds.includes(box.id);
                            return (
-                             <div 
-                               key={box.id} 
-                               className={`relative group rounded-xl overflow-hidden border-2 cursor-pointer transition-all aspect-[3/4] bg-black ${isSelected ? 'border-editor-accent' : 'border-editor-border opacity-50'}`}
+                             <div
+                               key={box.id}
+                               className="relative group cursor-pointer transition-all aspect-[3/4] flex items-center justify-center overflow-hidden"
+                               style={{
+                                 background: 'var(--color-card)',
+                                 border: isSelected ? '2px solid var(--color-accent)' : '0.5px solid var(--color-border-soft)',
+                                 borderRadius: 14,
+                                 boxShadow: isSelected ? '0 0 0 4px var(--color-accent-soft)' : 'var(--shadow-card)',
+                                 opacity: 1,
+                               }}
                                onClick={() => {
-                                 setSelectedBoxIds(prev => 
+                                 setSelectedBoxIds(prev =>
                                    prev.includes(box.id) ? prev.filter(id => id !== box.id) : [...prev, box.id]
                                  );
                                }}
                              >
                                 <img src={box.cropUrl} alt="Crop" className="w-full h-full object-contain" />
-                                <div className={`absolute top-2 right-2 w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-editor-accent border-editor-accent text-white' : 'border-white text-transparent'}`}>
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span
+                                  className="absolute top-2 left-2 font-semibold rounded-full"
+                                  style={{
+                                    padding: '3px 9px',
+                                    fontSize: 11,
+                                    background: 'var(--color-card)',
+                                    color: 'var(--color-text-secondary)',
+                                    border: '0.5px solid var(--color-border-soft)',
+                                    letterSpacing: '-0.01em',
+                                  }}
+                                >
+                                  Trang {idx + 1}
+                                </span>
+                                <div
+                                  className="absolute top-2 right-2 rounded-full flex items-center justify-center transition-all"
+                                  style={{
+                                    width: 24,
+                                    height: 24,
+                                    background: isSelected ? 'var(--color-accent)' : 'rgba(255,255,255,0.85)',
+                                    border: isSelected ? '0 solid transparent' : '0.5px solid var(--color-border)',
+                                    color: '#fff',
+                                  }}
+                                >
+                                  {isSelected && (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                  )}
                                 </div>
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(4px)' }}>
                                   <button onClick={(e) => {
                                       e.stopPropagation();
                                       setZoomImage(box.cropUrl);
-                                  }} className="p-2 bg-white/20 text-white rounded-lg hover:bg-white/40"><ZoomIn size={16} /></button>
+                                  }} className="p-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.25)', color: '#fff' }}><ZoomIn size={16} /></button>
                                 </div>
                              </div>
                            );
                         })}
                       </div>
-                      <div className="flex flex-wrap items-center gap-4 mb-8">
-                        <button
+                      {/* Action bar */}
+                      <div
+                        className="flex flex-wrap items-center gap-2 mb-8 p-3"
+                        style={{
+                          background: 'var(--color-card)',
+                          border: '0.5px solid var(--color-border-soft)',
+                          borderRadius: 14,
+                          boxShadow: 'var(--shadow-card)',
+                        }}
+                      >
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => {
                             if (ecomFinalImages.length > 0) {
                               if (!window.confirm("Phân tích lại sẽ xóa các kết quả đã tạo. Bạn có chắc chắn?")) return;
@@ -4359,13 +4416,15 @@ function App() {
                             setSelectedBoxIds([]);
                             setEcomFinalImages([]);
                           }}
-                          className="px-6 py-3 bg-gray-800 text-white font-bold rounded-xl flex items-center gap-2 hover:bg-gray-700 transition"
                           disabled={isEcomEnhancing}
                         >
                           Phân tích lại
-                        </button>
+                        </Button>
 
-                        <button
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          icon={selectedBoxIds.length === ecomBoxes.length && ecomBoxes.length > 0 ? X : Check}
                           onClick={() => {
                             if (selectedBoxIds.length === ecomBoxes.length) {
                               setSelectedBoxIds([]);
@@ -4374,21 +4433,25 @@ function App() {
                             }
                           }}
                           disabled={isEcomEnhancing || ecomBoxes.length === 0}
-                          className="px-4 py-3 bg-editor-border/30 border border-editor-border text-white text-sm font-bold rounded-xl flex items-center gap-2 hover:bg-editor-border/50 transition disabled:opacity-50"
                         >
-                          {selectedBoxIds.length === ecomBoxes.length && ecomBoxes.length > 0 ? (
-                            <><X size={16} /> Bỏ chọn tất cả</>
-                          ) : (
-                            <><Check size={16} /> Chọn tất cả ({ecomBoxes.length})</>
-                          )}
-                        </button>
+                          {selectedBoxIds.length === ecomBoxes.length && ecomBoxes.length > 0
+                            ? 'Bỏ chọn tất cả'
+                            : `Chọn tất cả (${ecomBoxes.length})`}
+                        </Button>
 
-                        <div className="flex items-center gap-3 bg-editor-border/20 px-4 py-2 rounded-xl border border-editor-border/50">
-                          <span className="text-sm font-medium text-gray-300">Tỉ lệ:</span>
+                        <div className="flex items-center gap-2 px-3 py-1.5" style={{ background: 'var(--color-fill)', borderRadius: 10 }}>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Tỉ lệ:</span>
                           <select
                             value={enhanceAspectRatio}
                             onChange={(e) => setEnhanceAspectRatio(e.target.value)}
-                            className="bg-gray-900 border border-editor-border text-white text-sm rounded-lg py-1.5 px-3 focus:ring-editor-accent focus:border-editor-accent outline-none"
+                            className="outline-none border-0"
+                            style={{
+                              background: 'transparent',
+                              color: 'var(--color-text)',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              padding: '2px 4px',
+                            }}
                             disabled={isEcomEnhancing}
                           >
                             <option value="1:1">1:1 (Vuông)</option>
@@ -4399,13 +4462,20 @@ function App() {
                           </select>
                         </div>
 
-                        <div className="flex items-center gap-3 bg-editor-border/20 px-4 py-2 rounded-xl border border-editor-border/50">
-                          <span className="text-sm font-medium text-gray-300">Model:</span>
-                          <div className="flex bg-gray-900 p-1 rounded-lg gap-1">
+                        <div className="flex items-center gap-2 px-2 py-1" style={{ background: 'var(--color-fill)', borderRadius: 10 }}>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)', paddingLeft: 4 }}>Model:</span>
+                          <div className="flex gap-1 p-0.5" style={{ background: 'var(--color-card)', borderRadius: 8 }}>
                             <button
                               onClick={() => setEnhanceModel('banana-2')}
                               disabled={isEcomEnhancing}
-                              className={`px-3 py-1 text-xs font-bold rounded transition-all ${enhanceModel === 'banana-2' ? 'bg-editor-accent text-white' : 'text-gray-400 hover:text-white'}`}
+                              className="px-2.5 py-1 transition-all"
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                borderRadius: 6,
+                                background: enhanceModel === 'banana-2' ? 'var(--color-accent)' : 'transparent',
+                                color: enhanceModel === 'banana-2' ? '#fff' : 'var(--color-text-secondary)',
+                              }}
                               title="Free, nhanh, chất lượng đủ"
                             >
                               Banana 2 (Free)
@@ -4413,7 +4483,14 @@ function App() {
                             <button
                               onClick={() => setEnhanceModel('banana-pro')}
                               disabled={isEcomEnhancing}
-                              className={`px-3 py-1 text-xs font-bold rounded transition-all ${enhanceModel === 'banana-pro' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                              className="px-2.5 py-1 transition-all"
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                borderRadius: 6,
+                                background: enhanceModel === 'banana-pro' ? 'var(--color-warning)' : 'transparent',
+                                color: enhanceModel === 'banana-pro' ? '#fff' : 'var(--color-text-secondary)',
+                              }}
                               title="Tốn phí, chi tiết hơn, chậm hơn"
                             >
                               Banana Pro ($)
@@ -4421,32 +4498,45 @@ function App() {
                           </div>
                         </div>
 
-                        <button
-                          onClick={handleEnhanceSelectedBoxes}
-                          disabled={isEcomEnhancing || selectedBoxIds.length === 0}
-                          className="px-6 py-3 bg-editor-accent text-white font-bold rounded-xl flex items-center gap-2 hover:opacity-90 transition disabled:opacity-50"
-                        >
-                          {isEcomEnhancing ? (
-                             <><RotateCw size={20} className="animate-spin" /> Đang gen ảnh ({selectedBoxIds.length})...</>
-                          ) : (
-                             <><Sparkles size={20} /> Gen {selectedBoxIds.length} ảnh đã chọn</>
-                          )}
-                        </button>
+                        <div className="ml-auto">
+                          <Button
+                            variant="filled"
+                            size="md"
+                            icon={isEcomEnhancing ? RotateCw : Sparkles}
+                            onClick={handleEnhanceSelectedBoxes}
+                            disabled={isEcomEnhancing || selectedBoxIds.length === 0}
+                          >
+                            {isEcomEnhancing
+                              ? `Đang gen (${selectedBoxIds.length})…`
+                              : `Gen ${selectedBoxIds.length} ảnh đã chọn`}
+                          </Button>
+                        </div>
                       </div>
 
                       {/* RESULTS SECTION BELOW GRID */}
                       {ecomFinalImages.length > 0 && (
-                        <div ref={resultsRef} className="w-full space-y-6 pt-8 border-t border-editor-border/30">
-                           <div className="flex justify-between items-center bg-editor-border/20 p-4 rounded-xl">
-                              <h3 className="font-bold text-white text-lg flex items-center gap-2">
-                                <Sparkles size={20} className="text-editor-accent" /> Kết quả Tách Ảnh ({ecomFinalImages.length})
-                              </h3>
-                              <div className="flex gap-3 flex-wrap">
+                        <div ref={resultsRef} className="w-full pt-8" style={{ borderTop: '0.5px solid var(--color-border-soft)' }}>
+                           <div className="flex items-end justify-between mb-4 flex-wrap gap-3">
+                              <div>
+                                <h2
+                                  className="font-bold"
+                                  style={{ fontSize: 22, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
+                                >
+                                  Kết quả
+                                </h2>
+                                <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                                  {ecomFinalImages.length} trang chi tiết · Chọn các trang để xuất riêng
+                                </p>
+                              </div>
+                              <div className="flex gap-2 items-center flex-wrap">
                                 {(() => {
                                   const readyResults = ecomFinalImages.filter(img => !img.loading);
                                   const allSelected = readyResults.length > 0 && readyResults.every(img => selectedResultIds.includes(img.id));
                                   return (
-                                    <button
+                                    <Button
+                                      variant="secondary"
+                                      size="sm"
+                                      icon={allSelected ? X : Check}
                                       onClick={() => {
                                         if (allSelected) {
                                           setSelectedResultIds([]);
@@ -4455,105 +4545,153 @@ function App() {
                                         }
                                       }}
                                       disabled={readyResults.length === 0}
-                                      className="px-4 py-2 bg-editor-border/30 border border-editor-border text-white text-xs font-bold rounded-lg hover:bg-editor-border/50 transition flex items-center gap-2 disabled:opacity-50"
                                     >
-                                      {allSelected ? (
-                                        <><X size={14} /> Bỏ chọn tất cả</>
-                                      ) : (
-                                        <><Check size={14} /> Chọn tất cả ({readyResults.length})</>
-                                      )}
-                                    </button>
+                                      {allSelected ? 'Bỏ chọn tất cả' : `Chọn tất cả (${readyResults.length})`}
+                                    </Button>
                                   );
                                 })()}
                                 {selectedResultIds.length > 0 && (
-                                  <button onClick={async () => {
-                                    const zip = new JSZip();
-                                    const selectedImages = ecomFinalImages.filter(img => selectedResultIds.includes(img.id));
-                                    for (let i = 0; i < selectedImages.length; i++) {
-                                      const img = selectedImages[i];
-                                      if (!img.url || img.loading) continue;
-                                      const base64Data = img.url.split(',')[1];
-                                      zip.file(`ecom-final-${Date.now()}-${i+1}.jpg`, base64Data, { base64: true });
-                                    }
-                                    const content = await zip.generateAsync({ type: "blob" });
-                                    saveAs(content, "ecom-results.zip");
-                                  }} className="px-4 py-2 bg-editor-accent text-white font-bold rounded-lg hover:opacity-90 transition text-xs flex items-center gap-2">
-                                    <Download size={14} /> Tải {selectedResultIds.length} ảnh
-                                  </button>
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    icon={isTranslatingImages ? RotateCw : Languages}
+                                    onClick={handleTranslateSelectedImages}
+                                    disabled={isTranslatingImages}
+                                  >
+                                    {isTranslatingImages
+                                      ? 'Đang dịch…'
+                                      : `Dịch ảnh (${selectedResultIds.length})`}
+                                  </Button>
                                 )}
                                 {selectedResultIds.length > 0 && (
-                                  <button onClick={handleTranslateSelectedImages}
-                                    disabled={isTranslatingImages}
-                                    className="px-4 py-2 bg-[#ff5722] text-white font-bold rounded-lg hover:opacity-90 transition text-xs flex items-center gap-2 disabled:opacity-50"
+                                  <Button
+                                    variant="filled"
+                                    size="sm"
+                                    icon={Download}
+                                    onClick={async () => {
+                                      const zip = new JSZip();
+                                      const selectedImages = ecomFinalImages.filter(img => selectedResultIds.includes(img.id));
+                                      for (let i = 0; i < selectedImages.length; i++) {
+                                        const img = selectedImages[i];
+                                        if (!img.url || img.loading) continue;
+                                        const base64Data = img.url.split(',')[1];
+                                        zip.file(`ecom-final-${Date.now()}-${i+1}.jpg`, base64Data, { base64: true });
+                                      }
+                                      const content = await zip.generateAsync({ type: "blob" });
+                                      saveAs(content, "ecom-results.zip");
+                                    }}
                                   >
-                                    {isTranslatingImages ? (
-                                      <><RotateCw size={14} className="animate-spin" /> Đang dịch...</>
-                                    ) : (
-                                      <><Languages size={14} /> Chuyển tiếng Việt ({selectedResultIds.length})</>
-                                    )}
-                                  </button>
+                                    Tải zip ({selectedResultIds.length})
+                                  </Button>
                                 )}
-                                <button onClick={() => {
-                                  if (window.confirm("Bạn có chắc chắn muốn xóa tất cả kết quả?")) {
-                                    setEcomFinalImages([]);
-                                    setSelectedResultIds([]);
-                                  }
-                                }} className="px-4 py-2 bg-gray-800 text-white font-bold rounded-lg hover:bg-gray-700 transition text-xs">
+                                <Button
+                                  variant="plain"
+                                  size="sm"
+                                  tone="danger"
+                                  onClick={() => {
+                                    if (window.confirm("Bạn có chắc chắn muốn xóa tất cả kết quả?")) {
+                                      setEcomFinalImages([]);
+                                      setSelectedResultIds([]);
+                                    }
+                                  }}
+                                >
                                   Xóa kết quả
-                                </button>
+                                </Button>
                               </div>
                            </div>
-                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {ecomFinalImages.map((res, i) => {
                               const isSelected = selectedResultIds.includes(res.id);
                               return (
-                                <div 
-                                  key={`${res.id}-${i}`} 
+                                <div
+                                  key={`${res.id}-${i}`}
                                   onClick={() => {
                                     if (res.loading) return;
-                                    setSelectedResultIds(prev => 
+                                    setSelectedResultIds(prev =>
                                       prev.includes(res.id) ? prev.filter(id => id !== res.id) : [...prev, res.id]
                                     );
                                   }}
-                                  className={`relative group rounded-xl overflow-hidden border transition-all cursor-pointer aspect-[3/4] flex items-center justify-center animate-in fade-in slide-in-from-bottom-4 duration-500 bg-black ${isSelected ? 'border-editor-accent ring-2 ring-editor-accent/50' : 'border-editor-border hover:border-gray-500'}`}
+                                  className="relative group transition-all cursor-pointer aspect-[3/4] flex items-center justify-center overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500"
+                                  style={{
+                                    background: 'var(--color-card)',
+                                    border: isSelected ? '2px solid var(--color-accent)' : '0.5px solid var(--color-border-soft)',
+                                    borderRadius: 14,
+                                    boxShadow: isSelected ? '0 0 0 4px var(--color-accent-soft)' : 'var(--shadow-card)',
+                                  }}
                                 >
-                                  <div className="absolute top-2 right-2 z-10 w-6 h-6 rounded border flex items-center justify-center transition-colors bg-black/60 border-gray-500">
-                                    {isSelected && <CheckCircle2 size={24} className="text-editor-accent bg-black rounded-full" />}
+                                  <span
+                                    className="absolute top-2 left-2 z-10 font-semibold rounded-full"
+                                    style={{
+                                      padding: '3px 9px',
+                                      fontSize: 11,
+                                      background: 'var(--color-card)',
+                                      color: 'var(--color-text-secondary)',
+                                      border: '0.5px solid var(--color-border-soft)',
+                                      letterSpacing: '-0.01em',
+                                    }}
+                                  >
+                                    Trang {i + 1}
+                                  </span>
+                                  <div
+                                    className="absolute top-2 right-2 z-10 rounded-full flex items-center justify-center transition-all"
+                                    style={{
+                                      width: 24,
+                                      height: 24,
+                                      background: isSelected ? 'var(--color-accent)' : 'rgba(255,255,255,0.85)',
+                                      border: isSelected ? '0 solid transparent' : '0.5px solid var(--color-border)',
+                                      color: '#fff',
+                                    }}
+                                  >
+                                    {isSelected && (
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    )}
                                   </div>
                                   <img src={res.url} alt={`Final Result ${i+1}`} className={`w-full h-full object-contain transition-all ${res.loading ? 'opacity-50 blur-sm scale-105' : 'scale-100'}`} />
                                   {res.loading && (
-                                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20">
-                                       <RotateCw size={24} className="animate-spin text-white mb-2" />
-                                       <span className="text-white text-xs font-medium">Đang xử lý...</span>
+                                     <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ background: 'color-mix(in srgb, var(--color-bg) 70%, transparent)', backdropFilter: 'blur(8px)' }}>
+                                       <RotateCw size={24} className="animate-spin mb-2" style={{ color: 'var(--color-accent)' }} />
+                                       <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text)' }}>Đang xử lý…</span>
                                      </div>
                                   )}
                                   {!res.loading && (
                                     <>
-                                      {!isSelected && (
-                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                                          <span className="px-4 py-2 bg-gray-800/80 text-white font-bold rounded-lg text-sm">Chọn</span>
-                                        </div>
-                                      )}
                                       <button
-                                        className="absolute bottom-2 left-2 z-10 px-2.5 h-8 rounded-lg bg-editor-accent text-white flex items-center gap-1 hover:opacity-90 transition-opacity opacity-0 group-hover:opacity-100 font-bold text-xs pointer-events-auto"
+                                        className="absolute bottom-2 left-2 z-10 flex items-center gap-1 font-semibold transition-opacity opacity-0 group-hover:opacity-100"
+                                        style={{
+                                          padding: '5px 9px',
+                                          fontSize: 11,
+                                          background: 'var(--color-accent)',
+                                          color: '#fff',
+                                          borderRadius: 8,
+                                          boxShadow: 'var(--shadow-pop)',
+                                        }}
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           useEcomImageAsInput(res.url, { snapshot: true });
                                         }}
                                         title="Dùng ảnh này để chỉnh sửa / viết prompt tiếp"
                                       >
-                                        <Edit2 size={14} />
-                                        EDIT
+                                        <Edit2 size={12} />
+                                        Edit
                                       </button>
                                       <button
-                                        className="absolute bottom-2 right-2 z-10 w-8 h-8 rounded-lg bg-black/80 flex items-center justify-center hover:bg-black transition-colors opacity-0 group-hover:opacity-100 border border-editor-border/50 text-white hover:text-editor-accent pointer-events-auto"
+                                        className="absolute bottom-2 right-2 z-10 rounded-lg flex items-center justify-center transition-opacity opacity-0 group-hover:opacity-100"
+                                        style={{
+                                          width: 28,
+                                          height: 28,
+                                          background: 'rgba(0,0,0,0.55)',
+                                          backdropFilter: 'blur(12px)',
+                                          color: '#fff',
+                                          boxShadow: 'var(--shadow-pop)',
+                                          border: '0.5px solid rgba(255,255,255,0.18)',
+                                        }}
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setZoomImage(res.url);
                                         }}
                                         title="Phóng to ảnh"
                                       >
-                                        <ZoomIn size={16} />
+                                        <ZoomIn size={14} />
                                       </button>
                                     </>
                                   )}
