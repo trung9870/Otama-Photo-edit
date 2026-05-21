@@ -3646,22 +3646,24 @@ function App() {
                           </div>
                           <div className="flex items-center gap-1 transition-all">
                             {isAdmin && (
+                              <button
+                                onClick={(e) => toggleSyncEcomPrompt(p, e)}
+                                className="p-1.5 transition-all text-gray-500 hover:text-blue-400"
+                                title="Đồng bộ"
+                              >
+                                <Globe size={12} />
+                              </button>
+                            )}
+                            {(isAdmin || !p.isDefault) && (
                               <>
-                                <button 
-                                  onClick={(e) => toggleSyncEcomPrompt(p, e)}
-                                  className="p-1.5 transition-all text-gray-500 hover:text-blue-400"
-                                  title="Đồng bộ"
-                                >
-                                  <Globe size={12} />
-                                </button>
-                                <button 
+                                <button
                                   onClick={(e) => startEditEcomPrompt(p, e)}
                                   className="p-1.5 hover:text-editor-accent transition-all"
                                   title="Sửa"
                                 >
                                   <Edit2 size={12} />
                                 </button>
-                                <button 
+                                <button
                                   onClick={(e) => deleteEcomPrompt(p.id, e)}
                                   className="p-1.5 hover:text-red-500 transition-all"
                                   title="Xóa"
