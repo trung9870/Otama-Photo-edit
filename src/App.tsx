@@ -2957,16 +2957,16 @@ function App() {
               }}
             >
               <h2
-                className="font-bold mb-2"
+                className="font-bold mb-1"
                 style={{ fontSize: 22, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
               >
-                Giao diện Ecom
+                Ecom Studio
               </h2>
               <p
                 className="mb-6"
-                style={{ fontSize: 14, color: 'var(--color-text-secondary)', letterSpacing: '-0.01em' }}
+                style={{ fontSize: 13, color: 'var(--color-text-secondary)', letterSpacing: '-0.01em' }}
               >
-                Tự động tạo ra kết quả xịn xò cho ảnh sản phẩm TMĐT của bạn.
+                Tạo trang chi tiết TMĐT cho ảnh sản phẩm.
               </p>
 
               <div className="mb-6">
@@ -3275,9 +3275,36 @@ function App() {
                   )}
                 </div>
               ) : (
+                <>
+                {/* Section: ẢNH SẢN PHẨM */}
+                <div className="mb-3 flex items-center gap-2">
+                  <span
+                    className="inline-flex items-center justify-center font-bold rounded-full"
+                    style={{
+                      width: 22,
+                      height: 22,
+                      fontSize: 11,
+                      background: 'var(--color-accent)',
+                      color: '#fff',
+                    }}
+                  >
+                    1
+                  </span>
+                  <p
+                    className="font-semibold uppercase"
+                    style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                  >
+                    Ảnh sản phẩm
+                  </p>
+                </div>
                 <div
                   {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
-                  className={`w-full aspect-square border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group ${dragOverId === 'ecom-product' ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'}`}
+                  className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                  style={{
+                    background: dragOverId === 'ecom-product' ? 'var(--color-accent-soft)' : 'var(--color-card-secondary)',
+                    border: `2px dashed ${dragOverId === 'ecom-product' || ecomProductImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                    borderRadius: 14,
+                  }}
                   onClick={() => {
                     setPasteTargetId('ecom-product');
                     if (ecomFileInputRef.current) ecomFileInputRef.current.click();
@@ -3286,17 +3313,21 @@ function App() {
                   {ecomProductImage ? (
                     <>
                       <img src={ecomProductImage} alt="Product" className="w-full h-full object-contain" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div
+                        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+                      >
                         <span className="text-white font-bold text-xs">Thay đổi ảnh sản phẩm</span>
                       </div>
                     </>
                   ) : (
-                    <div className="flex flex-col items-center gap-2 text-gray-400 group-hover:text-editor-accent">
+                    <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
                       <Upload size={32} />
-                      <span className="text-sm font-medium">Click, kéo thả hoặc Ctrl+V ảnh sản phẩm</span>
+                      <span style={{ fontSize: 13, fontWeight: 500 }}>Click, kéo thả hoặc Ctrl+V ảnh sản phẩm</span>
                     </div>
                   )}
                 </div>
+                </>
               )}
 
               <input
@@ -3408,33 +3439,60 @@ function App() {
                 <>
                   <div className="mt-6 space-y-4">
                 <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">DANH SÁCH PROMPT ĐÃ LƯU</p>
+                  {/* Section: PROMPT */}
+                  <div className="mb-4 flex items-center gap-2">
+                    <span
+                      className="inline-flex items-center justify-center font-bold rounded-full"
+                      style={{
+                        width: 22,
+                        height: 22,
+                        fontSize: 11,
+                        background: 'var(--color-accent)',
+                        color: '#fff',
+                      }}
+                    >
+                      2
+                    </span>
+                    <p
+                      className="font-semibold uppercase"
+                      style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                    >
+                      Prompt
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-3">
+                    <p
+                      className="uppercase font-semibold"
+                      style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                    >
+                      Danh sách đã lưu
+                    </p>
                     <div className="flex gap-3">
-                      <button 
+                      <button
                         onClick={() => {
                           setSelectedEcomPromptId('manual');
                           setEcomPromptText('');
                         }}
-                        className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                        className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
+                        style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                       >
                         <Edit2 size={12} />
-                        NHẬP THỦ CÔNG
+                        THỦ CÔNG
                       </button>
                       <button
                         onClick={() => {
                           if (!isAdmin) {
-                            // Non-admin: always start fresh to avoid accidentally
-                            // re-saving a curated prompt's content under their name
                             setEcomPromptText('');
                             setNewEcomPromptName('');
                           }
                           setIsAddingEcomPrompt(true);
                         }}
-                        className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                        className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
+                        style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                       >
                         <Plus size={12} />
-                        THÊM MỚI
+                        THÊM
                       </button>
                     </div>
                   </div>
@@ -3479,77 +3537,44 @@ function App() {
                       </div>
                     </motion.div>
                   ) : (
-                    <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="space-y-1 mb-6 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
                       {selectedEcomPromptId === 'manual' && (
-                        <div
-                          className="flex items-center gap-3 p-3 rounded-xl border border-editor-accent bg-editor-accent/5 transition-all cursor-pointer"
-                        >
-                          <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]" />
-                          <p className="text-xs font-bold text-editor-accent">
-                            📝 Nhập thủ công
-                          </p>
-                        </div>
+                        <PromptRow
+                          name="📝 Nhập thủ công"
+                          active
+                          onClick={() => {}}
+                          showEdit={false}
+                          showDelete={false}
+                        />
                       )}
                       {ecomSavedPrompts.map((p) => (
-                        <div
+                        <PromptRow
                           key={p.id}
+                          name={p.name}
+                          active={selectedEcomPromptId === p.id}
+                          synced={p.isDefault}
                           onClick={() => {
                             setSelectedEcomPromptId(p.id);
                             setEcomPromptText(p.prompt);
                           }}
-                          className={`group flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
-                            selectedEcomPromptId === p.id 
-                              ? 'border-editor-accent bg-editor-accent/5' 
-                              : 'border-editor-border hover:border-gray-600'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 overflow-hidden">
-                            <div className={`shrink-0 w-2 h-2 rounded-full ${selectedEcomPromptId === p.id ? 'bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]' : 'bg-gray-700'}`} />
-                            <div className="overflow-hidden flex items-center gap-2">
-                              <p className={`text-xs font-bold truncate ${selectedEcomPromptId === p.id ? 'text-editor-accent' : 'text-white'}`}>
-                                {p.name}
-                              </p>
-                              {p.isDefault && <CheckCircle2 size={14} className="text-green-500 shrink-0" title="Đã đồng bộ" />}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1 transition-all">
-                            {isAdmin && (
-                              <button
-                                onClick={(e) => toggleSyncEcomPrompt(p, e)}
-                                className="p-1.5 transition-all text-gray-500 hover:text-blue-400"
-                                title="Đồng bộ"
-                              >
-                                <Globe size={12} />
-                              </button>
-                            )}
-                            {(isAdmin || !p.isDefault) && (
-                              <>
-                                <button
-                                  onClick={(e) => startEditEcomPrompt(p, e)}
-                                  className="p-1.5 hover:text-editor-accent transition-all"
-                                  title="Sửa"
-                                >
-                                  <Edit2 size={12} />
-                                </button>
-                                <button
-                                  onClick={(e) => deleteEcomPrompt(p.id, e)}
-                                  className="p-1.5 hover:text-red-500 transition-all"
-                                  title="Xóa"
-                                >
-                                  <Trash2 size={12} />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
+                          showSync={isAdmin}
+                          onSync={(e) => toggleSyncEcomPrompt(p, e)}
+                          showEdit={isAdmin || !p.isDefault}
+                          showDelete={isAdmin || !p.isDefault}
+                          onEdit={(e) => startEditEcomPrompt(p, e)}
+                          onDelete={(e) => deleteEcomPrompt(p.id, e)}
+                        />
                       ))}
                     </div>
                   )}
 
                   {(isAdmin || selectedEcomPromptId === 'manual') && (
                     <>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-4">
-                        {selectedEcomPromptId === 'manual' ? 'NHẬP PROMPT MỚI' : 'NỘI DUNG PROMPT HIỆN TẠI'}
+                      <p
+                        className="uppercase font-semibold mb-2"
+                        style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                      >
+                        {selectedEcomPromptId === 'manual' ? 'Nhập Prompt mới' : 'Nội dung Prompt hiện tại'}
                       </p>
                       <textarea
                         value={ecomPromptText}
@@ -3559,24 +3584,50 @@ function App() {
                             setSelectedEcomPromptId('manual');
                           }
                         }}
-                        placeholder="Mô tả nội dung..."
-                        className="w-full h-24 bg-editor-border/10 border border-editor-border rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-editor-accent resize-none placeholder-gray-600 mb-4"
+                        placeholder="Mô tả nội dung…"
+                        className="w-full h-24 outline-none transition-colors p-3 mb-4 resize-none"
+                        style={{
+                          background: 'var(--color-fill)',
+                          color: 'var(--color-text)',
+                          borderRadius: 12,
+                          border: '0.5px solid transparent',
+                          fontSize: 13,
+                          letterSpacing: '-0.01em',
+                        }}
+                        onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                        onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
                       />
                     </>
                   )}
                   {!isAdmin && selectedEcomPromptId !== 'manual' && selectedEcomPromptId && (
-                    <div className="bg-editor-accent/5 border border-editor-accent/30 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
-                      <CheckCircle2 size={14} className="text-editor-accent flex-shrink-0" />
-                      <p className="text-xs text-editor-accent font-bold">Đã chọn prompt — sẵn sàng Gen</p>
+                    <div
+                      className="rounded-lg px-4 py-3 mb-4 flex items-center gap-2"
+                      style={{
+                        background: 'var(--color-accent-soft)',
+                        border: '0.5px solid var(--color-accent)',
+                      }}
+                    >
+                      <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+                      <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
+                        Đã chọn prompt — sẵn sàng Gen
+                      </p>
                     </div>
                   )}
 
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] text-editor-accent uppercase tracking-widest font-bold">+ Bổ sung prompt (tuỳ chọn)</p>
+                    <p
+                      className="uppercase font-semibold"
+                      style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
+                    >
+                      + Bổ sung prompt (tuỳ chọn)
+                    </p>
                     {ecomSupplementaryPrompt && (
                       <button
                         onClick={() => setEcomSupplementaryPrompt('')}
-                        className="text-[10px] text-gray-500 hover:text-red-400 font-bold"
+                        className="font-semibold transition-colors"
+                        style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-danger)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-tertiary)')}
                       >
                         XOÁ
                       </button>
@@ -3585,10 +3636,20 @@ function App() {
                   <textarea
                     value={ecomSupplementaryPrompt}
                     onChange={(e) => setEcomSupplementaryPrompt(e.target.value)}
-                    placeholder="VD: Sản phẩm là chăn ga họa tiết hoa cúc xanh navy, phong cách Hàn Quốc tối giản, không có chữ Trung Quốc trên ảnh..."
-                    className="w-full h-24 bg-editor-accent/5 border border-editor-accent/40 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-editor-accent resize-none placeholder-gray-600 mb-2"
+                    placeholder="VD: Sản phẩm là chăn ga họa tiết hoa cúc xanh navy, phong cách Hàn Quốc tối giản, không có chữ Trung Quốc trên ảnh…"
+                    className="w-full h-24 outline-none transition-colors p-3 mb-2 resize-none"
+                    style={{
+                      background: 'var(--color-accent-soft)',
+                      color: 'var(--color-text)',
+                      borderRadius: 12,
+                      border: '0.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)',
+                      fontSize: 13,
+                      letterSpacing: '-0.01em',
+                    }}
+                    onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                    onBlur={(e) => (e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 35%, transparent)')}
                   />
-                  <p className="text-[10px] text-gray-500 mb-6">
+                  <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 24 }}>
                     Khi gen, phần này sẽ được nối vào cuối prompt mặc định với độ ưu tiên cao.
                   </p>
                 </div>
@@ -3599,146 +3660,162 @@ function App() {
 
             {(ecomSubTab === 'gen-new' || ecomSubTab === 'clone-template') && (
               <>
-
-                <div className="mb-6">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold mt-4">Google AI Engine</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setEcomModel(m)}
-                        className={`p-2 rounded-xl border text-center transition-all relative overflow-hidden ${
-                          ecomModel === m 
-                            ? 'border-editor-accent bg-editor-accent/5' 
-                            : m === 'banana-pro'
-                              ? 'border-amber-500/50 bg-amber-500/5'
-                              : 'border-editor-border hover:border-gray-600'
-                        }`}
-                      >
-                        {m === 'banana-pro' && (
-                          <div className="absolute top-0 right-0 bg-amber-500 text-black text-[6px] font-black px-1 py-0.5 rounded-bl-md">
-                            BEST
-                          </div>
-                        )}
-                        <p className={`text-[11px] font-bold ${
-                          ecomModel === m 
-                            ? 'text-editor-accent' 
-                            : m === 'banana-pro'
-                              ? 'text-amber-500'
-                              : 'text-white'
-                        }`}>
-                          {MODEL_CONFIG[m].name}
-                        </p>
-                        {MODEL_CONFIG[m].requiredKey === 'google' && (
-                          <span className="text-[7px] text-editor-accent uppercase font-bold block mt-0.5">Google</span>
-                        )}
-                        {MODEL_CONFIG[m].requiredKey === 'kie' && (
-                          <span className="text-[7px] text-amber-500/70 uppercase font-bold block mt-0.5">Kie.ai</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
+                {/* Section: CÀI ĐẶT */}
+                <div className="mt-6 mb-4 flex items-center gap-2">
+                  <span
+                    className="inline-flex items-center justify-center font-bold rounded-full"
+                    style={{
+                      width: 22,
+                      height: 22,
+                      fontSize: 11,
+                      background: 'var(--color-accent)',
+                      color: '#fff',
+                    }}
+                  >
+                    3
+                  </span>
+                  <p
+                    className="font-semibold uppercase"
+                    style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                  >
+                    Cài đặt
+                  </p>
                 </div>
 
-                <div className="mb-6">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold">TỈ LỆ KHUNG HÌNH</p>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {ASPECT_RATIOS.map((ratio) => (
-                      <button
-                        key={ratio.value}
-                        onClick={() => setEcomAspectRatio(ratio.value)}
-                        className={`py-2 px-1 rounded-lg border flex flex-col items-center gap-1 transition-all ${
-                          ecomAspectRatio === ratio.value 
-                            ? 'border-editor-accent bg-editor-accent/5' 
-                            : 'border-editor-border hover:border-gray-600'
-                        }`}
-                      >
-                        <div className={`border border-current ${
-                          ratio.value === '1:1' ? 'w-3 h-3' : 
-                          ratio.value === '3:4' ? 'w-2.5 h-3' : 
-                          ratio.value === '4:3' ? 'w-3 h-2.5' : 
-                          ratio.value === '9:16' ? 'w-2 h-3.5' : 'w-3.5 h-2'
-                        } ${ecomAspectRatio === ratio.value ? 'text-editor-accent' : 'text-gray-500'}`} />
-                        <span className={`text-[8px] font-bold ${ecomAspectRatio === ratio.value ? 'text-editor-accent' : 'text-white'}`}>
-                          {ratio.label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                <div className="mb-4">
+                  <p
+                    className="uppercase font-semibold mb-2"
+                    style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                  >
+                    Model
+                  </p>
+                  <ModelCardPicker<ModelType>
+                    value={ecomModel}
+                    onChange={(m) => setEcomModel(m)}
+                    options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                      value: m,
+                      name: MODEL_CONFIG[m].name,
+                      sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
+                      best: m === 'banana-pro',
+                    }))}
+                  />
                 </div>
 
-                <div className="mb-6">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold">CHẤT LƯỢNG ẢNH</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(() => {
-                      // Compute available sizes based on Kie.ai constraints for GPT2
-                      const availableSizes: string[] = ecomModel === 'gpt2'
-                        ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
-                          : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
-                          : ['1k']) // 3:4, 4:3, 16:9
-                        : ['1k', '2k', '4k']; // Banana Pro / Banana 2 hỗ trợ đủ
+                <div className="mb-4">
+                  <p
+                    className="uppercase font-semibold mb-2"
+                    style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                  >
+                    Tỉ lệ khung hình
+                  </p>
+                  <ARSelector
+                    value={ecomAspectRatio as any}
+                    onChange={(v) => setEcomAspectRatio(v)}
+                  />
+                </div>
 
-                      return ['1k', '2k', '4k'].map((size) => {
-                        const isAvailable = availableSizes.includes(size);
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div>
+                    <p
+                      className="uppercase font-semibold mb-2"
+                      style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                    >
+                      Chất lượng
+                    </p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(() => {
+                        const availableSizes: string[] = ecomModel === 'gpt2'
+                          ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
+                            : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
+                            : ['1k'])
+                          : ['1k', '2k', '4k'];
+
+                        return ['1k', '2k', '4k'].map((size) => {
+                          const isAvailable = availableSizes.includes(size);
+                          const active = ecomImageSize === size;
+                          return (
+                            <button
+                              key={size}
+                              onClick={() => isAvailable && setEcomImageSize(size)}
+                              disabled={!isAvailable}
+                              title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
+                              className="py-2 text-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{
+                                borderRadius: 10,
+                                background: active ? 'var(--color-accent-soft)' : 'var(--color-fill)',
+                                border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                fontSize: 11,
+                                fontWeight: 600,
+                                letterSpacing: '0.04em',
+                              }}
+                            >
+                              {size.toUpperCase()}
+                            </button>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p
+                      className="uppercase font-semibold mb-2"
+                      style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                    >
+                      Số ảnh
+                    </p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[1, 2, 3].map((count) => {
+                        const active = ecomImageCount === count;
                         return (
                           <button
-                            key={size}
-                            onClick={() => isAvailable && setEcomImageSize(size)}
-                            disabled={!isAvailable}
-                            title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
-                            className={`py-2 rounded-xl border text-center transition-all ${
-                              !isAvailable
-                                ? 'border-editor-border/30 bg-black/40 text-gray-700 cursor-not-allowed opacity-40'
-                                : ecomImageSize === size
-                                  ? 'border-editor-accent bg-editor-accent/5 text-editor-accent'
-                                  : 'border-editor-border hover:border-gray-600 text-gray-400 hover:text-white'
-                            }`}
+                            key={count}
+                            onClick={() => setEcomImageCount(count)}
+                            className="py-2 text-center transition-all"
+                            style={{
+                              borderRadius: 10,
+                              background: active ? 'var(--color-accent-soft)' : 'var(--color-fill)',
+                              border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                              color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                              fontSize: 11,
+                              fontWeight: 600,
+                              letterSpacing: '0.04em',
+                            }}
                           >
-                            <span className="text-[11px] font-bold uppercase">{size}</span>
+                            {count}
                           </button>
                         );
-                      });
-                    })()}
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-3 font-bold">SỐ LƯỢNG KẾT QUẢ</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[1, 2, 3].map((count) => (
-                      <button
-                        key={count}
-                        onClick={() => setEcomImageCount(count)}
-                        className={`py-2 rounded-xl border text-center transition-all ${
-                          ecomImageCount === count 
-                            ? 'border-editor-accent bg-editor-accent/5 text-editor-accent' 
-                            : 'border-editor-border hover:border-gray-600 text-gray-400 hover:text-white'
-                        }`}
-                      >
-                        <span className="text-[11px] font-bold uppercase">{count} ẢNH</span>
-                      </button>
-                    ))}
+                      })}
+                    </div>
                   </div>
                 </div>
 
                 {globalError && (
-                  <div className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-3 text-red-400 text-xs">
+                  <div
+                    className="mb-6 p-3 rounded-lg flex items-start gap-3"
+                    style={{
+                      background: 'color-mix(in srgb, var(--color-danger) 12%, transparent)',
+                      border: '0.5px solid color-mix(in srgb, var(--color-danger) 30%, transparent)',
+                      color: 'var(--color-danger)',
+                      fontSize: 12,
+                    }}
+                  >
                     <p>{globalError}</p>
                   </div>
                 )}
 
-                <div className="pt-4 space-y-4">
-                  <button 
+                <div className="pt-2 space-y-3">
+                  <Button
+                    variant="filled"
+                    size="lg"
+                    fullWidth
+                    icon={isEcomGenerating ? Loader2 : Sparkles}
                     onClick={handleEcomGenerate}
                     disabled={!ecomProductImage || isEcomGenerating}
-                    className="w-full py-4 rounded-xl bg-editor-accent text-white font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isEcomGenerating ? (
-                      <><Loader2 className="animate-spin" size={20} /> Đang xử lý...</>
-                    ) : (
-                      <><Sparkles size={20} /> Gen ảnh TMĐT</>
-                    )}
-                  </button>
+                    {isEcomGenerating ? 'Đang xử lý…' : 'Gen ảnh TMĐT'}
+                  </Button>
                 </div>
               </>
             )}
