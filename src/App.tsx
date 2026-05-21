@@ -75,6 +75,8 @@ import {
 import AdminPanel from './components/AdminPanel';
 import { useTheme } from './hooks/useTheme';
 import { Button } from './components/ui';
+import { Header } from './components/Header';
+import { Login } from './components/Login';
 
 // Error Boundary Component
 class ErrorBoundary extends (Component as any) {
@@ -2866,257 +2868,70 @@ function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-editor-bg p-4">
-        <div className="bg-[#1a1a1f] border border-editor-border rounded-2xl p-8 w-full max-w-md shadow-2xl">
-          <div className="flex items-center gap-3 mb-6 justify-center">
-            <div className="w-10 h-10 bg-editor-accent rounded-lg flex items-center justify-center">
-              <Palette className="text-black w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tighter leading-none">PHOTO</h1>
-              <p className="text-[10px] tracking-[0.3em] text-editor-accent font-bold">EDITOR</p>
-            </div>
-          </div>
-          <h2 className="text-base font-bold text-white text-center mb-6 flex items-center gap-2 justify-center">
-            <LogIn size={18} className="text-editor-accent" /> Vui lòng đăng nhập để tiếp tục
-          </h2>
-
-          <button
-            onClick={handleGoogleLogin}
-            disabled={loginLoading}
-            className="w-full py-3 bg-white text-black font-bold rounded-xl flex items-center justify-center gap-3 hover:bg-gray-100 transition disabled:opacity-50 mb-4"
-          >
-            {loginLoading ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 48 48">
-                <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8a12 12 0 0 1 0-24c3 0 5.7 1.1 7.8 3l5.7-5.7C33.6 6.1 29 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
-                <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 16 19 13 24 13c3 0 5.7 1.1 7.8 3l5.7-5.7C33.6 6.1 29 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
-                <path fill="#4CAF50" d="M24 44c5 0 9.5-1.9 12.9-5l-6-5c-1.8 1.4-4.2 2.3-6.9 2.3-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
-                <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6 5c-.4.4 6.5-4.7 6.5-14.7 0-1.3-.1-2.6-.4-3.9z"/>
-              </svg>
-            )}
-            Đăng nhập bằng Google
-          </button>
-
-          <div className="flex items-center gap-3 my-4">
-            <div className="flex-1 h-px bg-editor-border" />
-            <span className="text-[10px] text-gray-500 uppercase tracking-widest">hoặc</span>
-            <div className="flex-1 h-px bg-editor-border" />
-          </div>
-
-          <form onSubmit={handleEmailLogin} className="space-y-3">
-            <div>
-              <label className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Email</label>
-              <input
-                type="email"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                disabled={loginLoading}
-                placeholder="nhanvien@otama.vn"
-                className="w-full bg-[#252525] text-white p-3 rounded-lg border border-white/10 focus:border-editor-accent focus:outline-none text-sm"
-                autoComplete="email"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Mật khẩu</label>
-              <input
-                type="password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                disabled={loginLoading}
-                placeholder="••••••••"
-                className="w-full bg-[#252525] text-white p-3 rounded-lg border border-white/10 focus:border-editor-accent focus:outline-none text-sm"
-                autoComplete="current-password"
-              />
-            </div>
-
-            {loginError && (
-              <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-xs p-3 rounded-lg">
-                {loginError}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loginLoading}
-              className="w-full py-3 bg-editor-accent text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50"
-            >
-              {loginLoading ? (
-                <><Loader2 size={18} className="animate-spin" /> Đang đăng nhập...</>
-              ) : (
-                <><LogIn size={18} /> Đăng nhập bằng Email</>
-              )}
-            </button>
-          </form>
-
-          <p className="text-[10px] text-gray-500 text-center mt-4">
-            Tài khoản nhân viên do quản trị viên (Sếp) cấp.
-          </p>
-        </div>
-      </div>
+      <Login
+        loginEmail={loginEmail}
+        setLoginEmail={setLoginEmail}
+        loginPassword={loginPassword}
+        setLoginPassword={setLoginPassword}
+        loginError={loginError}
+        loginLoading={loginLoading}
+        onEmailSubmit={handleEmailLogin}
+        onGoogleLogin={handleGoogleLogin}
+      />
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col p-4 md:p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <header className="flex items-center justify-between mb-8 flex-wrap gap-4">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-editor-accent rounded-lg flex items-center justify-center">
-              <Palette className="text-black w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tighter leading-none">PHOTO</h1>
-              <p className="text-[10px] tracking-[0.3em] text-editor-accent font-bold">EDITOR</p>
-            </div>
-          </div>
-          <div className="hidden sm:flex bg-editor-border/20 p-1 rounded-lg">
-            {(isAdmin || userPermissions?.canUseClothing) && (
-              <button
-                onClick={() => setAppMode('clothing')}
-                className={`px-3 py-1.5 text-sm font-bold rounded-md transition-all ${appMode === 'clothing' ? 'bg-editor-accent text-black' : 'text-editor-text'}`}
-              >
-                Quần áo
-              </button>
-            )}
-            {(isAdmin || userPermissions?.canUseEcom) && (
-              <button
-                onClick={() => setAppMode('ecom')}
-                className={`px-3 py-1.5 text-sm font-bold rounded-md transition-all ${appMode === 'ecom' ? 'bg-editor-accent text-black' : 'text-editor-text'}`}
-              >
-                Ecom
-              </button>
-            )}
-            {isAdmin && (
-              <button
-                onClick={() => setAppMode('admin')}
-                className={`px-3 py-1.5 text-sm font-bold rounded-md transition-all ${appMode === 'admin' ? 'bg-editor-accent text-black' : 'text-editor-text'}`}
-              >
-                Admin
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-4">
-          <div className="flex sm:hidden w-full bg-editor-border/20 p-1 rounded-lg mb-2">
-            {(isAdmin || userPermissions?.canUseClothing) && (
-              <button
-                onClick={() => setAppMode('clothing')}
-                className={`flex-1 px-3 py-1.5 text-sm font-bold rounded-md transition-all ${appMode === 'clothing' ? 'bg-editor-accent text-black' : 'text-editor-text'}`}
-              >
-                Quần áo
-              </button>
-            )}
-            {(isAdmin || userPermissions?.canUseEcom) && (
-              <button
-                onClick={() => setAppMode('ecom')}
-                className={`flex-1 px-3 py-1.5 text-sm font-bold rounded-md transition-all ${appMode === 'ecom' ? 'bg-editor-accent text-black' : 'text-editor-text'}`}
-              >
-                Ecom
-              </button>
-            )}
-            {isAdmin && (
-              <button
-                onClick={() => setAppMode('admin')}
-                className={`flex-1 px-3 py-1.5 text-sm font-bold rounded-md transition-all ${appMode === 'admin' ? 'bg-editor-accent text-black' : 'text-editor-text'}`}
-              >
-                Admin
-              </button>
-            )}
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={theme === 'system' ? Monitor : resolvedTheme === 'dark' ? Moon : Sun}
-            onClick={() => setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light')}
-            title={`Theme: ${theme}`}
-          >
-            {theme === 'system' ? 'Auto' : theme === 'dark' ? 'Tối' : 'Sáng'}
-          </Button>
-
-          {isAdmin && (
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-bold transition-all ${
-                kieApiKey || googleApiKey
-                  ? 'bg-green-500/10 border-green-500/30 text-green-500'
-                  : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-500'
-              }`}
-            >
-              <Settings size={12} />
-              {kieApiKey || googleApiKey ? 'Cài đặt API' : 'Thêm API Key'}
-            </button>
-          )}
-
-          {isAuthReady && (
-            <div className="flex items-center gap-3 bg-editor-border/20 px-3 py-1.5 rounded-full border border-editor-border/30">
-              {user ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    {user.photoURL ? (
-                      <img src={user.photoURL} alt={user.displayName || ''} className="w-6 h-6 rounded-full border border-editor-accent/50" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-editor-accent flex items-center justify-center">
-                        <UserIcon size={12} className="text-black" />
-                      </div>
-                    )}
-                    <span className="text-xs font-bold hidden sm:inline-block max-w-[100px] truncate">{user.displayName}</span>
-                  </div>
-                  <button 
-                    onClick={handleLogout}
-                    className="p-1.5 hover:text-red-500 transition-colors"
-                    title="Đăng xuất"
-                  >
-                    <LogOut size={16} />
-                  </button>
-                </>
-              ) : (
-                <button 
-                  onClick={handleLogin}
-                  className="flex items-center gap-2 text-xs font-bold text-editor-accent hover:opacity-80 transition-opacity"
-                >
-                  <LogIn size={16} />
-                  Đăng nhập đồng bộ
-                </button>
-              )}
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
+    <div className="min-h-screen flex flex-col">
+      <Header
+        appMode={appMode}
+        onModeChange={(m) => setAppMode(m)}
+        isAdmin={isAdmin}
+        canUseClothing={!!userPermissions?.canUseClothing}
+        canUseEcom={!!userPermissions?.canUseEcom}
+        theme={theme}
+        resolvedTheme={resolvedTheme}
+        onThemeChange={setTheme}
+        hasApiKey={!!(kieApiKey || googleApiKey)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        isAuthReady={isAuthReady}
+        user={user}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
+        actions={
+          <>
             {images.length > 0 && (
-              <button 
+              <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={images.length >= 5}
-                className="flex items-center gap-2 px-4 py-2 rounded-full border border-editor-border text-sm hover:bg-editor-accent hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-editor-border text-xs hover:bg-editor-accent hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Upload size={16} />
+                <Upload size={14} />
                 <span className="hidden sm:inline">Thêm ảnh ({images.length}/5)</span>
                 <span className="sm:hidden">{images.length}/5</span>
               </button>
             )}
             {images.some(img => img.processed && img.processed !== img.source) && (
-              <button 
+              <button
                 onClick={handleDownloadAll}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-editor-accent text-black text-sm font-bold hover:opacity-90 transition-all"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-editor-accent text-black text-xs font-bold hover:opacity-90 transition-all"
               >
-                <Download size={16} />
+                <Download size={14} />
                 <span className="hidden sm:inline">Lưu tất cả</span>
               </button>
             )}
-            <button 
+            <button
               onClick={resetEditor}
-              className="flex items-center gap-2 px-4 py-2 rounded-full border border-editor-border text-sm hover:bg-editor-border/30 transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-editor-border text-xs hover:bg-editor-border/30 transition-colors"
             >
-              <RotateCcw size={16} />
+              <RotateCcw size={14} />
               <span className="hidden sm:inline">Reset</span>
             </button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
+      <div className="flex-1 flex flex-col p-4 md:p-8 max-w-7xl mx-auto w-full">
       {appMode === 'admin' && (
         <main className="flex-1 w-full max-w-7xl mx-auto py-8">
           <AdminPanel currentUser={user} />
@@ -6275,6 +6090,7 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
     </div>
   );
 }
