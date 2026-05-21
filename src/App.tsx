@@ -78,7 +78,7 @@ import { Button } from './components/ui';
 import { Header } from './components/Header';
 import { Login } from './components/Login';
 import { Segmented } from './components/ui';
-import { ARSelector, ModelCardPicker, PromptRow } from './components/clothing';
+import { ARSelector, ModelCardPicker, PromptRow, PromptListModal } from './components/clothing';
 
 // Error Boundary Component
 class ErrorBoundary extends (Component as any) {
@@ -349,6 +349,9 @@ function App() {
   }, [ecomSavedPrompts, selectedEcomPromptId]);
 
   const [isAddingEcomPrompt, setIsAddingEcomPrompt] = useState(false);
+  const [showEcomPromptModal, setShowEcomPromptModal] = useState(false);
+  const [showGenPromptModal, setShowGenPromptModal] = useState(false);
+  const [showTryOnPromptModal, setShowTryOnPromptModal] = useState(false);
   const [newEcomPromptName, setNewEcomPromptName] = useState('');
   const [editingEcomPromptId, setEditingEcomPromptId] = useState<string | null>(null);
 
@@ -3638,7 +3641,7 @@ function App() {
                       </div>
                     </motion.div>
                   ) : (
-                    <div className="space-y-1 mb-6 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div className="space-y-1 mb-6">
                       {selectedEcomPromptId === 'manual' && (
                         <PromptRow
                           name="📝 Nhập thủ công"
@@ -3648,7 +3651,7 @@ function App() {
                           showDelete={false}
                         />
                       )}
-                      {ecomSavedPrompts.map((p) => (
+                      {ecomSavedPrompts.slice(0, 3).map((p) => (
                         <PromptRow
                           key={p.id}
                           name={p.name}
@@ -3666,6 +3669,26 @@ function App() {
                           onDelete={(e) => deleteEcomPrompt(p.id, e)}
                         />
                       ))}
+                      {ecomSavedPrompts.length > 3 && (
+                        <button
+                          onClick={() => setShowEcomPromptModal(true)}
+                          className="w-full flex items-center justify-center gap-1.5 transition-colors mt-1"
+                          style={{
+                            padding: '8px 12px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: 'var(--color-accent)',
+                            background: 'var(--color-fill)',
+                            borderRadius: 10,
+                            letterSpacing: '-0.01em',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-soft)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-fill)')}
+                        >
+                          Xem tất cả ({ecomSavedPrompts.length})
+                          <ChevronRight size={14} />
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -5167,7 +5190,7 @@ function App() {
                         </p>
                       </div>
                     )}
-                    {savedGenPrompts.map((p) => (
+                    {savedGenPrompts.slice(0, 3).map((p) => (
                       <PromptRow
                         key={p.id}
                         name={p.name}
@@ -5182,6 +5205,26 @@ function App() {
                         onDelete={(e) => deletePrompt(p.id, e)}
                       />
                     ))}
+                    {savedGenPrompts.length > 3 && (
+                      <button
+                        onClick={() => setShowGenPromptModal(true)}
+                        className="w-full flex items-center justify-center gap-1.5 transition-colors mt-1"
+                        style={{
+                          padding: '8px 12px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--color-accent)',
+                          background: 'var(--color-fill)',
+                          borderRadius: 10,
+                          letterSpacing: '-0.01em',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-soft)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-fill)')}
+                      >
+                        Xem tất cả ({savedGenPrompts.length})
+                        <ChevronRight size={14} />
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -6115,64 +6158,54 @@ function App() {
                           </div>
                         </motion.div>
                       ) : (
-                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar mb-4">
+                        <div className="space-y-1 mb-4">
                           {tryOnManualMode && (
-                            <div className="flex items-center gap-3 p-3 rounded-xl border border-editor-accent bg-editor-accent/5 transition-all cursor-pointer">
-                              <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]" />
-                              <p className="text-xs font-bold text-editor-accent">📝 Nhập thủ công</p>
-                            </div>
+                            <PromptRow
+                              name="📝 Nhập thủ công"
+                              active
+                              onClick={() => {}}
+                              showEdit={false}
+                              showDelete={false}
+                            />
                           )}
-                          {savedTryOnPrompts.map((p) => (
-                            <div
+                          {savedTryOnPrompts.slice(0, 3).map((p) => (
+                            <PromptRow
                               key={p.id}
+                              name={p.name}
+                              active={!tryOnManualMode && tryOnPrompt === p.prompt}
+                              synced={p.isDefault}
                               onClick={() => {
                                 setTryOnPrompt(p.prompt);
                                 setTryOnManualMode(false);
                               }}
-                              className={`group flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
-                                !tryOnManualMode && tryOnPrompt === p.prompt
-                                  ? 'border-editor-accent bg-editor-accent/5'
-                                  : 'border-editor-border hover:border-gray-600'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3 overflow-hidden">
-                                <div className={`shrink-0 w-2 h-2 rounded-full ${!tryOnManualMode && tryOnPrompt === p.prompt ? 'bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]' : 'bg-gray-700'}`} />
-                                <div className="overflow-hidden flex items-center gap-2">
-                                  <p className={`text-xs font-bold truncate ${!tryOnManualMode && tryOnPrompt === p.prompt ? 'text-editor-accent' : 'text-white'}`}>
-                                    {p.name}
-                                  </p>
-                                  {p.isDefault && <CheckCircle2 size={14} className="text-green-500 shrink-0" title="Đã đồng bộ" />}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1 transition-all">
-                                {isAdmin && (
-                                  <button
-                                    onClick={(e) => toggleSyncGenPrompt(p, e)}
-                                    className="p-1.5 transition-all text-gray-500 hover:text-blue-400"
-                                    title="Đồng bộ cho mọi người"
-                                  >
-                                    <Globe size={12} />
-                                  </button>
-                                )}
-                                {(isAdmin || !p.isDefault) && (
-                                  <>
-                                    <button
-                                      onClick={(e) => startEditPrompt(p, e)}
-                                      className="p-1.5 hover:text-editor-accent transition-all"
-                                    >
-                                      <Edit2 size={12} />
-                                    </button>
-                                    <button
-                                      onClick={(e) => deletePrompt(p.id, e)}
-                                      className="p-1.5 hover:text-red-500 transition-all"
-                                    >
-                                      <Trash2 size={12} />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
+                              showSync={isAdmin}
+                              onSync={(e) => toggleSyncGenPrompt(p, e)}
+                              showEdit={isAdmin || !p.isDefault}
+                              showDelete={isAdmin || !p.isDefault}
+                              onEdit={(e) => startEditPrompt(p, e)}
+                              onDelete={(e) => deletePrompt(p.id, e)}
+                            />
                           ))}
+                          {savedTryOnPrompts.length > 3 && (
+                            <button
+                              onClick={() => setShowTryOnPromptModal(true)}
+                              className="w-full flex items-center justify-center gap-1.5 transition-colors mt-1"
+                              style={{
+                                padding: '8px 12px',
+                                fontSize: 12,
+                                fontWeight: 600,
+                                color: 'var(--color-accent)',
+                                background: 'var(--color-fill)',
+                                borderRadius: 10,
+                                letterSpacing: '-0.01em',
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-soft)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-fill)')}
+                            >
+                              Xem tất cả ({savedTryOnPrompts.length})
+                              <ChevronRight size={14} />
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -6514,6 +6547,50 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Prompt list full picker modals */}
+      <PromptListModal
+        open={showEcomPromptModal}
+        onClose={() => setShowEcomPromptModal(false)}
+        title="Tất cả Prompt Ecom"
+        prompts={ecomSavedPrompts}
+        selectedId={selectedEcomPromptId}
+        onSelect={(p) => {
+          setSelectedEcomPromptId(p.id);
+          setEcomPromptText((p as any).prompt);
+        }}
+        isAdmin={isAdmin}
+        onSync={(p, e) => toggleSyncEcomPrompt(p as any, e)}
+        onEdit={(p, e) => startEditEcomPrompt(p as any, e)}
+        onDelete={(id, e) => deleteEcomPrompt(id, e)}
+      />
+      <PromptListModal
+        open={showGenPromptModal}
+        onClose={() => setShowGenPromptModal(false)}
+        title="Tất cả Prompt Gen Ảnh"
+        prompts={savedGenPrompts}
+        selectedId={selectedPromptId}
+        onSelect={(p) => selectPrompt(p.id)}
+        isAdmin={isAdmin}
+        onSync={(p, e) => toggleSyncGenPrompt(p as any, e)}
+        onEdit={(p, e) => startEditPrompt(p as any, e)}
+        onDelete={(id, e) => deletePrompt(id, e)}
+      />
+      <PromptListModal
+        open={showTryOnPromptModal}
+        onClose={() => setShowTryOnPromptModal(false)}
+        title="Tất cả Prompt Thay Đồ"
+        prompts={savedTryOnPrompts}
+        selectedId={tryOnManualMode ? null : (savedTryOnPrompts.find((p) => p.prompt === tryOnPrompt)?.id ?? null)}
+        onSelect={(p) => {
+          setTryOnPrompt((p as any).prompt);
+          setTryOnManualMode(false);
+        }}
+        isAdmin={isAdmin}
+        onSync={(p, e) => toggleSyncGenPrompt(p as any, e)}
+        onEdit={(p, e) => startEditPrompt(p as any, e)}
+        onDelete={(id, e) => deletePrompt(id, e)}
+      />
 
       {/* Zoom Lightbox */}
       <AnimatePresence>
