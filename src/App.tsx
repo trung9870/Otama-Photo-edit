@@ -2886,7 +2886,7 @@ function App() {
   return (
     <div
       className="min-h-screen flex flex-col"
-      style={appMode === 'clothing' ? { background: 'var(--color-bg)' } : undefined}
+      style={appMode === 'clothing' || appMode === 'ecom' ? { background: 'var(--color-bg)' } : undefined}
     >
       <Header
         appMode={appMode}
@@ -2947,35 +2947,41 @@ function App() {
         <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Left panel: Upload and Settings */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-            <div className="glass-panel p-6">
-              <h2 className="text-xl font-bold text-white mb-4">Giao diện Ecom</h2>
-              <p className="text-sm text-gray-400 mb-6">Tự động tạo ra kết quả xịn xò cho ảnh sản phẩm TMĐT của bạn.</p>
-              
-              <div className="flex bg-editor-border/20 p-1 rounded-lg mb-6">
-                <button
-                  onClick={() => setEcomSubTab('gen-new')}
-                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${ecomSubTab === 'gen-new' ? 'bg-editor-accent text-black shadow-md' : 'text-gray-400 hover:text-white'}`}
-                >
-                  Gen new
-                </button>
-                <button
-                  onClick={() => setEcomSubTab('clone-template')}
-                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${ecomSubTab === 'clone-template' ? 'bg-editor-accent text-black shadow-md' : 'text-gray-400 hover:text-white'}`}
-                >
-                  Clone Templates
-                </button>
-                <button
-                  onClick={() => setEcomSubTab('pattern-replace')}
-                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${ecomSubTab === 'pattern-replace' ? 'bg-editor-accent text-black shadow-md' : 'text-gray-400 hover:text-white'}`}
-                >
-                  Thay Pattern
-                </button>
-                <button
-                  onClick={() => setEcomSubTab('thay')}
-                  className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${ecomSubTab === 'thay' ? 'bg-editor-accent text-black shadow-md' : 'text-gray-400 hover:text-white'}`}
-                >
-                  THAY
-                </button>
+            <div
+              className="p-6"
+              style={{
+                background: 'var(--color-card)',
+                border: '0.5px solid var(--color-border-soft)',
+                borderRadius: 18,
+                boxShadow: 'var(--shadow-card)',
+              }}
+            >
+              <h2
+                className="font-bold mb-2"
+                style={{ fontSize: 22, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
+              >
+                Giao diện Ecom
+              </h2>
+              <p
+                className="mb-6"
+                style={{ fontSize: 14, color: 'var(--color-text-secondary)', letterSpacing: '-0.01em' }}
+              >
+                Tự động tạo ra kết quả xịn xò cho ảnh sản phẩm TMĐT của bạn.
+              </p>
+
+              <div className="mb-6">
+                <Segmented<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay'>
+                  value={ecomSubTab}
+                  onChange={(v) => setEcomSubTab(v)}
+                  size="md"
+                  fullWidth
+                  options={[
+                    { value: 'gen-new', label: 'Gen new' },
+                    { value: 'clone-template', label: 'Clone' },
+                    { value: 'pattern-replace', label: 'Pattern' },
+                    { value: 'thay', label: 'Thay' },
+                  ]}
+                />
               </div>
 
               {ecomSubTab === 'clone-template' ? (
@@ -5098,28 +5104,32 @@ function App() {
           <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Analyze Tab Content */}
             <div className="flex flex-col gap-4">
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                <Scan className="text-editor-accent" />
+              <h2
+                className="font-bold flex items-center gap-2"
+                style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
+              >
+                <Scan style={{ color: 'var(--color-accent)' }} size={18} />
                 Tải ảnh mẫu để phân tích
               </h2>
 
               <div>
-                <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">Loại phân tích</p>
-                <div className="flex bg-[#252525] p-1 rounded-lg">
-                  <button
-                    onClick={() => setAnalyzeMode('fashion')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${analyzeMode === 'fashion' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                  >
-                    FASHION
-                  </button>
-                  <button
-                    onClick={() => setAnalyzeMode('bedding')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-md transition-all ${analyzeMode === 'bedding' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                  >
-                    BEDDING
-                  </button>
-                </div>
-                <p className="text-[10px] text-gray-500 mt-2">
+                <p
+                  className="uppercase font-semibold mb-2"
+                  style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                >
+                  Loại phân tích
+                </p>
+                <Segmented<'fashion' | 'bedding'>
+                  value={analyzeMode}
+                  onChange={(v) => setAnalyzeMode(v)}
+                  size="md"
+                  fullWidth
+                  options={[
+                    { value: 'fashion', label: 'Fashion' },
+                    { value: 'bedding', label: 'Bedding' },
+                  ]}
+                />
+                <p className="mt-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                   {analyzeMode === 'fashion'
                     ? 'Sinh prompt tả phong cách chụp (JSON) — dùng để gen ảnh giống style.'
                     : 'Sinh 8 cặp HEADLINE + BODY tiếng Việt cho trang chi tiết chăn ga.'}
@@ -5142,28 +5152,45 @@ function App() {
                     r.readAsDataURL(file);
                   }
                 }}
-                className={`glass-panel aspect-video flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-editor-accent transition-all relative overflow-hidden ${analyzeDragOver ? 'border-editor-accent bg-editor-accent/10' : ''}`}
+                className="aspect-video flex flex-col items-center justify-center gap-4 cursor-pointer transition-all relative overflow-hidden"
+                style={{
+                  background: analyzeDragOver ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                  border: analyzeDragOver ? '1px solid var(--color-accent)' : '0.5px solid var(--color-border-soft)',
+                  borderRadius: 18,
+                  boxShadow: 'var(--shadow-card)',
+                }}
               >
                 {analyzeImage ? (
                   <>
                     <img src={analyzeImage} alt="To analyze" className="w-full h-full object-contain" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity">
-                      <p className="text-sm font-bold">Thay đổi ảnh</p>
+                    <div
+                      className="absolute inset-0 opacity-0 hover:opacity-100 flex items-center justify-center transition-opacity"
+                      style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+                    >
+                      <p className="text-sm font-bold text-white">Thay đổi ảnh</p>
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="w-16 h-16 rounded-full bg-editor-border/30 flex items-center justify-center">
-                      <Upload className="text-gray-400" />
+                    <div
+                      className="w-16 h-16 rounded-full flex items-center justify-center"
+                      style={{
+                        background: 'var(--color-fill)',
+                        color: 'var(--color-text-tertiary)',
+                      }}
+                    >
+                      <Upload />
                     </div>
                     <div className="text-center">
-                      <p className="font-bold">Bấm để tải ảnh</p>
-                      <p className="text-xs text-gray-500">Ảnh sản phẩm bạn muốn lấy phong cách</p>
+                      <p className="font-bold" style={{ color: 'var(--color-text)' }}>Bấm để tải ảnh</p>
+                      <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+                        Ảnh sản phẩm bạn muốn lấy phong cách
+                      </p>
                     </div>
                   </>
                 )}
-                <input 
-                  type="file" 
+                <input
+                  type="file"
                   ref={analyzeFileInputRef}
                   className="hidden"
                   accept="image/*"
@@ -5177,31 +5204,36 @@ function App() {
                   }}
                 />
               </div>
-              <button 
+              <Button
+                variant="filled"
+                size="lg"
+                fullWidth
                 onClick={handleAnalyzeImage}
                 disabled={!analyzeImage || isAnalyzing}
-                className="w-full py-4 rounded-xl bg-editor-accent text-black font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
+                icon={isAnalyzing ? Loader2 : Search}
               >
-                {isAnalyzing ? (
-                  <>
-                    <Loader2 className="animate-spin" />
-                    Đang phân tích...
-                  </>
-                ) : (
-                  <>
-                    <Search size={20} />
-                    Bắt đầu phân tích
-                  </>
-                )}
-              </button>
+                {isAnalyzing ? 'Đang phân tích…' : 'Bắt đầu phân tích'}
+              </Button>
             </div>
 
             <div className="flex flex-col gap-4">
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                <Sparkles className="text-editor-accent" />
+              <h2
+                className="font-bold flex items-center gap-2"
+                style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
+              >
+                <Sparkles style={{ color: 'var(--color-accent)' }} size={18} />
                 Kết quả Prompt
               </h2>
-              <div className="glass-panel flex-1 min-h-[300px] p-4 font-mono text-xs overflow-auto bg-black/20 relative">
+              <div
+                className="flex-1 min-h-[300px] p-4 font-mono text-xs overflow-auto relative"
+                style={{
+                  background: '#0f0f12',
+                  color: '#a8d5ff',
+                  borderRadius: 18,
+                  border: '0.5px solid var(--color-border-soft)',
+                  boxShadow: 'var(--shadow-card)',
+                }}
+              >
                 {analyzedPrompt && (
                   <button
                     onClick={async () => {
@@ -5213,11 +5245,14 @@ function App() {
                         console.error('Copy failed:', err);
                       }
                     }}
-                    className={`absolute top-2 right-2 z-10 px-2 py-1 rounded-md text-[10px] font-bold flex items-center gap-1 transition-all ${
-                      analyzedCopied
-                        ? 'bg-green-500 text-black'
-                        : 'bg-editor-border/60 text-white hover:bg-editor-accent hover:text-black'
-                    }`}
+                    className="absolute top-2 right-2 z-10 flex items-center gap-1 font-bold transition-all hover:brightness-110"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: 10,
+                      borderRadius: 8,
+                      background: analyzedCopied ? 'var(--color-success)' : 'rgba(255,255,255,0.10)',
+                      color: '#fff',
+                    }}
                     title="Sao chép kết quả"
                   >
                     {analyzedCopied ? (
@@ -5228,29 +5263,33 @@ function App() {
                   </button>
                 )}
                 {analyzedPrompt ? (
-                  <pre className="whitespace-pre-wrap text-editor-accent">{analyzedPrompt}</pre>
+                  <pre className="whitespace-pre-wrap">{analyzedPrompt}</pre>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-gray-500 italic">
+                  <div className="h-full flex items-center justify-center italic" style={{ color: 'rgba(168,213,255,0.4)' }}>
                     Kết quả phân tích sẽ hiện ở đây...
                   </div>
                 )}
               </div>
               {analyzedPrompt && (
-                <div className="grid grid-cols-2 gap-4">
-                  <button 
+                <div className="grid grid-cols-2 gap-3">
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    fullWidth
+                    icon={Save}
                     onClick={saveAnalyzedPrompt}
-                    className="py-3 rounded-xl border border-editor-border font-bold flex items-center justify-center gap-2 hover:bg-editor-border/30 transition-all"
                   >
-                    <Save size={18} />
                     Lưu Prompt
-                  </button>
-                  <button 
+                  </Button>
+                  <Button
+                    variant="filled"
+                    size="md"
+                    fullWidth
+                    icon={Copy}
                     onClick={useAnalyzedPrompt}
-                    className="py-3 rounded-xl bg-white text-black font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all"
                   >
-                    <Copy size={18} />
                     Sử dụng ngay
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -5325,11 +5364,21 @@ function App() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Model Image Upload */}
                 <div className="flex flex-col gap-3">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Ảnh người mẫu (Model)</p>
+                  <p
+                    className="uppercase font-semibold"
+                    style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                  >
+                    Ảnh người mẫu (Model)
+                  </p>
                   <div
                     onClick={() => { setPasteTargetId('tryon-model'); modelFileInputRef.current?.click(); }}
                     {...makeDropHandlers('tryon-model', setTryOnModelImage)}
-                    className={`aspect-[3/4] glass-panel relative overflow-hidden flex items-center justify-center cursor-pointer transition-all border-dashed border-2 ${dragOverId === 'tryon-model' ? 'border-editor-accent bg-editor-accent/10' : tryOnModelImage ? 'border-editor-accent' : 'border-editor-border hover:border-editor-accent'}`}
+                    className="aspect-[3/4] relative overflow-hidden flex items-center justify-center cursor-pointer transition-all"
+                    style={{
+                      background: dragOverId === 'tryon-model' ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                      border: `2px dashed ${dragOverId === 'tryon-model' || tryOnModelImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                      borderRadius: 14,
+                    }}
                   >
                     {tryOnModelImage ? (
                       <>
@@ -5343,9 +5392,9 @@ function App() {
                         </button>
                       </>
                     ) : (
-                      <div className="flex flex-col items-center gap-2">
-                        <UserIcon size={32} className="text-gray-500" />
-                        <span className="text-xs text-gray-500">Tải ảnh người mẫu</span>
+                      <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                        <UserIcon size={32} />
+                        <span style={{ fontSize: 12 }}>Tải ảnh người mẫu</span>
                       </div>
                     )}
                   </div>
@@ -5434,13 +5483,15 @@ function App() {
                                   setDraftDeletedModelIds(new Set());
                                   setIsEditingSavedModels(false);
                                 }}
-                                className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1"
+                                className="font-semibold hover:underline flex items-center gap-1"
+                                style={{ fontSize: 11, color: 'var(--color-accent)' }}
                               >
                                 <Check size={10} /> LƯU
                               </button>
                               <button
                                 onClick={() => { setDraftDeletedModelIds(new Set()); setIsEditingSavedModels(false); }}
-                                className="text-[10px] text-gray-400 font-bold hover:underline flex items-center gap-1"
+                                className="font-semibold hover:underline flex items-center gap-1"
+                                style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}
                               >
                                 <X size={10} /> HỦY
                               </button>
@@ -5449,7 +5500,10 @@ function App() {
                             (personalModels.length > 0 || (isAdmin && sharedModels.length > 0)) && (
                               <button
                                 onClick={() => setIsEditingSavedModels(true)}
-                                className="text-[10px] text-gray-400 font-bold hover:text-editor-accent hover:underline flex items-center gap-1"
+                                className="font-semibold hover:underline flex items-center gap-1 transition-colors"
+                                style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}
+                                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-accent)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-secondary)')}
                               >
                                 <Pencil size={10} /> CHỈNH SỬA
                               </button>
@@ -5460,7 +5514,10 @@ function App() {
                         {/* SECTION 1: NGƯỜI MẪU CHUNG OTAMA */}
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center justify-between">
-                            <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold flex items-center gap-1">
+                            <p
+                              className="uppercase font-semibold flex items-center gap-1"
+                              style={{ fontSize: 11, color: 'var(--color-teal)', letterSpacing: '0.06em' }}
+                            >
                               <Globe size={10} /> Người mẫu chung Otama ({sharedModels.length}/5)
                             </p>
                             {isAdmin && sharedModels.length < 5 && !isEditingSavedModels && (
@@ -5471,7 +5528,8 @@ function App() {
                                   modelListFileInputRef.current?.click();
                                 }}
                                 disabled={isSavingModel}
-                                className="text-[10px] text-blue-400 font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
+                                className="font-semibold hover:underline flex items-center gap-1 disabled:opacity-50"
+                                style={{ fontSize: 11, color: 'var(--color-teal)' }}
                               >
                                 {isSavingModel ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
                                 THÊM VÀO KHO CHUNG
@@ -5501,7 +5559,10 @@ function App() {
                         {/* SECTION 2: NGƯỜI MẪU CÁ NHÂN */}
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center justify-between">
-                            <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold flex items-center gap-1">
+                            <p
+                              className="uppercase font-semibold flex items-center gap-1"
+                              style={{ fontSize: 11, color: 'var(--color-text-secondary)', letterSpacing: '0.06em' }}
+                            >
                               <UserIcon size={10} /> Người mẫu cá nhân ({personalModels.length}/5)
                             </p>
                             {personalModels.length < 5 && !isEditingSavedModels && (
@@ -5510,7 +5571,8 @@ function App() {
                                   if (!user) { handleLogin(); } else { modelListFileInputRef.current?.click(); }
                                 }}
                                 disabled={isSavingModel}
-                                className="text-[10px] text-editor-accent font-bold hover:underline flex items-center gap-1 disabled:opacity-50"
+                                className="font-semibold hover:underline flex items-center gap-1 disabled:opacity-50"
+                                style={{ fontSize: 11, color: 'var(--color-accent)' }}
                               >
                                 {isSavingModel ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
                                 THÊM MỚI
@@ -5520,8 +5582,17 @@ function App() {
                           <div className="grid grid-cols-5 gap-2">
                             {personalModels.map(m => renderModelCell(m, true))}
                             {Array.from({ length: 5 - personalModels.length }).map((_, i) => (
-                              <div key={`empty-personal-${i}`} className="aspect-[3/4] rounded-lg border-2 border-dashed border-editor-border flex items-center justify-center bg-black/20">
-                                <UserIcon size={16} className="text-gray-700" />
+                              <div
+                                key={`empty-personal-${i}`}
+                                className="aspect-[3/4] flex items-center justify-center"
+                                style={{
+                                  borderRadius: 10,
+                                  border: '1.5px dashed var(--color-border-soft)',
+                                  background: 'var(--color-fill)',
+                                  color: 'var(--color-text-tertiary)',
+                                }}
+                              >
+                                <UserIcon size={16} />
                               </div>
                             ))}
                           </div>
@@ -5535,12 +5606,24 @@ function App() {
                 {/* Product Image Upload */}
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Ảnh sản phẩm (Product)</p>
+                    <p
+                      className="uppercase font-semibold"
+                      style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                    >
+                      Ảnh sản phẩm (Product)
+                    </p>
                     {tryOnProductImage && (
-                      <button 
+                      <button
                         onClick={handleGenerateWhiteBg}
                         disabled={isGeneratingWhiteBg}
-                        className="text-[10px] bg-editor-accent/20 text-editor-accent px-2 py-1 rounded hover:bg-editor-accent/30 transition-colors flex items-center gap-1 disabled:opacity-50"
+                        className="font-semibold flex items-center gap-1 transition-colors disabled:opacity-50"
+                        style={{
+                          padding: '3px 9px',
+                          fontSize: 11,
+                          background: 'var(--color-accent-soft)',
+                          color: 'var(--color-accent)',
+                          borderRadius: 8,
+                        }}
                       >
                         {isGeneratingWhiteBg ? (
                           <Loader2 size={10} className="animate-spin" />
@@ -5551,10 +5634,15 @@ function App() {
                       </button>
                     )}
                   </div>
-                  <div 
+                  <div
                     onClick={() => { setPasteTargetId('tryon-product'); productFileInputRef.current?.click(); }}
                     {...makeDropHandlers('tryon-product', setTryOnProductImage)}
-                    className={`aspect-[3/4] glass-panel relative overflow-hidden flex items-center justify-center cursor-pointer transition-all border-dashed border-2 ${dragOverId === 'tryon-product' ? 'border-editor-accent bg-editor-accent/10' : tryOnProductImage ? 'border-editor-accent' : 'border-editor-border hover:border-editor-accent'}`}
+                    className="aspect-[3/4] relative overflow-hidden flex items-center justify-center cursor-pointer transition-all"
+                    style={{
+                      background: dragOverId === 'tryon-product' ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                      border: `2px dashed ${dragOverId === 'tryon-product' || tryOnProductImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                      borderRadius: 14,
+                    }}
                   >
                     {tryOnProductImage ? (
                       <>
@@ -5574,9 +5662,9 @@ function App() {
                         </button>
                       </>
                     ) : (
-                      <div className="flex flex-col items-center gap-2">
-                        <Shirt size={32} className="text-gray-500" />
-                        <span className="text-xs text-gray-500">Tải ảnh sản phẩm</span>
+                      <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                        <Shirt size={32} />
+                        <span style={{ fontSize: 12 }}>Tải ảnh sản phẩm</span>
                       </div>
                     )}
                   </div>
@@ -5584,34 +5672,53 @@ function App() {
                   
                   {/* Category Selection */}
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="text-[10px] text-gray-500 font-bold uppercase">Loại:</span>
-                    <div className="flex bg-black/40 rounded-lg p-1 border border-editor-border flex-1">
-                      {(['top', 'bottom', 'shoes', 'all'] as const).map((cat) => (
-                        <button
-                          key={cat}
-                          onClick={() => setTryOnProductCategory(cat)}
-                          className={`flex-1 py-1 text-[10px] font-bold uppercase rounded transition-all ${
-                            tryOnProductCategory === cat 
-                              ? 'bg-editor-accent text-black shadow-lg' 
-                              : 'text-gray-500 hover:text-white'
-                          }`}
-                        >
-                          {cat === 'top' ? 'Áo' : cat === 'bottom' ? 'Quần' : cat === 'shoes' ? 'Giày' : 'Tất cả'}
-                        </button>
-                      ))}
+                    <span
+                      className="uppercase font-semibold"
+                      style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                    >
+                      Loại:
+                    </span>
+                    <div className="flex-1">
+                      <Segmented<'top' | 'bottom' | 'shoes' | 'all'>
+                        value={tryOnProductCategory}
+                        onChange={(v) => setTryOnProductCategory(v)}
+                        size="sm"
+                        fullWidth
+                        options={[
+                          { value: 'top', label: 'Áo' },
+                          { value: 'bottom', label: 'Quần' },
+                          { value: 'shoes', label: 'Giày' },
+                          { value: 'all', label: 'Tất cả' },
+                        ]}
+                      />
                     </div>
                   </div>
                 </div>
 
                 {/* Result Image Area */}
                 <div className="flex flex-col gap-3">
-                  <p className="text-[10px] text-editor-accent uppercase tracking-widest font-bold">Kết quả thay đồ (Result)</p>
-                  <div className="aspect-[3/4] glass-panel relative overflow-hidden flex items-center justify-center bg-black/40 border-2 border-editor-border">
+                  <p
+                    className="uppercase font-semibold"
+                    style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.06em' }}
+                  >
+                    ✨ Kết quả thay đồ
+                  </p>
+                  <div
+                    className="aspect-[3/4] relative overflow-hidden flex items-center justify-center"
+                    style={{
+                      background: 'var(--color-card-secondary)',
+                      border: '0.5px solid var(--color-border-soft)',
+                      borderRadius: 14,
+                    }}
+                  >
                     {isTryOnProcessing ? (
                       <div className="flex flex-col items-center gap-3">
-                        <Loader2 className="animate-spin text-editor-accent" size={32} />
-                        <p className="text-[10px] font-bold uppercase text-editor-accent">
-                          {tryOnStep === 'preparing' ? 'Đang chuẩn bị sản phẩm...' : 'Đang thay đồ...'}
+                        <Loader2 className="animate-spin" size={32} style={{ color: 'var(--color-accent)' }} />
+                        <p
+                          className="uppercase font-semibold"
+                          style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.06em' }}
+                        >
+                          {tryOnStep === 'preparing' ? 'Đang chuẩn bị sản phẩm…' : 'Đang thay đồ…'}
                         </p>
                       </div>
                     ) : tryOnResult ? (
@@ -5632,7 +5739,13 @@ function App() {
                               link.download = `tryon-${Date.now()}.png`;
                               link.click();
                             }}
-                            className="p-3 bg-editor-accent text-black rounded-full shadow-lg hover:scale-110 transition-transform"
+                            className="rounded-full hover:scale-110 transition-transform flex items-center justify-center"
+                            style={{
+                              padding: 12,
+                              background: 'var(--color-accent)',
+                              color: '#fff',
+                              boxShadow: 'var(--shadow-pop)',
+                            }}
                             title="Tải ảnh về"
                           >
                             <Download size={20} />
@@ -5642,7 +5755,15 @@ function App() {
                               setTryOnModelImage(tryOnResult);
                               setTryOnResult(null);
                             }}
-                            className="p-3 bg-black/60 text-white backdrop-blur-md border border-white/20 rounded-full shadow-lg hover:scale-110 transition-transform flex items-center justify-center"
+                            className="rounded-full hover:scale-110 transition-transform flex items-center justify-center"
+                            style={{
+                              padding: 12,
+                              background: 'rgba(0,0,0,0.55)',
+                              backdropFilter: 'blur(12px)',
+                              border: '0.5px solid rgba(255,255,255,0.18)',
+                              color: '#fff',
+                              boxShadow: 'var(--shadow-pop)',
+                            }}
                             title="Dùng làm người mẫu để thay tiếp"
                           >
                             <ArrowLeft size={20} />
@@ -5650,9 +5771,11 @@ function App() {
                         </div>
                       </>
                     ) : (
-                      <div className="flex flex-col items-center gap-2 text-gray-600">
+                      <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
                         <ImageIcon size={32} />
-                        <span className="text-xs uppercase font-bold">Chưa có kết quả</span>
+                        <span className="uppercase font-semibold" style={{ fontSize: 11, letterSpacing: '0.06em' }}>
+                          Chưa có kết quả
+                        </span>
                       </div>
                     )}
                   </div>
@@ -5662,42 +5785,66 @@ function App() {
 
             {/* Controls */}
             <div className="flex flex-col gap-6">
-              <div className="glass-panel p-6 flex flex-col gap-6">
+              <div
+                className="p-6 flex flex-col gap-6"
+                style={{
+                  background: 'var(--color-card)',
+                  border: '0.5px solid var(--color-border-soft)',
+                  borderRadius: 18,
+                  boxShadow: 'var(--shadow-card)',
+                }}
+              >
                 <div>
-                  <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
-                    <Sparkles className="text-editor-accent" />
+                  <h2
+                    className="font-bold flex items-center gap-2 mb-4"
+                    style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
+                  >
+                    <Sparkles style={{ color: 'var(--color-accent)' }} size={18} />
                     Cấu hình Thay Đồ
                   </h2>
-                  
+
                   <div className="space-y-4">
                     <div>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2">Chọn Mô hình AI</p>
-                      <div className="flex gap-2 p-1 bg-black/40 rounded-2xl border border-editor-border">
-                        {(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => (
-                          <button
-                            key={m}
-                            onClick={() => setSelectedModel(m)}
-                            className={`flex-1 py-2 px-3 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all ${selectedModel === m ? 'bg-editor-accent text-black shadow-lg' : 'text-gray-500 hover:text-white'}`}
-                          >
-                            {MODEL_CONFIG[m].name}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-gray-500 mt-2 italic px-1">
+                      <p
+                        className="uppercase font-semibold mb-2"
+                        style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                      >
+                        Chọn Mô hình AI
+                      </p>
+                      <ModelCardPicker<ModelType>
+                        value={selectedModel}
+                        onChange={(m) => setSelectedModel(m)}
+                        options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                          value: m,
+                          name: MODEL_CONFIG[m].name,
+                          sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
+                          best: m === 'banana-pro',
+                        }))}
+                      />
+                      <p
+                        className="mt-2 italic px-1"
+                        style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}
+                      >
                         {MODEL_CONFIG[selectedModel].description}
                       </p>
                     </div>
 
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest">Chọn Prompt nhanh</p>
+                        <p
+                          className="uppercase font-semibold"
+                          style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                        >
+                          Chọn Prompt nhanh
+                        </p>
                         <div className="flex gap-3">
                           <button
                             onClick={() => {
                               setTryOnManualMode(true);
                               setTryOnPrompt('');
                             }}
-                            className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                            className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
+                            style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                           >
                             <Edit2 size={12} />
                             NHẬP THỦ CÔNG
@@ -5710,7 +5857,8 @@ function App() {
                               }
                               setIsAddingPrompt(true);
                             }}
-                            className="flex items-center gap-1 text-[10px] text-editor-accent font-bold hover:opacity-80 transition-opacity"
+                            className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
+                            style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                           >
                             <Plus size={12} />
                             THÊM MỚI
@@ -5829,36 +5977,47 @@ function App() {
                           value={tryOnPrompt}
                           onChange={(e) => setTryOnPrompt(e.target.value)}
                           placeholder="Mô tả cách thay đồ... (VD: Thay chiếc áo thun này cho người mẫu, giữ nguyên tư thế)"
-                          className="ai-input min-h-[120px] resize-none"
+                          className="w-full min-h-[120px] resize-none outline-none transition-colors p-3"
+                          style={{
+                            background: 'var(--color-fill)',
+                            color: 'var(--color-text)',
+                            borderRadius: 12,
+                            border: '0.5px solid transparent',
+                            fontSize: 13,
+                            letterSpacing: '-0.01em',
+                          }}
+                          onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                          onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
                         />
                       </div>
                     )}
                     {!isAdmin && !tryOnManualMode && tryOnPrompt && (
-                      <div className="bg-editor-accent/5 border border-editor-accent/30 rounded-lg px-4 py-3 flex items-center gap-2">
-                        <CheckCircle2 size={14} className="text-editor-accent flex-shrink-0" />
-                        <p className="text-xs text-editor-accent font-bold">Đã chọn prompt — sẵn sàng Thay đồ</p>
+                      <div
+                        className="rounded-lg px-4 py-3 flex items-center gap-2"
+                        style={{
+                          background: 'var(--color-accent-soft)',
+                          border: '0.5px solid var(--color-accent)',
+                        }}
+                      >
+                        <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+                        <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
+                          Đã chọn prompt — sẵn sàng Thay đồ
+                        </p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <button 
+                <Button
+                  variant="filled"
+                  size="lg"
+                  fullWidth
+                  icon={isTryOnProcessing ? Loader2 : Shirt}
                   onClick={handleTryOnProcess}
                   disabled={!tryOnModelImage || !tryOnProductImage || isTryOnProcessing}
-                  className="w-full py-4 rounded-xl bg-editor-accent text-black font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
                 >
-                  {isTryOnProcessing ? (
-                    <>
-                      <Loader2 className="animate-spin" />
-                      Đang xử lý...
-                    </>
-                  ) : (
-                    <>
-                      <Shirt size={20} />
-                      Bắt đầu Thay Đồ
-                    </>
-                  )}
-                </button>
+                  {isTryOnProcessing ? 'Đang xử lý…' : 'Bắt đầu Thay Đồ'}
+                </Button>
               </div>
             </div>
           </div>
