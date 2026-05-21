@@ -350,6 +350,27 @@ function App() {
 
   const [isAddingEcomPrompt, setIsAddingEcomPrompt] = useState(false);
   const [showEcomPromptModal, setShowEcomPromptModal] = useState(false);
+  const ecomPromptSectionRef = useRef<HTMLDivElement>(null);
+  const ecomMainRef = useRef<HTMLElement>(null);
+  const [ecomPromptPopupTop, setEcomPromptPopupTop] = useState(20);
+  useEffect(() => {
+    if (!showEcomPromptModal) return;
+    const compute = () => {
+      const main = ecomMainRef.current;
+      const section = ecomPromptSectionRef.current;
+      if (!main || !section) return;
+      const mainRect = main.getBoundingClientRect();
+      const sectionRect = section.getBoundingClientRect();
+      setEcomPromptPopupTop(Math.max(0, sectionRect.top - mainRect.top));
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    window.addEventListener('scroll', compute, true);
+    return () => {
+      window.removeEventListener('resize', compute);
+      window.removeEventListener('scroll', compute, true);
+    };
+  }, [showEcomPromptModal]);
   const [showGenPromptModal, setShowGenPromptModal] = useState(false);
   const [showTryOnPromptModal, setShowTryOnPromptModal] = useState(false);
   const [newEcomPromptName, setNewEcomPromptName] = useState('');
@@ -2947,7 +2968,7 @@ function App() {
       )}
 
       {appMode === 'ecom' && (
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
+        <main ref={ecomMainRef} className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
           {/* Floating prompt picker popup — anchored just right of left panel */}
           {showEcomPromptModal && ecomSubTab === 'gen-new' && (
             <>
@@ -2960,9 +2981,9 @@ function App() {
                 className="hidden lg:flex flex-col absolute z-40"
                 style={{
                   left: 'calc(33.333% + 12px)',
-                  top: '20px',
+                  top: ecomPromptPopupTop,
                   width: 380,
-                  maxHeight: 'calc(100vh - 140px)',
+                  maxHeight: '60vh',
                   background: 'var(--color-card)',
                   borderRadius: 18,
                   border: '0.5px solid var(--color-border-soft)',
@@ -3616,7 +3637,7 @@ function App() {
               />
               {ecomSubTab === 'gen-new' && (
                 <>
-                  <div className="mt-6 space-y-4">
+                  <div ref={ecomPromptSectionRef} className="mt-6 space-y-4">
                 <div>
                   {/* Section: PROMPT */}
                   <div className="mb-4 flex items-center gap-2">
