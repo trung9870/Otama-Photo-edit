@@ -77,6 +77,8 @@ import { useTheme } from './hooks/useTheme';
 import { Button } from './components/ui';
 import { Header } from './components/Header';
 import { Login } from './components/Login';
+import { Segmented } from './components/ui';
+import { ARSelector, ModelCardPicker, PromptRow } from './components/clothing';
 
 // Error Boundary Component
 class ErrorBoundary extends (Component as any) {
@@ -4451,39 +4453,20 @@ function App() {
 
       {appMode === 'clothing' && (
         <>
-          {/* Tab Switcher */}
-          <div className="flex gap-4 mb-6 border-b border-editor-border">
-        <button 
-          onClick={() => setActiveTab('generate')}
-          className={`pb-2 px-4 text-sm font-bold transition-all relative ${activeTab === 'generate' ? 'text-editor-accent' : 'text-gray-500 hover:text-white'}`}
-        >
-          <div className="flex items-center gap-2">
-            <Sparkles size={16} />
-            Gen Ảnh
+          {/* Tab Switcher (Apple HIG Segmented) */}
+          <div className="mb-6">
+            <Segmented<'generate' | 'analyze' | 'tryon'>
+              value={activeTab}
+              onChange={(v) => setActiveTab(v)}
+              size="lg"
+              fullWidth
+              options={[
+                { value: 'generate', label: 'Gen Ảnh', icon: Sparkles },
+                { value: 'analyze', label: 'Phân Tích', icon: Search },
+                { value: 'tryon', label: 'Thay Đồ', icon: Shirt },
+              ]}
+            />
           </div>
-          {activeTab === 'generate' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-editor-accent" />}
-        </button>
-        <button 
-          onClick={() => setActiveTab('analyze')}
-          className={`pb-2 px-4 text-sm font-bold transition-all relative ${activeTab === 'analyze' ? 'text-editor-accent' : 'text-gray-500 hover:text-white'}`}
-        >
-          <div className="flex items-center gap-2">
-            <Search size={16} />
-            Phân Tích Ảnh
-          </div>
-          {activeTab === 'analyze' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-editor-accent" />}
-        </button>
-        <button 
-          onClick={() => setActiveTab('tryon')}
-          className={`pb-2 px-4 text-sm font-bold transition-all relative ${activeTab === 'tryon' ? 'text-editor-accent' : 'text-gray-500 hover:text-white'}`}
-        >
-          <div className="flex items-center gap-2">
-            <Shirt size={16} />
-            Thay Đồ
-          </div>
-          {activeTab === 'tryon' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-editor-accent" />}
-        </button>
-      </div>
 
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8">
         {activeTab === 'generate' && (
@@ -4711,7 +4694,15 @@ function App() {
         {/* Controls Area */}
         <div className="flex flex-col gap-6">
           {/* Main Control Panel */}
-          <div className="glass-panel p-6 flex-1 flex flex-col gap-6 overflow-y-auto max-h-[calc(100vh-150px)]">
+          <div
+            className="p-6 flex-1 flex flex-col gap-6 overflow-y-auto max-h-[calc(100vh-150px)]"
+            style={{
+              background: 'var(--color-card)',
+              border: '0.5px solid var(--color-border-soft)',
+              borderRadius: 18,
+              boxShadow: 'var(--shadow-card)',
+            }}
+          >
             <div className="space-y-6 flex-1 flex flex-col">
               <div>
                 <h3 className="font-bold flex items-center gap-2 mb-4">
@@ -4719,44 +4710,21 @@ function App() {
                   Google AI Engine
                 </h3>
                 
-                {/* Model Selector */}
-                <div className="grid grid-cols-3 gap-2 mb-2">
-                  {(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setSelectedModel(m)}
-                      className={`p-2 rounded-xl border text-center transition-all relative overflow-hidden ${
-                        selectedModel === m 
-                          ? 'border-editor-accent bg-editor-accent/5' 
-                          : m === 'banana-pro'
-                            ? 'border-amber-500/50 bg-amber-500/5'
-                            : 'border-editor-border hover:border-gray-600'
-                      }`}
-                    >
-                      {m === 'banana-pro' && (
-                        <div className="absolute top-0 right-0 bg-amber-500 text-black text-[6px] font-black px-1 py-0.5 rounded-bl-md">
-                          BEST
-                        </div>
-                      )}
-                      <p className={`text-[11px] font-bold ${
-                        selectedModel === m 
-                          ? 'text-editor-accent' 
-                          : m === 'banana-pro'
-                            ? 'text-amber-500'
-                            : 'text-white'
-                      }`}>
-                        {MODEL_CONFIG[m].name}
-                      </p>
-                      {MODEL_CONFIG[m].requiredKey === 'google' && (
-                        <span className="text-[7px] text-editor-accent uppercase font-bold block mt-0.5">Google</span>
-                      )}
-                      {MODEL_CONFIG[m].requiredKey === 'kie' && (
-                        <span className="text-[7px] text-amber-500/70 uppercase font-bold block mt-0.5">Kie.ai</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[9px] text-gray-500 mb-6 italic leading-tight">
+                {/* Model Selector — Apple HIG cards */}
+                <ModelCardPicker<ModelType>
+                  value={selectedModel}
+                  onChange={(m) => setSelectedModel(m)}
+                  options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                    value: m,
+                    name: MODEL_CONFIG[m].name,
+                    sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
+                    best: m === 'banana-pro',
+                  }))}
+                />
+                <p
+                  className="mb-6 mt-2 italic leading-tight"
+                  style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}
+                >
                   {MODEL_CONFIG[selectedModel].description}
                 </p>
 
@@ -4776,33 +4744,14 @@ function App() {
                       </button>
                     )}
                   </div>
-                  <div className="grid grid-cols-5 gap-1.5">
-                    {ASPECT_RATIOS.map((ratio) => (
-                      <button
-                        key={ratio.value}
-                        onClick={() => {
-                          setImages(prev => prev.map((img, idx) => 
-                            idx === selectedIndex ? { ...img, aspectRatio: ratio.value } : img
-                          ));
-                        }}
-                        className={`py-2 px-1 rounded-lg border flex flex-col items-center gap-1 transition-all ${
-                          currentImage?.aspectRatio === ratio.value 
-                            ? 'border-editor-accent bg-editor-accent/5' 
-                            : 'border-editor-border hover:border-gray-600'
-                        }`}
-                      >
-                        <div className={`border border-current ${
-                          ratio.value === '1:1' ? 'w-3 h-3' : 
-                          ratio.value === '3:4' ? 'w-2.5 h-3' : 
-                          ratio.value === '4:3' ? 'w-3 h-2.5' : 
-                          ratio.value === '9:16' ? 'w-2 h-3.5' : 'w-3.5 h-2'
-                        } ${currentImage?.aspectRatio === ratio.value ? 'text-editor-accent' : 'text-gray-500'}`} />
-                        <span className={`text-[8px] font-bold ${currentImage?.aspectRatio === ratio.value ? 'text-editor-accent' : 'text-white'}`}>
-                          {ratio.label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                  <ARSelector
+                    value={(currentImage?.aspectRatio as any) || '1:1'}
+                    onChange={(v) => {
+                      setImages(prev => prev.map((img, idx) =>
+                        idx === selectedIndex ? { ...img, aspectRatio: v } : img
+                      ));
+                    }}
+                  />
                 </div>
 
                 <div className="flex items-center justify-between mb-4">
@@ -4880,52 +4829,19 @@ function App() {
                       </div>
                     )}
                     {savedGenPrompts.map((p) => (
-                      <div
+                      <PromptRow
                         key={p.id}
+                        name={p.name}
+                        active={selectedPromptId === p.id}
+                        synced={p.isDefault}
                         onClick={() => selectPrompt(p.id)}
-                        className={`group flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${
-                          selectedPromptId === p.id
-                            ? 'border-editor-accent bg-editor-accent/5'
-                            : 'border-editor-border hover:border-gray-600'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 overflow-hidden">
-                          <div className={`shrink-0 w-2 h-2 rounded-full ${selectedPromptId === p.id ? 'bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]' : 'bg-gray-700'}`} />
-                          <div className="overflow-hidden flex items-center gap-2">
-                            <p className={`text-xs font-bold truncate ${selectedPromptId === p.id ? 'text-editor-accent' : 'text-white'}`}>
-                              {p.name}
-                            </p>
-                            {p.isDefault && <CheckCircle2 size={14} className="text-green-500 shrink-0" title="Đã đồng bộ" />}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 transition-all">
-                          {isAdmin && (
-                            <button
-                              onClick={(e) => toggleSyncGenPrompt(p, e)}
-                              className="p-1.5 transition-all text-gray-500 hover:text-blue-400"
-                              title="Đồng bộ cho mọi người"
-                            >
-                              <Globe size={12} />
-                            </button>
-                          )}
-                          {(isAdmin || !p.isDefault) && (
-                            <>
-                              <button
-                                onClick={(e) => startEditPrompt(p, e)}
-                                className="p-1.5 hover:text-editor-accent transition-all"
-                              >
-                                <Edit2 size={12} />
-                              </button>
-                              <button
-                                onClick={(e) => deletePrompt(p.id, e)}
-                                className="p-1.5 hover:text-red-500 transition-all"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
+                        showSync={isAdmin}
+                        onSync={(e) => toggleSyncGenPrompt(p, e)}
+                        showEdit={isAdmin || !p.isDefault}
+                        showDelete={isAdmin || !p.isDefault}
+                        onEdit={(e) => startEditPrompt(p, e)}
+                        onDelete={(e) => deletePrompt(p.id, e)}
+                      />
                     ))}
                   </div>
                 )}
@@ -4960,46 +4876,35 @@ function App() {
                 )}
 
                 <div className="flex flex-col gap-2">
-                  <button 
+                  <Button
+                    variant="filled"
+                    size="lg"
+                    fullWidth
+                    icon={currentImage?.isProcessing ? Loader2 : Sparkles}
                     onClick={() => handleAiEdit(selectedIndex)}
                     disabled={isBatchProcessing || images.length === 0 || !aiPrompt || currentImage?.isProcessing}
-                    className="primary-btn flex items-center justify-center gap-2"
                   >
-                    {currentImage?.isProcessing ? (
-                      <>
-                        <Loader2 className="animate-spin" size={20} />
-                        Đang xử lý ảnh này...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={20} />
-                        ✨ Gen ảnh hiện tại
-                      </>
-                    )}
-                  </button>
-                  
+                    {currentImage?.isProcessing ? 'Đang xử lý ảnh này…' : 'Gen ảnh hiện tại'}
+                  </Button>
+
                   {images.length > 1 && (
-                    <button 
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      fullWidth
+                      icon={isBatchProcessing ? Loader2 : Layers}
                       onClick={() => handleAiEdit()}
                       disabled={isBatchProcessing || !aiPrompt}
-                      className="w-full py-3 rounded-xl border border-editor-border text-white text-sm font-bold hover:bg-white/5 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                      {isBatchProcessing ? (
-                        <>
-                          <Loader2 className="animate-spin" size={16} />
-                          Đang xử lý hàng loạt...
-                        </>
-                      ) : (
-                        <>
-                          <Layers size={16} />
-                          Gen tất cả ({images.length} ảnh)
-                        </>
-                      )}
-                    </button>
+                      {isBatchProcessing ? 'Đang xử lý hàng loạt…' : `Gen tất cả (${images.length} ảnh)`}
+                    </Button>
                   )}
                 </div>
-                
-                <p className="text-[10px] text-center text-gray-600">
+
+                <p
+                  className="text-center"
+                  style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}
+                >
                   {images.length > 0 ? `Đang chọn ảnh ${selectedIndex + 1}/${images.length}` : 'Vui lòng tải ảnh lên để bắt đầu'}
                 </p>
               </div>
