@@ -46,7 +46,10 @@ import {
   Languages,
   Bed,
   Pencil,
-  Check
+  Check,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -70,6 +73,8 @@ import {
   User as FirebaseUser
 } from './firebase';
 import AdminPanel from './components/AdminPanel';
+import { useTheme } from './hooks/useTheme';
+import { Button } from './components/ui';
 
 // Error Boundary Component
 class ErrorBoundary extends (Component as any) {
@@ -296,6 +301,9 @@ export default function AppWrapper() {
 }
 
 function App() {
+  // Apple-style theme — Milestone 0 foundation
+  const { theme, setTheme, resolvedTheme } = useTheme();
+
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [images, setImages] = useState<EditableImage[]>([]);
@@ -3019,6 +3027,16 @@ function App() {
               </button>
             )}
           </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={theme === 'system' ? Monitor : resolvedTheme === 'dark' ? Moon : Sun}
+            onClick={() => setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light')}
+            title={`Theme: ${theme}`}
+          >
+            {theme === 'system' ? 'Auto' : theme === 'dark' ? 'Tối' : 'Sáng'}
+          </Button>
+
           {isAdmin && (
             <button
               onClick={() => setIsSettingsOpen(true)}
