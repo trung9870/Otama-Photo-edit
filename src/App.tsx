@@ -3249,6 +3249,105 @@ function App() {
                     </p>
                   </div>
 
+                  {/* Settings card — Model / AR / Quality / Count */}
+                  <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-5" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    {/* Model */}
+                    <div className="md:col-span-4">
+                      <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                        Model
+                      </p>
+                      <ModelCardPicker<ModelType>
+                        value={ecomModel}
+                        onChange={(m) => setEcomModel(m)}
+                        options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                          value: m,
+                          name: MODEL_CONFIG[m].name,
+                          sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
+                          best: m === 'banana-pro',
+                        }))}
+                      />
+                    </div>
+                    {/* Aspect ratio */}
+                    <div className="md:col-span-5">
+                      <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                        Tỉ lệ khung hình
+                      </p>
+                      <ARSelector
+                        value={ecomAspectRatio as any}
+                        onChange={(v) => setEcomAspectRatio(v)}
+                      />
+                    </div>
+                    {/* Quality + Count compact */}
+                    <div className="md:col-span-3 grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                          Chất lượng
+                        </p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {(() => {
+                            const availableSizes: string[] = ecomModel === 'gpt2'
+                              ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
+                                : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
+                                : ['1k'])
+                              : ['1k', '2k', '4k'];
+                            return ['1k', '2k', '4k'].map((size) => {
+                              const isAvailable = availableSizes.includes(size);
+                              const active = ecomImageSize === size;
+                              return (
+                                <button
+                                  key={size}
+                                  onClick={() => isAvailable && setEcomImageSize(size)}
+                                  disabled={!isAvailable}
+                                  title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
+                                  className="py-2 text-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                  style={{
+                                    borderRadius: 10,
+                                    background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                    border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                    color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                    fontSize: 11,
+                                    fontWeight: 600,
+                                    letterSpacing: '0.04em',
+                                  }}
+                                >
+                                  {size.toUpperCase()}
+                                </button>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                          Số ảnh
+                        </p>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[1, 2, 3].map((count) => {
+                            const active = ecomImageCount === count;
+                            return (
+                              <button
+                                key={count}
+                                onClick={() => setEcomImageCount(count)}
+                                className="py-2 text-center transition-all"
+                                style={{
+                                  borderRadius: 10,
+                                  background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                  border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                  color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  letterSpacing: '0.04em',
+                                }}
+                              >
+                                {count}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* 3-column grid: Source / Generated / Mockup */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Col 1 — Source pattern */}
