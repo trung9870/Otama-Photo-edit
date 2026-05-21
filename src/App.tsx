@@ -1246,7 +1246,21 @@ function App() {
     setLoginError(null);
     setLoginLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const email = result.user.email;
+
+      // Chỉ cho phép admin hardcoded hoặc email đã được admin tạo trong collection users
+      if (email !== 'trungg9870@gmail.com') {
+        const { getDocs } = await import('firebase/firestore');
+        const usersQ = query(collection(db, 'users'), where('email', '==', email));
+        const snap = await getDocs(usersQ);
+        if (snap.empty) {
+          await signOut(auth);
+          setLoginError(`Email ${email} chưa được cấp quyền truy cập. Vui lòng liên hệ quản trị viên.`);
+          return;
+        }
+      }
+
       setShowLoginModal(false);
     } catch (error: any) {
       console.error("Google login error:", error);
