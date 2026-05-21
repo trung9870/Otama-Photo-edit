@@ -5,10 +5,12 @@
   --font-sans: "Inter", -apple-system, ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  /* Legacy editor-* tokens — giữ lại cho App.tsx hiện tại chưa migrate */
+  /* Legacy editor-* tokens — bridged to Apple tokens so any unmigrated
+     spot using text-editor-accent / bg-editor-accent etc. reacts to the
+     active theme instead of rendering as neon-yellow on a light surface */
   --color-editor-bg: #0a0a0f;
   --color-editor-card: #151521;
-  --color-editor-accent: #d4ff5c;
+  --color-editor-accent: #007AFF;
   --color-editor-border: #2a2a3a;
 
   /* Apple HIG tokens (LIGHT mode default) — dùng cho components UI mới */

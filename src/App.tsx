@@ -2909,7 +2909,7 @@ function App() {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={images.length >= 5}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-editor-border text-xs hover:bg-editor-accent hover:text-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-editor-border text-xs hover:bg-editor-accent hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Upload size={14} />
                 <span className="hidden sm:inline">Thêm ảnh ({images.length}/5)</span>
@@ -2919,7 +2919,7 @@ function App() {
             {images.some(img => img.processed && img.processed !== img.source) && (
               <button
                 onClick={handleDownloadAll}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-editor-accent text-black text-xs font-bold hover:opacity-90 transition-all"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-editor-accent text-white text-xs font-bold hover:opacity-90 transition-all"
               >
                 <Download size={14} />
                 <span className="hidden sm:inline">Lưu tất cả</span>
@@ -3049,13 +3049,13 @@ function App() {
                     <div className="flex bg-[#252525] p-1 rounded-lg">
                       <button
                         onClick={() => setClonePromptType('amazon')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'amazon' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'amazon' ? 'bg-editor-accent text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
                       >
                         Amazon
                       </button>
                       <button
                         onClick={() => setClonePromptType('taobao')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'taobao' ? 'bg-editor-accent text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${clonePromptType === 'taobao' ? 'bg-editor-accent text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
                       >
                         Taobao
                       </button>
@@ -3109,7 +3109,7 @@ function App() {
                   {/* Step 1 */}
                   <div className="bg-editor-border/10 p-4 rounded-xl border border-editor-border">
                     <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-editor-accent text-black flex items-center justify-center text-xs">1</span>
+                      <span className="w-5 h-5 rounded-full bg-editor-accent text-white flex items-center justify-center text-xs">1</span>
                       TẠO PATTERN TỪ ẢNH MẪU
                     </h3>
                     <div
@@ -3129,7 +3129,7 @@ function App() {
                                 e.stopPropagation();
                                 setIsPatternCropModalOpen(true);
                               }}
-                              className="p-3 bg-black/60 text-white rounded-md hover:bg-editor-accent hover:text-black transition-colors"
+                              className="p-3 bg-black/60 text-white rounded-md hover:bg-editor-accent hover:text-white transition-colors"
                               title="Cắt ảnh"
                             >
                               <Crop size={24} />
@@ -3160,7 +3160,7 @@ function App() {
                     <button
                       onClick={handleEcomGeneratePattern}
                       disabled={!patternSourceImage || isGeneratingPattern}
-                      className="w-full mt-4 py-3 bg-editor-accent text-black rounded-xl font-bold hover:bg-editor-accent/90 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
+                      className="w-full mt-4 py-3 bg-editor-accent text-white rounded-xl font-bold hover:bg-editor-accent/90 transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
                     >
                       {isGeneratingPattern ? (
                         <><Loader2 className="animate-spin" size={20} /> ĐANG TẠO PATTERN 2D...</>
@@ -3182,7 +3182,7 @@ function App() {
                   {/* Step 2 */}
                   <div className={`bg-editor-border/10 p-4 rounded-xl border border-editor-border transition-opacity duration-300 ${!generatedPattern ? 'opacity-50 pointer-events-none' : ''}`}>
                     <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-editor-accent text-black flex items-center justify-center text-xs">2</span>
+                      <span className="w-5 h-5 rounded-full bg-editor-accent text-white flex items-center justify-center text-xs">2</span>
                       ÁP DỤNG LÊN SẢN PHẨM MẪU
                     </h3>
                     <div
@@ -3461,7 +3461,7 @@ function App() {
                       <div className="flex gap-2">
                         <button 
                           onClick={handleAddEcomPrompt}
-                          className="flex-1 py-2 bg-editor-accent text-black rounded-lg text-[10px] font-bold hover:opacity-90"
+                          className="flex-1 py-2 bg-editor-accent text-white rounded-lg text-[10px] font-bold hover:opacity-90"
                         >
                           {editingEcomPromptId ? 'CẬP NHẬT' : 'LƯU PROMPT'}
                         </button>
@@ -3484,7 +3484,7 @@ function App() {
                         <div
                           className="flex items-center gap-3 p-3 rounded-xl border border-editor-accent bg-editor-accent/5 transition-all cursor-pointer"
                         >
-                          <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]" />
+                          <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]" />
                           <p className="text-xs font-bold text-editor-accent">
                             📝 Nhập thủ công
                           </p>
@@ -3504,7 +3504,7 @@ function App() {
                           }`}
                         >
                           <div className="flex items-center gap-3 overflow-hidden">
-                            <div className={`shrink-0 w-2 h-2 rounded-full ${selectedEcomPromptId === p.id ? 'bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]' : 'bg-gray-700'}`} />
+                            <div className={`shrink-0 w-2 h-2 rounded-full ${selectedEcomPromptId === p.id ? 'bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]' : 'bg-gray-700'}`} />
                             <div className="overflow-hidden flex items-center gap-2">
                               <p className={`text-xs font-bold truncate ${selectedEcomPromptId === p.id ? 'text-editor-accent' : 'text-white'}`}>
                                 {p.name}
@@ -3731,7 +3731,7 @@ function App() {
                   <button 
                     onClick={handleEcomGenerate}
                     disabled={!ecomProductImage || isEcomGenerating}
-                    className="w-full py-4 rounded-xl bg-editor-accent text-black font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full py-4 rounded-xl bg-editor-accent text-white font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isEcomGenerating ? (
                       <><Loader2 className="animate-spin" size={20} /> Đang xử lý...</>
@@ -3775,7 +3775,7 @@ function App() {
                           className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
                           title="Dùng ảnh này làm input mới"
                         >
-                          <span className="px-2 py-1 rounded bg-editor-accent text-black font-bold text-[10px] flex items-center gap-1">
+                          <span className="px-2 py-1 rounded bg-editor-accent text-white font-bold text-[10px] flex items-center gap-1">
                             <Edit2 size={10} /> EDIT
                           </span>
                         </button>
@@ -3919,7 +3919,7 @@ function App() {
                                 link.download = `thay-result-${Date.now()}.png`;
                                 link.click();
                               }}
-                              className="absolute bottom-3 right-3 p-3 bg-editor-accent text-black rounded-full shadow-lg hover:scale-110 transition-transform"
+                              className="absolute bottom-3 right-3 p-3 bg-editor-accent text-white rounded-full shadow-lg hover:scale-110 transition-transform"
                               title="Tải ảnh về"
                             >
                               <Download size={18} />
@@ -4135,7 +4135,7 @@ function App() {
                                }}
                              >
                                 <img src={box.cropUrl} alt="Crop" className="w-full h-full object-contain" />
-                                <div className={`absolute top-2 right-2 w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-editor-accent border-editor-accent text-black' : 'border-white text-transparent'}`}>
+                                <div className={`absolute top-2 right-2 w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-editor-accent border-editor-accent text-white' : 'border-white text-transparent'}`}>
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                                 </div>
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -4204,7 +4204,7 @@ function App() {
                             <button
                               onClick={() => setEnhanceModel('banana-2')}
                               disabled={isEcomEnhancing}
-                              className={`px-3 py-1 text-xs font-bold rounded transition-all ${enhanceModel === 'banana-2' ? 'bg-editor-accent text-black' : 'text-gray-400 hover:text-white'}`}
+                              className={`px-3 py-1 text-xs font-bold rounded transition-all ${enhanceModel === 'banana-2' ? 'bg-editor-accent text-white' : 'text-gray-400 hover:text-white'}`}
                               title="Free, nhanh, chất lượng đủ"
                             >
                               Banana 2 (Free)
@@ -4223,7 +4223,7 @@ function App() {
                         <button
                           onClick={handleEnhanceSelectedBoxes}
                           disabled={isEcomEnhancing || selectedBoxIds.length === 0}
-                          className="px-6 py-3 bg-editor-accent text-black font-bold rounded-xl flex items-center gap-2 hover:opacity-90 transition disabled:opacity-50"
+                          className="px-6 py-3 bg-editor-accent text-white font-bold rounded-xl flex items-center gap-2 hover:opacity-90 transition disabled:opacity-50"
                         >
                           {isEcomEnhancing ? (
                              <><RotateCw size={20} className="animate-spin" /> Đang gen ảnh ({selectedBoxIds.length})...</>
@@ -4276,7 +4276,7 @@ function App() {
                                     }
                                     const content = await zip.generateAsync({ type: "blob" });
                                     saveAs(content, "ecom-results.zip");
-                                  }} className="px-4 py-2 bg-editor-accent text-black font-bold rounded-lg hover:opacity-90 transition text-xs flex items-center gap-2">
+                                  }} className="px-4 py-2 bg-editor-accent text-white font-bold rounded-lg hover:opacity-90 transition text-xs flex items-center gap-2">
                                     <Download size={14} /> Tải {selectedResultIds.length} ảnh
                                   </button>
                                 )}
@@ -4334,7 +4334,7 @@ function App() {
                                         </div>
                                       )}
                                       <button
-                                        className="absolute bottom-2 left-2 z-10 px-2.5 h-8 rounded-lg bg-editor-accent text-black flex items-center gap-1 hover:opacity-90 transition-opacity opacity-0 group-hover:opacity-100 font-bold text-xs pointer-events-auto"
+                                        className="absolute bottom-2 left-2 z-10 px-2.5 h-8 rounded-lg bg-editor-accent text-white flex items-center gap-1 hover:opacity-90 transition-opacity opacity-0 group-hover:opacity-100 font-bold text-xs pointer-events-auto"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           useEcomImageAsInput(res.url, { snapshot: true });
@@ -4379,7 +4379,7 @@ function App() {
                         <button 
                           onClick={handleDetectGridBoxes}
                           disabled={isDetectingBoxes}
-                          className="px-6 py-3 bg-editor-accent text-black font-bold rounded-xl flex items-center gap-2 hover:opacity-90 transition disabled:opacity-50"
+                          className="px-6 py-3 bg-editor-accent text-white font-bold rounded-xl flex items-center gap-2 hover:opacity-90 transition disabled:opacity-50"
                         >
                           {isDetectingBoxes ? (
                              <><RotateCw size={20} className="animate-spin" /> Đang phân tích...</>
@@ -4441,7 +4441,7 @@ function App() {
                             link.download = `ecom-result-${i+1}-${Date.now()}.png`;
                             link.click();
                           }}
-                          className="px-4 py-2 bg-editor-accent text-black font-bold rounded-lg flex items-center gap-2 w-32 justify-center text-xs"
+                          className="px-4 py-2 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-2 w-32 justify-center text-xs"
                         >
                           <Download size={14} /> Tải xuống
                         </button>
@@ -4960,7 +4960,7 @@ function App() {
                     <div className="flex gap-2">
                       <button 
                         onClick={handleAddPrompt}
-                        className="flex-1 py-2 bg-editor-accent text-black rounded-lg text-[10px] font-bold hover:opacity-90"
+                        className="flex-1 py-2 bg-editor-accent text-white rounded-lg text-[10px] font-bold hover:opacity-90"
                       >
                         {editingPromptId ? 'CẬP NHẬT' : 'LƯU PROMPT'}
                       </button>
@@ -4983,7 +4983,7 @@ function App() {
                       <div
                         className="flex items-center gap-3 p-3 rounded-xl border border-editor-accent bg-editor-accent/5 transition-all cursor-pointer"
                       >
-                        <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]" />
+                        <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]" />
                         <p className="text-xs font-bold text-editor-accent">
                           📝 Nhập thủ công
                         </p>
@@ -5346,7 +5346,7 @@ function App() {
                       </button>
                       <button 
                         onClick={confirmSaveAnalyzedPrompt}
-                        className="flex-1 py-3 bg-editor-accent text-black rounded-xl text-sm font-bold hover:opacity-90 transition-all"
+                        className="flex-1 py-3 bg-editor-accent text-white rounded-xl text-sm font-bold hover:opacity-90 transition-all"
                       >
                         LƯU NGAY
                       </button>
@@ -5888,7 +5888,7 @@ function App() {
                           <div className="flex gap-2">
                             <button 
                               onClick={handleAddPrompt}
-                              className="flex-1 py-2 bg-editor-accent text-black rounded-lg text-[10px] font-bold hover:opacity-90"
+                              className="flex-1 py-2 bg-editor-accent text-white rounded-lg text-[10px] font-bold hover:opacity-90"
                             >
                               {editingPromptId ? 'CẬP NHẬT' : 'LƯU PROMPT'}
                             </button>
@@ -5909,7 +5909,7 @@ function App() {
                         <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar mb-4">
                           {tryOnManualMode && (
                             <div className="flex items-center gap-3 p-3 rounded-xl border border-editor-accent bg-editor-accent/5 transition-all cursor-pointer">
-                              <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]" />
+                              <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]" />
                               <p className="text-xs font-bold text-editor-accent">📝 Nhập thủ công</p>
                             </div>
                           )}
@@ -5927,7 +5927,7 @@ function App() {
                               }`}
                             >
                               <div className="flex items-center gap-3 overflow-hidden">
-                                <div className={`shrink-0 w-2 h-2 rounded-full ${!tryOnManualMode && tryOnPrompt === p.prompt ? 'bg-editor-accent shadow-[0_0_8px_rgba(255,255,0,0.5)]' : 'bg-gray-700'}`} />
+                                <div className={`shrink-0 w-2 h-2 rounded-full ${!tryOnManualMode && tryOnPrompt === p.prompt ? 'bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]' : 'bg-gray-700'}`} />
                                 <div className="overflow-hidden flex items-center gap-2">
                                   <p className={`text-xs font-bold truncate ${!tryOnManualMode && tryOnPrompt === p.prompt ? 'text-editor-accent' : 'text-white'}`}>
                                     {p.name}
@@ -6108,7 +6108,7 @@ function App() {
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => setIsSettingsOpen(false)}
-                  className="bg-editor-accent text-black font-bold px-6 py-2 rounded-lg hover:shadow-[0_0_15px_rgba(212,255,0,0.3)] transition-all"
+                  className="bg-editor-accent text-white font-bold px-6 py-2 rounded-lg hover:shadow-[0_0_15px_rgba(212,255,0,0.3)] transition-all"
                 >
                   Xong
                 </button>
@@ -6288,7 +6288,7 @@ function App() {
                 <button
                   type="submit"
                   disabled={loginLoading}
-                  className="w-full py-3 bg-editor-accent text-black font-bold rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50"
+                  className="w-full py-3 bg-editor-accent text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-50"
                 >
                   {loginLoading ? (
                     <><Loader2 size={18} className="animate-spin" /> Đang đăng nhập...</>
