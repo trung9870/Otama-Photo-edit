@@ -2947,7 +2947,82 @@ function App() {
       )}
 
       {appMode === 'ecom' && (
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
+          {/* Floating prompt picker popup — anchored just right of left panel */}
+          {showEcomPromptModal && ecomSubTab === 'gen-new' && (
+            <>
+              {/* Click-outside catcher */}
+              <div
+                className="hidden lg:block fixed inset-0 z-30"
+                onClick={() => setShowEcomPromptModal(false)}
+              />
+              <div
+                className="hidden lg:flex flex-col absolute z-40"
+                style={{
+                  left: 'calc(33.333% + 12px)',
+                  top: '20px',
+                  width: 380,
+                  maxHeight: 'calc(100vh - 140px)',
+                  background: 'var(--color-card)',
+                  borderRadius: 18,
+                  border: '0.5px solid var(--color-border-soft)',
+                  boxShadow: 'var(--shadow-sheet)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  className="flex items-center justify-between"
+                  style={{ padding: '14px 16px', borderBottom: '0.5px solid var(--color-border-soft)' }}
+                >
+                  <div>
+                    <h3 className="font-bold" style={{ fontSize: 15, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
+                      Tất cả Prompt ({ecomSavedPrompts.length})
+                    </h3>
+                    <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                      Chọn 1 để dùng
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowEcomPromptModal(false)}
+                    className="rounded-full p-1.5 transition-colors"
+                    style={{ color: 'var(--color-text-tertiary)' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-fill)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                    title="Đóng"
+                  >
+                    <X size={16} strokeWidth={1.8} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                  {ecomSavedPrompts.length === 0 ? (
+                    <div className="py-8 text-center" style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+                      Chưa có prompt nào được lưu.
+                    </div>
+                  ) : (
+                    ecomSavedPrompts.map((p) => (
+                      <PromptRow
+                        key={p.id}
+                        name={p.name}
+                        active={selectedEcomPromptId === p.id}
+                        synced={p.isDefault}
+                        onClick={() => {
+                          setSelectedEcomPromptId(p.id);
+                          setEcomPromptText(p.prompt);
+                          setShowEcomPromptModal(false);
+                        }}
+                        showSync={isAdmin}
+                        onSync={(e) => toggleSyncEcomPrompt(p, e)}
+                        showEdit={isAdmin || !p.isDefault}
+                        showDelete={isAdmin || !p.isDefault}
+                        onEdit={(e) => startEditEcomPrompt(p, e)}
+                        onDelete={(e) => deleteEcomPrompt(p.id, e)}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          )}
           {/* Left panel: Upload and Settings */}
           <div className="lg:col-span-4 flex flex-col gap-6">
             <div
@@ -3954,63 +4029,6 @@ function App() {
           {/* Right panel: Results */}
           <div className="lg:col-span-8 flex flex-col gap-4">
             <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
-              {showEcomPromptModal && ecomSubTab === 'gen-new' ? (
-                <div className="w-full self-stretch flex flex-col">
-                  <div className="flex items-end justify-between mb-4">
-                    <div>
-                      <h2 className="font-bold" style={{ fontSize: 22, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
-                        Tất cả Prompt Ecom
-                      </h2>
-                      <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                        {ecomSavedPrompts.length} prompt đã lưu · Chọn 1 để dùng
-                      </p>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      icon={X}
-                      onClick={() => setShowEcomPromptModal(false)}
-                    >
-                      Đóng
-                    </Button>
-                  </div>
-                  <div
-                    className="flex-1 overflow-y-auto p-2 space-y-1"
-                    style={{
-                      background: 'var(--color-card-secondary)',
-                      borderRadius: 14,
-                      maxHeight: '60vh',
-                    }}
-                  >
-                    {ecomSavedPrompts.length === 0 ? (
-                      <div className="py-12 text-center" style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
-                        Chưa có prompt nào được lưu.
-                      </div>
-                    ) : (
-                      ecomSavedPrompts.map((p) => (
-                        <PromptRow
-                          key={p.id}
-                          name={p.name}
-                          active={selectedEcomPromptId === p.id}
-                          synced={p.isDefault}
-                          onClick={() => {
-                            setSelectedEcomPromptId(p.id);
-                            setEcomPromptText(p.prompt);
-                            setShowEcomPromptModal(false);
-                          }}
-                          showSync={isAdmin}
-                          onSync={(e) => toggleSyncEcomPrompt(p, e)}
-                          showEdit={isAdmin || !p.isDefault}
-                          showDelete={isAdmin || !p.isDefault}
-                          onEdit={(e) => startEditEcomPrompt(p, e)}
-                          onDelete={(e) => deleteEcomPrompt(p.id, e)}
-                        />
-                      ))
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <>
               {ecomSubTab === 'gen-new' && ecomLastFinalImages.length > 0 && (
                 <div className="mb-4 pb-4 border-b border-editor-border/50">
                   <div className="flex items-center justify-between mb-3">
@@ -4850,8 +4868,6 @@ function App() {
                   <ImageIcon size={64} className="opacity-20 mb-4" />
                   <p>Kết quả sẽ hiển thị ở đây</p>
                 </div>
-              )}
-                </>
               )}
             </div>
           </div>
