@@ -423,6 +423,7 @@ function App() {
   const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay'>('gen-new');
   const [ecomTemplateImage, setEcomTemplateImage] = useState<string | null>(null);
   const [clonePromptType, setClonePromptType] = useState<'amazon' | 'taobao'>('amazon');
+  const [cloneManualMode, setCloneManualMode] = useState(false);
 
   const DEFAULT_CLONE_PROMPTS = {
     amazon: "请复刻图1的设计,为图二生成亚马逊视觉电商A+,越南语",
@@ -2300,13 +2301,16 @@ function App() {
     let templateB64: string | undefined = undefined;
 
     if (ecomSubTab === 'clone-template') {
-      currentPrompt = clonePrompts[clonePromptType] || DEFAULT_CLONE_PROMPTS[clonePromptType];
+      // Manual mode: dùng prompt người dùng tự nhập; ngược lại dùng prompt template Amazon/Taobao
+      currentPrompt = (cloneManualMode && ecomPromptText.trim())
+        ? ecomPromptText.trim()
+        : (clonePrompts[clonePromptType] || DEFAULT_CLONE_PROMPTS[clonePromptType]);
       config = MODEL_CONFIG['gpt2']; // force GPT2
       templateB64 = ecomTemplateImage!.split(',')[1];
     }
 
-    // Gộp prompt bổ sung (áp dụng cho Gen new + Clone Templates)
-    if ((ecomSubTab === 'gen-new' || ecomSubTab === 'clone-template') && ecomSupplementaryPrompt.trim()) {
+    // Gộp prompt bổ sung (chỉ áp dụng cho Gen new)
+    if (ecomSubTab === 'gen-new' && ecomSupplementaryPrompt.trim()) {
       currentPrompt = `${currentPrompt}\n\n[YÊU CẦU BỔ SUNG — ƯU TIÊN CAO]:\n${ecomSupplementaryPrompt.trim()}`;
     }
 
@@ -3237,46 +3241,63 @@ function App() {
                     </div>
                   )}
 
-                  {/* Bổ sung prompt thủ công — áp cho mọi user */}
+                  {/* Nhập prompt thủ công — thay thế prompt template */}
                   <div className="mt-2">
                     <div className="flex items-center justify-between mb-2">
                       <p
                         className="uppercase font-semibold"
+                        style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
+                      >
+                        Prompt
+                      </p>
+                      <button
+                        onClick={() => {
+                          setCloneManualMode((v) => {
+                            const next = !v;
+                            if (next) setEcomPromptText('');
+                            return next;
+                          });
+                        }}
+                        className="flex items-center gap-1 font-semibold transition-opacity hover:opacity-80"
                         style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                       >
-                        + Bổ sung prompt (tuỳ chọn)
-                      </p>
-                      {ecomSupplementaryPrompt && (
-                        <button
-                          onClick={() => setEcomSupplementaryPrompt('')}
-                          className="font-semibold transition-colors"
-                          style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}
-                          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-danger)')}
-                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-tertiary)')}
-                        >
-                          XOÁ
-                        </button>
-                      )}
+                        <Edit2 size={12} />
+                        {cloneManualMode ? 'DÙNG TEMPLATE' : 'NHẬP THỦ CÔNG'}
+                      </button>
                     </div>
-                    <textarea
-                      value={ecomSupplementaryPrompt}
-                      onChange={(e) => setEcomSupplementaryPrompt(e.target.value)}
-                      placeholder="VD: Tiêu đề tiếng Việt, tông màu pastel, thêm icon bảo hành, không có chữ Trung Quốc trên ảnh…"
-                      className="w-full h-24 outline-none transition-colors p-3 resize-none"
-                      style={{
-                        background: 'var(--color-accent-soft)',
-                        color: 'var(--color-text)',
-                        borderRadius: 12,
-                        border: '0.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)',
-                        fontSize: 13,
-                        letterSpacing: '-0.01em',
-                      }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 35%, transparent)')}
-                    />
-                    <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
-                      Nội dung này sẽ được nối vào cuối prompt template với độ ưu tiên cao.
-                    </p>
+                    {cloneManualMode ? (
+                      <>
+                        <textarea
+                          value={ecomPromptText}
+                          onChange={(e) => setEcomPromptText(e.target.value)}
+                          placeholder="Nhập prompt riêng của bạn để tạo template (thay thế prompt mặc định)…"
+                          className="w-full h-28 outline-none transition-colors p-3 resize-none"
+                          style={{
+                            background: 'var(--color-fill)',
+                            color: 'var(--color-text)',
+                            borderRadius: 12,
+                            border: '0.5px solid transparent',
+                            fontSize: 13,
+                            letterSpacing: '-0.01em',
+                          }}
+                          onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                          onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
+                        />
+                        <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
+                          Đang dùng prompt thủ công — bỏ qua prompt template {clonePromptType === 'amazon' ? 'Amazon' : 'Taobao'}.
+                        </p>
+                      </>
+                    ) : (
+                      <div
+                        className="rounded-lg px-4 py-3 flex items-center gap-2"
+                        style={{ background: 'var(--color-accent-soft)', border: '0.5px solid var(--color-accent)' }}
+                      >
+                        <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+                        <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
+                          Đang dùng prompt template {clonePromptType === 'amazon' ? 'Amazon' : 'Taobao'}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : ecomSubTab === 'pattern-replace' ? (
