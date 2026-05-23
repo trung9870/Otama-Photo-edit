@@ -338,6 +338,9 @@ function App() {
   const [selectedEcomPromptId, setSelectedEcomPromptId] = useState<string>('e1');
   const [ecomPromptText, setEcomPromptText] = useState<string>(defaultEcomPrompts[0].prompt);
   const [ecomSupplementaryPrompt, setEcomSupplementaryPrompt] = useState<string>('');
+  // Kho prompt riêng cho tab Thay (type 'ecom-thay'), tách khỏi Gen new
+  const [ecomThaySavedPrompts, setEcomThaySavedPrompts] = useState<SavedPrompt[]>([]);
+  const [showThayPromptAll, setShowThayPromptAll] = useState(false);
 
   useEffect(() => {
     if (selectedEcomPromptId !== 'manual') {
@@ -775,6 +778,7 @@ function App() {
       setSavedGenPrompts(DEFAULT_GEN_PROMPTS);
       setSavedTryOnPrompts(DEFAULT_TRYON_PROMPTS);
       setEcomSavedPrompts(defaultEcomPrompts);
+      setEcomThaySavedPrompts([]);
       return;
     }
 
@@ -800,10 +804,12 @@ function App() {
       const gen = merged.filter(p => p.type === 'generate');
       const tryon = merged.filter(p => p.type === 'tryon');
       const ecom = merged.filter(p => p.type === 'ecom');
+      const ecomThay = merged.filter(p => p.type === 'ecom-thay');
 
       setSavedGenPrompts([...gen, ...DEFAULT_GEN_PROMPTS.filter(d => !merged.some(m => m.id === d.id))]);
       setSavedTryOnPrompts([...tryon, ...DEFAULT_TRYON_PROMPTS.filter(d => !merged.some(m => m.id === d.id))]);
       setEcomSavedPrompts([...ecom, ...defaultEcomPrompts.filter(d => !merged.some(m => m.id === d.id))]);
+      setEcomThaySavedPrompts(ecomThay);
 
       if (gen.length > 0 && !selectedPromptId) {
         setSelectedPromptId(gen[0].id);
@@ -2497,7 +2503,7 @@ function App() {
         id,
         name,
         prompt: ecomThayPrompt,
-        type: 'ecom',
+        type: 'ecom-thay',
         uid: user.uid,
         createdAt: Timestamp.now(),
       });
@@ -3655,11 +3661,11 @@ function App() {
                         <Plus size={12} /> LƯU MẪU
                       </button>
                     </div>
-                    {ecomSavedPrompts.length === 0 ? (
+                    {ecomThaySavedPrompts.length === 0 ? (
                       <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>Chưa có prompt mẫu. Bấm "Lưu mẫu" để lưu prompt hiện tại.</p>
                     ) : (
-                      <div className="space-y-1" style={showEcomPromptModal ? { maxHeight: 200, overflowY: 'auto' } : undefined}>
-                        {(showEcomPromptModal ? ecomSavedPrompts : ecomSavedPrompts.slice(0, 3)).map((p) => (
+                      <div className="space-y-1" style={showThayPromptAll ? { maxHeight: 200, overflowY: 'auto' } : undefined}>
+                        {(showThayPromptAll ? ecomThaySavedPrompts : ecomThaySavedPrompts.slice(0, 3)).map((p) => (
                           <PromptRow
                             key={p.id}
                             name={p.name}
@@ -3668,22 +3674,21 @@ function App() {
                             onClick={() => setEcomThayPrompt(p.prompt)}
                             showSync={isAdmin}
                             onSync={(e) => toggleSyncEcomPrompt(p, e)}
-                            showEdit={isAdmin || !p.isDefault}
+                            showEdit={false}
                             showDelete={isAdmin || !p.isDefault}
-                            onEdit={(e) => startEditEcomPrompt(p, e)}
                             onDelete={(e) => deleteEcomPrompt(p.id, e)}
                           />
                         ))}
-                        {ecomSavedPrompts.length > 3 && (
+                        {ecomThaySavedPrompts.length > 3 && (
                           <button
-                            onClick={() => setShowEcomPromptModal((v) => !v)}
+                            onClick={() => setShowThayPromptAll((v) => !v)}
                             className="w-full flex items-center justify-center gap-1.5 transition-colors mt-1"
                             style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--color-accent)', background: 'var(--color-fill)', borderRadius: 10 }}
                             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-soft)')}
                             onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-fill)')}
                           >
-                            {showEcomPromptModal ? 'Thu gọn' : `Xem tất cả (${ecomSavedPrompts.length})`}
-                            <ChevronRight size={14} style={{ transform: showEcomPromptModal ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }} />
+                            {showThayPromptAll ? 'Thu gọn' : `Xem tất cả (${ecomThaySavedPrompts.length})`}
+                            <ChevronRight size={14} style={{ transform: showThayPromptAll ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }} />
                           </button>
                         )}
                       </div>
