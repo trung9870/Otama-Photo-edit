@@ -3645,6 +3645,96 @@ function App() {
                   )}
                 </div>
               ) : (
+                <div className="flex flex-col gap-6">
+                {/* Settings card — moved on top, with dividers */}
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
+                  <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Cài đặt</p>
+                </div>
+                <div className="p-5 flex flex-col md:flex-row gap-5" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                  <div className="md:pr-5" style={{ flex: '0 0 auto', borderRight: '0.5px solid var(--color-border)' }}>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Model</p>
+                    <div style={{ width: 230 }}>
+                      <ModelCardPicker<ModelType>
+                        value={ecomModel}
+                        onChange={(m) => setEcomModel(m)}
+                        options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                          value: m,
+                          name: MODEL_CONFIG[m].name,
+                          sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
+                          best: m === 'banana-pro',
+                        }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="md:pr-5 flex-1" style={{ borderRight: '0.5px solid var(--color-border)' }}>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ khung hình</p>
+                    <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} />
+                  </div>
+                  <div style={{ flex: '0 0 auto' }}>
+                    <div className="flex gap-5">
+                      <div>
+                        <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chất lượng</p>
+                        <div className="flex gap-1.5">
+                          {(() => {
+                            const availableSizes: string[] = ecomModel === 'gpt2'
+                              ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
+                                : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
+                                : ['1k'])
+                              : ['1k', '2k', '4k'];
+                            return ['1k', '2k', '4k'].map((size) => {
+                              const isAvailable = availableSizes.includes(size);
+                              const active = ecomImageSize === size;
+                              return (
+                                <button
+                                  key={size}
+                                  onClick={() => isAvailable && setEcomImageSize(size)}
+                                  disabled={!isAvailable}
+                                  title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
+                                  className="px-3 py-2 text-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                  style={{
+                                    borderRadius: 10,
+                                    background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                    border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                    color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                    fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+                                  }}
+                                >
+                                  {size.toUpperCase()}
+                                </button>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Số ảnh</p>
+                        <div className="flex gap-1.5">
+                          {[1, 2, 3].map((count) => {
+                            const active = ecomImageCount === count;
+                            return (
+                              <button
+                                key={count}
+                                onClick={() => setEcomImageCount(count)}
+                                className="px-3 py-2 text-center transition-all"
+                                style={{
+                                  borderRadius: 10,
+                                  background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                  border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                  color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                  fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+                                }}
+                              >
+                                {count}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Col 1 — Ảnh sản phẩm */}
                   <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
@@ -3848,6 +3938,7 @@ function App() {
                     />
                   </div>
                 </div>
+                </div>
               )}
 
               <input
@@ -3957,116 +4048,6 @@ function App() {
               />
             {ecomSubTab === 'gen-new' && (
               <>
-                {/* Section: CÀI ĐẶT */}
-                <div className="mt-6 mb-4 flex items-center gap-2">
-                  <span
-                    className="inline-flex items-center justify-center font-bold rounded-full"
-                    style={{
-                      width: 22,
-                      height: 22,
-                      fontSize: 11,
-                      background: 'var(--color-accent)',
-                      color: '#fff',
-                    }}
-                  >
-                    3
-                  </span>
-                  <p
-                    className="font-semibold uppercase"
-                    style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
-                  >
-                    Cài đặt
-                  </p>
-                </div>
-
-                <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start mb-6" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
-                  <div className="md:col-span-4">
-                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                      Model
-                    </p>
-                    <ModelCardPicker<ModelType>
-                      value={ecomModel}
-                      onChange={(m) => setEcomModel(m)}
-                      options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
-                        value: m,
-                        name: MODEL_CONFIG[m].name,
-                        sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
-                        best: m === 'banana-pro',
-                      }))}
-                    />
-                  </div>
-                  <div className="md:col-span-5">
-                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                      Tỉ lệ khung hình
-                    </p>
-                    <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} />
-                  </div>
-                  <div className="md:col-span-3 grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                        Chất lượng
-                      </p>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {(() => {
-                          const availableSizes: string[] = ecomModel === 'gpt2'
-                            ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
-                              : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
-                              : ['1k'])
-                            : ['1k', '2k', '4k'];
-                          return ['1k', '2k', '4k'].map((size) => {
-                            const isAvailable = availableSizes.includes(size);
-                            const active = ecomImageSize === size;
-                            return (
-                              <button
-                                key={size}
-                                onClick={() => isAvailable && setEcomImageSize(size)}
-                                disabled={!isAvailable}
-                                title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
-                                className="py-2 text-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                                style={{
-                                  borderRadius: 10,
-                                  background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
-                                  border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
-                                  color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                                  fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
-                                }}
-                              >
-                                {size.toUpperCase()}
-                              </button>
-                            );
-                          });
-                        })()}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                        Số ảnh
-                      </p>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[1, 2, 3].map((count) => {
-                          const active = ecomImageCount === count;
-                          return (
-                            <button
-                              key={count}
-                              onClick={() => setEcomImageCount(count)}
-                              className="py-2 text-center transition-all"
-                              style={{
-                                borderRadius: 10,
-                                background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
-                                border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
-                                color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                                fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
-                              }}
-                            >
-                              {count}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 {globalError && (
                   <div
                     className="mb-6 p-3 rounded-lg flex items-start gap-3"
