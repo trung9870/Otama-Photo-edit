@@ -3048,8 +3048,8 @@ function App() {
               </div>
             </>
           )}
-          {/* Left panel: Upload and Settings — expands to full width on pattern-replace */}
-          <div className={`flex flex-col gap-6 ${ecomSubTab === 'pattern-replace' ? 'lg:col-span-12' : 'lg:col-span-4'}`}>
+          {/* Left panel: Upload and Settings — full width on pattern-replace + clone */}
+          <div className={`flex flex-col gap-6 ${ecomSubTab === 'pattern-replace' || ecomSubTab === 'clone-template' ? 'lg:col-span-12' : 'lg:col-span-4'}`}>
             <div
               className="p-6"
               style={{
@@ -3088,217 +3088,289 @@ function App() {
               </div>
 
               {ecomSubTab === 'clone-template' ? (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-6">
+                  {/* Title bar */}
                   <div>
-                    <div className="mb-2 flex items-center gap-2">
-                      <span
-                        className="inline-flex items-center justify-center font-bold rounded-full"
-                        style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}
-                      >
-                        1
-                      </span>
-                      <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                        Template mẫu
-                      </p>
-                    </div>
-                    <div
-                      {...makeDropHandlers('ecom-template', setEcomTemplateImage)}
-                      className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
-                      style={{
-                        background: dragOverId === 'ecom-template' ? 'var(--color-accent-soft)' : 'var(--color-card-secondary)',
-                        border: `2px dashed ${dragOverId === 'ecom-template' || ecomTemplateImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                        borderRadius: 14,
-                      }}
-                      onClick={() => {
-                        setPasteTargetId('ecom-template');
-                        if (ecomTemplateFileInputRef.current) ecomTemplateFileInputRef.current.click();
-                      }}
-                    >
-                      {ecomTemplateImage ? (
-                        <>
-                          <img src={ecomTemplateImage} alt="Template" className="w-full h-full object-contain" />
-                          <div
-                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
-                          >
-                            <span className="text-white font-bold text-xs">Thay đổi ảnh Template</span>
-                          </div>
-                        </>
-                      ) : isStitchingImages ? (
-                        <div className="flex flex-col items-center gap-3" style={{ color: 'var(--color-accent)' }}>
-                          <Loader2 className="animate-spin" size={32} />
-                          <span className="text-sm font-bold animate-pulse">Đang ghép ảnh…</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2 text-center px-4" style={{ color: 'var(--color-text-tertiary)' }}>
-                          <Upload size={32} />
-                          <span style={{ fontSize: 13, fontWeight: 500 }}>Click để tải 1 ảnh hoặc ghép nhiều ảnh</span>
-                          <span style={{ fontSize: 11, opacity: 0.7 }}>Có thể chọn nhiều ảnh cùng lúc để tự động ghép</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-2 flex items-center gap-2">
-                      <span
-                        className="inline-flex items-center justify-center font-bold rounded-full"
-                        style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}
-                      >
-                        2
-                      </span>
-                      <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                        Sản phẩm gốc
-                      </p>
-                    </div>
-                    <div
-                      {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
-                      className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
-                      style={{
-                        background: dragOverId === 'ecom-product' ? 'var(--color-accent-soft)' : 'var(--color-card-secondary)',
-                        border: `2px dashed ${dragOverId === 'ecom-product' || ecomProductImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                        borderRadius: 14,
-                      }}
-                      onClick={() => {
-                        setPasteTargetId('ecom-product');
-                        if (ecomFileInputRef.current) ecomFileInputRef.current.click();
-                      }}
-                    >
-                      {ecomProductImage ? (
-                        <>
-                          <img src={ecomProductImage} alt="Product" className="w-full h-full object-contain" />
-                          <div
-                            className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
-                          >
-                            <span className="text-white font-bold text-xs">Thay đổi ảnh sản phẩm</span>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
-                          <Upload size={32} />
-                          <span style={{ fontSize: 13, fontWeight: 500 }}>Click để tải ảnh sản phẩm</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-2">
-                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                      Loại template
+                    <h2 className="font-bold" style={{ fontSize: 24, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
+                      Clone Templates
+                    </h2>
+                    <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                      Bê layout từ ảnh mẫu sang sản phẩm của bạn.
                     </p>
-                    <Segmented<'amazon' | 'taobao'>
-                      value={clonePromptType}
-                      onChange={(v) => setClonePromptType(v)}
-                      size="md"
-                      fullWidth
-                      options={[
-                        { value: 'amazon', label: 'Amazon A+' },
-                        { value: 'taobao', label: 'Taobao' },
-                      ]}
-                    />
                   </div>
 
-                  {isAdmin && (
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold flex items-center gap-2">
-                          PROMPT {clonePromptType === 'amazon' ? 'AMAZON' : 'TAOBAO'} (CHỈ ADMIN)
-                          {clonePromptsSynced[clonePromptType] && (
-                            <CheckCircle2 size={11} className="text-green-500" title="Đã đồng bộ" />
-                          )}
+                  {/* Settings card — Tỉ lệ / Chất lượng / Số ảnh (Clone luôn dùng GPT2) */}
+                  <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    <div className="md:col-span-6">
+                      <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                        Tỉ lệ khung hình
+                      </p>
+                      <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} />
+                    </div>
+                    <div className="md:col-span-3">
+                      <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                        Chất lượng
+                      </p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(() => {
+                          const availableSizes: string[] = ecomAspectRatio === '1:1' ? ['1k', '2k']
+                            : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
+                            : ['1k'];
+                          return ['1k', '2k', '4k'].map((size) => {
+                            const isAvailable = availableSizes.includes(size);
+                            const active = ecomImageSize === size;
+                            return (
+                              <button
+                                key={size}
+                                onClick={() => isAvailable && setEcomImageSize(size)}
+                                disabled={!isAvailable}
+                                title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
+                                className="py-2 text-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                style={{
+                                  borderRadius: 10,
+                                  background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                  border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                  color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                  fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+                                }}
+                              >
+                                {size.toUpperCase()}
+                              </button>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                    <div className="md:col-span-3">
+                      <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                        Số ảnh
+                      </p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[1, 2, 3].map((count) => {
+                          const active = ecomImageCount === count;
+                          return (
+                            <button
+                              key={count}
+                              onClick={() => setEcomImageCount(count)}
+                              className="py-2 text-center transition-all"
+                              style={{
+                                borderRadius: 10,
+                                background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+                              }}
+                            >
+                              {count}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3-column grid: Template / Product / Type+Prompt */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Col 1 — Template mẫu */}
+                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
+                        <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                          Template mẫu
                         </p>
-                        <div className="flex items-center gap-3">
+                      </div>
+                      <div
+                        {...makeDropHandlers('ecom-template', setEcomTemplateImage)}
+                        className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                        style={{
+                          background: dragOverId === 'ecom-template' ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                          border: `2px dashed ${dragOverId === 'ecom-template' || ecomTemplateImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                          borderRadius: 12,
+                        }}
+                        onClick={() => {
+                          setPasteTargetId('ecom-template');
+                          if (ecomTemplateFileInputRef.current) ecomTemplateFileInputRef.current.click();
+                        }}
+                      >
+                        {ecomTemplateImage ? (
+                          <>
+                            <img src={ecomTemplateImage} alt="Template" className="w-full h-full object-contain" />
+                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}>
+                              <span className="text-white font-bold text-xs">Thay đổi ảnh Template</span>
+                            </div>
+                          </>
+                        ) : isStitchingImages ? (
+                          <div className="flex flex-col items-center gap-3" style={{ color: 'var(--color-accent)' }}>
+                            <Loader2 className="animate-spin" size={32} />
+                            <span className="text-sm font-bold animate-pulse">Đang ghép ảnh…</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 text-center px-4" style={{ color: 'var(--color-text-tertiary)' }}>
+                            <Upload size={28} />
+                            <span style={{ fontSize: 12, fontWeight: 500 }}>Click để tải 1 ảnh hoặc ghép nhiều ảnh</span>
+                          </div>
+                        )}
+                      </div>
+                      <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 8 }}>
+                        Có thể chọn nhiều ảnh cùng lúc để tự động ghép.
+                      </p>
+                    </div>
+
+                    {/* Col 2 — Sản phẩm gốc */}
+                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>2</span>
+                        <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                          Sản phẩm gốc
+                        </p>
+                      </div>
+                      <div
+                        {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
+                        className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                        style={{
+                          background: dragOverId === 'ecom-product' ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                          border: `2px dashed ${dragOverId === 'ecom-product' || ecomProductImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                          borderRadius: 12,
+                        }}
+                        onClick={() => {
+                          setPasteTargetId('ecom-product');
+                          if (ecomFileInputRef.current) ecomFileInputRef.current.click();
+                        }}
+                      >
+                        {ecomProductImage ? (
+                          <>
+                            <img src={ecomProductImage} alt="Product" className="w-full h-full object-contain" />
+                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}>
+                              <span className="text-white font-bold text-xs">Thay đổi ảnh sản phẩm</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                            <Upload size={28} />
+                            <span style={{ fontSize: 12, fontWeight: 500 }}>Click để tải ảnh sản phẩm</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Col 3 — Loại template + Prompt */}
+                    <div className="p-4 flex flex-col gap-4" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                      <div>
+                        <div className="mb-3 flex items-center gap-2">
+                          <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
+                          <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                            Loại template
+                          </p>
+                        </div>
+                        <Segmented<'amazon' | 'taobao'>
+                          value={clonePromptType}
+                          onChange={(v) => setClonePromptType(v)}
+                          size="md"
+                          fullWidth
+                          options={[
+                            { value: 'amazon', label: 'Amazon A+' },
+                            { value: 'taobao', label: 'Taobao' },
+                          ]}
+                        />
+                      </div>
+
+                      {isAdmin && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="uppercase font-semibold flex items-center gap-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                              Prompt {clonePromptType === 'amazon' ? 'Amazon' : 'Taobao'} (admin)
+                              {clonePromptsSynced[clonePromptType] && <CheckCircle2 size={11} style={{ color: 'var(--color-success)' }} />}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <button onClick={syncClonePrompt} className="flex items-center gap-1 font-bold" style={{ fontSize: 9, color: 'var(--color-accent)' }} title="Đồng bộ prompt này cho mọi người dùng">
+                                <Globe size={10} /> ĐỒNG BỘ
+                              </button>
+                              <button onClick={() => setClonePrompts(prev => ({ ...prev, [clonePromptType]: DEFAULT_CLONE_PROMPTS[clonePromptType] }))} className="font-bold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)' }} title="Khôi phục prompt mặc định">
+                                ↺ MẶC ĐỊNH
+                              </button>
+                            </div>
+                          </div>
+                          <textarea
+                            value={clonePrompts[clonePromptType]}
+                            onChange={(e) => {
+                              setClonePrompts(prev => ({ ...prev, [clonePromptType]: e.target.value }));
+                              setClonePromptsSynced(prev => ({ ...prev, [clonePromptType]: false }));
+                            }}
+                            className="w-full h-16 outline-none transition-colors p-3 resize-none"
+                            style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 12, border: '0.5px solid transparent', fontSize: 12 }}
+                            onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                            onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
+                          />
+                        </div>
+                      )}
+
+                      {/* Prompt thủ công */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                            Prompt
+                          </p>
                           <button
-                            onClick={syncClonePrompt}
-                            className="flex items-center gap-1 text-[9px] text-blue-400 hover:text-blue-300 font-bold"
-                            title="Đồng bộ prompt này cho mọi người dùng"
+                            onClick={() => {
+                              setCloneManualMode((v) => {
+                                const next = !v;
+                                if (next) setEcomPromptText('');
+                                return next;
+                              });
+                            }}
+                            className="flex items-center gap-1 font-semibold transition-opacity hover:opacity-80"
+                            style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                           >
-                            <Globe size={10} /> ĐỒNG BỘ
-                          </button>
-                          <button
-                            onClick={() => setClonePrompts(prev => ({ ...prev, [clonePromptType]: DEFAULT_CLONE_PROMPTS[clonePromptType] }))}
-                            className="text-[9px] text-gray-500 hover:text-editor-accent font-bold"
-                            title="Khôi phục prompt mặc định"
-                          >
-                            ↺ MẶC ĐỊNH
+                            <Edit2 size={12} />
+                            {cloneManualMode ? 'DÙNG TEMPLATE' : 'NHẬP THỦ CÔNG'}
                           </button>
                         </div>
+                        {cloneManualMode ? (
+                          <>
+                            <textarea
+                              value={ecomPromptText}
+                              onChange={(e) => setEcomPromptText(e.target.value)}
+                              placeholder="Nhập prompt riêng của bạn để tạo template (thay thế prompt mặc định)…"
+                              className="w-full h-24 outline-none transition-colors p-3 resize-none"
+                              style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 12, border: '0.5px solid transparent', fontSize: 13, letterSpacing: '-0.01em' }}
+                              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                              onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
+                            />
+                            <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
+                              Đang dùng prompt thủ công — bỏ qua template {clonePromptType === 'amazon' ? 'Amazon' : 'Taobao'}.
+                            </p>
+                          </>
+                        ) : (
+                          <div className="rounded-lg px-3 py-2.5 flex items-center gap-2" style={{ background: 'var(--color-accent-soft)', border: '0.5px solid var(--color-accent)' }}>
+                            <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+                            <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
+                              Dùng template {clonePromptType === 'amazon' ? 'Amazon' : 'Taobao'}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      <textarea
-                        value={clonePrompts[clonePromptType]}
-                        onChange={(e) => {
-                          setClonePrompts(prev => ({ ...prev, [clonePromptType]: e.target.value }));
-                          setClonePromptsSynced(prev => ({ ...prev, [clonePromptType]: false }));
-                        }}
-                        className="w-full h-20 bg-editor-border/10 border border-editor-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-editor-accent resize-none"
-                      />
-                      <p className="text-[9px] text-gray-500 mt-1">
-                        {clonePromptsSynced[clonePromptType]
-                          ? '✅ Prompt đã đồng bộ cho mọi nhân viên.'
-                          : '⚠️ Có thay đổi chưa đồng bộ. Bấm "ĐỒNG BỘ" để áp dụng cho nhân viên.'}
-                      </p>
+
+                      {/* CTA */}
+                      <div className="mt-auto pt-2">
+                        <Button
+                          variant="filled"
+                          size="lg"
+                          fullWidth
+                          icon={isEcomGenerating ? Loader2 : Copy}
+                          onClick={handleEcomGenerate}
+                          disabled={!ecomProductImage || !ecomTemplateImage || isEcomGenerating}
+                        >
+                          {isEcomGenerating ? 'Đang xử lý…' : 'Clone template này'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {globalError && (
+                    <div className="p-3 rounded-lg flex items-start gap-3" style={{ background: 'color-mix(in srgb, var(--color-danger) 12%, transparent)', border: '0.5px solid color-mix(in srgb, var(--color-danger) 30%, transparent)', color: 'var(--color-danger)', fontSize: 12 }}>
+                      <p>{globalError}</p>
                     </div>
                   )}
-
-                  {/* Nhập prompt thủ công — thay thế prompt template */}
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <p
-                        className="uppercase font-semibold"
-                        style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
-                      >
-                        Prompt
-                      </p>
-                      <button
-                        onClick={() => {
-                          setCloneManualMode((v) => {
-                            const next = !v;
-                            if (next) setEcomPromptText('');
-                            return next;
-                          });
-                        }}
-                        className="flex items-center gap-1 font-semibold transition-opacity hover:opacity-80"
-                        style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
-                      >
-                        <Edit2 size={12} />
-                        {cloneManualMode ? 'DÙNG TEMPLATE' : 'NHẬP THỦ CÔNG'}
-                      </button>
-                    </div>
-                    {cloneManualMode ? (
-                      <>
-                        <textarea
-                          value={ecomPromptText}
-                          onChange={(e) => setEcomPromptText(e.target.value)}
-                          placeholder="Nhập prompt riêng của bạn để tạo template (thay thế prompt mặc định)…"
-                          className="w-full h-28 outline-none transition-colors p-3 resize-none"
-                          style={{
-                            background: 'var(--color-fill)',
-                            color: 'var(--color-text)',
-                            borderRadius: 12,
-                            border: '0.5px solid transparent',
-                            fontSize: 13,
-                            letterSpacing: '-0.01em',
-                          }}
-                          onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
-                          onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
-                        />
-                        <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
-                          Đang dùng prompt thủ công — bỏ qua prompt template {clonePromptType === 'amazon' ? 'Amazon' : 'Taobao'}.
-                        </p>
-                      </>
-                    ) : (
-                      <div
-                        className="rounded-lg px-4 py-3 flex items-center gap-2"
-                        style={{ background: 'var(--color-accent-soft)', border: '0.5px solid var(--color-accent)' }}
-                      >
-                        <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-                        <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
-                          Đang dùng prompt template {clonePromptType === 'amazon' ? 'Amazon' : 'Taobao'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
                 </div>
               ) : ecomSubTab === 'pattern-replace' ? (
                 <div className="flex flex-col gap-6">
@@ -4051,7 +4123,7 @@ function App() {
             </>
             )}
 
-            {(ecomSubTab === 'gen-new' || ecomSubTab === 'clone-template') && (
+            {ecomSubTab === 'gen-new' && (
               <>
                 {/* Section: CÀI ĐẶT */}
                 <div className="mt-6 mb-4 flex items-center gap-2">
@@ -4220,8 +4292,8 @@ function App() {
             )}
               </div>
             </div>
-          {/* Right panel: Results — hidden on pattern-replace (uses full-width layout) */}
-          <div className={`flex-col gap-4 ${ecomSubTab === 'pattern-replace' ? 'hidden' : 'lg:col-span-8 flex'}`}>
+          {/* Right panel: Results — hidden on pattern-replace; full-width below on clone */}
+          <div className={`flex-col gap-4 ${ecomSubTab === 'pattern-replace' ? 'hidden' : ecomSubTab === 'clone-template' ? 'lg:col-span-12 flex' : 'lg:col-span-8 flex'}`}>
             <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
               {ecomSubTab === 'gen-new' && ecomLastFinalImages.length > 0 && (
                 <div className="mb-4 pb-4 border-b border-editor-border/50">
