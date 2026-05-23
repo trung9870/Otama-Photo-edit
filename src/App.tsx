@@ -4826,25 +4826,47 @@ function App() {
                                         <Edit2 size={12} />
                                         Edit
                                       </button>
-                                      <button
-                                        className="absolute bottom-2 right-2 z-10 rounded-lg flex items-center justify-center transition-opacity opacity-0 group-hover:opacity-100"
-                                        style={{
-                                          width: 28,
-                                          height: 28,
-                                          background: 'rgba(0,0,0,0.55)',
-                                          backdropFilter: 'blur(12px)',
-                                          color: '#fff',
-                                          boxShadow: 'var(--shadow-pop)',
-                                          border: '0.5px solid rgba(255,255,255,0.18)',
-                                        }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setZoomImage(res.url);
-                                        }}
-                                        title="Phóng to ảnh"
-                                      >
-                                        <ZoomIn size={14} />
-                                      </button>
+                                      <div className="absolute bottom-2 right-2 z-10 flex items-center gap-1.5 transition-opacity opacity-0 group-hover:opacity-100">
+                                        <button
+                                          className="rounded-lg flex items-center justify-center"
+                                          style={{
+                                            width: 28,
+                                            height: 28,
+                                            background: 'var(--color-accent)',
+                                            color: '#fff',
+                                            boxShadow: 'var(--shadow-pop)',
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const a = document.createElement('a');
+                                            a.href = res.url;
+                                            a.download = `ecom-${Date.now()}-${i + 1}.png`;
+                                            a.click();
+                                          }}
+                                          title="Tải ảnh này"
+                                        >
+                                          <Download size={14} />
+                                        </button>
+                                        <button
+                                          className="rounded-lg flex items-center justify-center"
+                                          style={{
+                                            width: 28,
+                                            height: 28,
+                                            background: 'rgba(0,0,0,0.55)',
+                                            backdropFilter: 'blur(12px)',
+                                            color: '#fff',
+                                            boxShadow: 'var(--shadow-pop)',
+                                            border: '0.5px solid rgba(255,255,255,0.18)',
+                                          }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setZoomImage(res.url);
+                                          }}
+                                          title="Phóng to ảnh"
+                                        >
+                                          <ZoomIn size={14} />
+                                        </button>
+                                      </div>
                                     </>
                                   )}
                                 </div>
