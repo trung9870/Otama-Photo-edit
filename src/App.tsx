@@ -2485,6 +2485,27 @@ function App() {
     }
   };
 
+  // Lưu prompt Thay hiện tại thành mẫu (dùng chung kho ecomSavedPrompts)
+  const handleSaveThayPrompt = async () => {
+    if (!user) { setGlobalError('Vui lòng đăng nhập để lưu prompt!'); return; }
+    if (!ecomThayPrompt.trim()) return;
+    const name = window.prompt('Đặt tên cho prompt mẫu này:');
+    if (!name) return;
+    const id = Math.random().toString(36).substr(2, 9);
+    try {
+      await setDoc(doc(db, 'prompts', id), {
+        id,
+        name,
+        prompt: ecomThayPrompt,
+        type: 'ecom',
+        uid: user.uid,
+        createdAt: Timestamp.now(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `prompts/${id}`);
+    }
+  };
+
   const handleEcomThay = async () => {
     if (!ecomThayModelImage || !ecomThayProductImage) {
       setGlobalError("Vui lòng tải lên cả ẢNH GIƯỜNG (MODEL) và ẢNH SẢN PHẨM (PRODUCT).");
@@ -2514,6 +2535,7 @@ function App() {
           aspectRatio: "3:4",
           imageSize: "1K",
           numberOfImages: 1,
+          clientKieApiKey: kieApiKey,
           clientGoogleApiKey: googleApiKey
         })
       });
@@ -2524,11 +2546,18 @@ function App() {
       }
 
       const data = await response.json();
-      const b64 = data.imagesBase64?.[0] || data.imageBase64;
-      if (!b64) {
-        throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
+      // GPT2 (Kie.ai) trả về async — cần poll; Gemini trả về base64 ngay
+      if (data.isAsync && Array.isArray(data.taskIds)) {
+        const urls = await pollKieTasks(data.taskIds, kieApiKey);
+        if (!urls[0]) throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
+        setEcomThayResult(urls[0]);
+      } else {
+        const b64 = data.imagesBase64?.[0] || data.imageBase64;
+        if (!b64) {
+          throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
+        }
+        setEcomThayResult(`data:image/png;base64,${b64}`);
       }
-      setEcomThayResult(`data:image/png;base64,${b64}`);
     } catch (err: any) {
       console.error(err);
       setGlobalError(err.message || "Có lỗi xảy ra khi thực hiện THAY.");
@@ -3592,54 +3621,102 @@ function App() {
                   )}
                 </div>
               ) : ecomSubTab === 'thay' ? (
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center gap-2 text-editor-accent mb-1">
-                    <Sparkles size={18} />
-                    <h3 className="font-bold text-sm uppercase tracking-widest">Cấu hình Thay Đồ</h3>
+                <div className="flex flex-col gap-5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
+                    <h3 className="font-bold" style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>Cấu hình Thay Đồ</h3>
                   </div>
 
+                  {/* Model */}
                   <div>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">CHỌN MÔ HÌNH AI</p>
-                    <div className="flex bg-[#252525] p-1 rounded-lg">
-                      <button
-                        onClick={() => setEcomThayModel('banana-pro')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${ecomThayModel === 'banana-pro' ? 'bg-[#d4ff00] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        BANANA PRO
-                      </button>
-                      <button
-                        onClick={() => setEcomThayModel('banana-2')}
-                        className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${ecomThayModel === 'banana-2' ? 'bg-[#d4ff00] text-black shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        BANANA 2
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-2 font-bold">NỘI DUNG PROMPT</p>
-                    <textarea
-                      value={ecomThayPrompt}
-                      onChange={(e) => setEcomThayPrompt(e.target.value)}
-                      className="w-full h-32 bg-[#252525] text-white p-3 rounded-lg border border-white/10 focus:border-editor-accent focus:outline-none resize-none text-sm"
-                      placeholder="Mô tả cách thay thế..."
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chọn mô hình AI</p>
+                    <ModelCardPicker<ModelType>
+                      value={ecomThayModel}
+                      onChange={(m) => setEcomThayModel(m)}
+                      options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                        value: m,
+                        name: MODEL_CONFIG[m].name,
+                        sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
+                        best: m === 'banana-pro',
+                      }))}
                     />
                   </div>
 
-                  <button
+                  {/* Saved prompts */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Prompt mẫu đã lưu</p>
+                      <button
+                        onClick={handleSaveThayPrompt}
+                        className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
+                        style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
+                        title="Lưu prompt hiện tại thành mẫu"
+                      >
+                        <Plus size={12} /> LƯU MẪU
+                      </button>
+                    </div>
+                    {ecomSavedPrompts.length === 0 ? (
+                      <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>Chưa có prompt mẫu. Bấm "Lưu mẫu" để lưu prompt hiện tại.</p>
+                    ) : (
+                      <div className="space-y-1" style={showEcomPromptModal ? { maxHeight: 200, overflowY: 'auto' } : undefined}>
+                        {(showEcomPromptModal ? ecomSavedPrompts : ecomSavedPrompts.slice(0, 3)).map((p) => (
+                          <PromptRow
+                            key={p.id}
+                            name={p.name}
+                            active={ecomThayPrompt === p.prompt}
+                            synced={p.isDefault}
+                            onClick={() => setEcomThayPrompt(p.prompt)}
+                            showSync={isAdmin}
+                            onSync={(e) => toggleSyncEcomPrompt(p, e)}
+                            showEdit={isAdmin || !p.isDefault}
+                            showDelete={isAdmin || !p.isDefault}
+                            onEdit={(e) => startEditEcomPrompt(p, e)}
+                            onDelete={(e) => deleteEcomPrompt(p.id, e)}
+                          />
+                        ))}
+                        {ecomSavedPrompts.length > 3 && (
+                          <button
+                            onClick={() => setShowEcomPromptModal((v) => !v)}
+                            className="w-full flex items-center justify-center gap-1.5 transition-colors mt-1"
+                            style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--color-accent)', background: 'var(--color-fill)', borderRadius: 10 }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-soft)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-fill)')}
+                          >
+                            {showEcomPromptModal ? 'Thu gọn' : `Xem tất cả (${ecomSavedPrompts.length})`}
+                            <ChevronRight size={14} style={{ transform: showEcomPromptModal ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Manual prompt content */}
+                  <div>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Nội dung prompt (nhập thủ công)</p>
+                    <textarea
+                      value={ecomThayPrompt}
+                      onChange={(e) => setEcomThayPrompt(e.target.value)}
+                      placeholder="Mô tả cách thay thế…"
+                      className="w-full h-32 outline-none transition-colors p-3 resize-none"
+                      style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 12, border: '0.5px solid transparent', fontSize: 13, letterSpacing: '-0.01em' }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
+                    />
+                  </div>
+
+                  <Button
+                    variant="filled"
+                    size="lg"
+                    fullWidth
+                    icon={isEcomThayGenerating ? Loader2 : Shirt}
                     onClick={handleEcomThay}
                     disabled={!ecomThayModelImage || !ecomThayProductImage || isEcomThayGenerating}
-                    className="w-full py-3 bg-[#8b9d29] text-black rounded-xl font-bold hover:bg-[#a5ba30] transition-colors disabled:opacity-50 flex justify-center items-center gap-2"
                   >
-                    {isEcomThayGenerating ? (
-                      <><Loader2 className="animate-spin" size={20} /> ĐANG XỬ LÝ...</>
-                    ) : (
-                      <><Shirt size={20} /> BẮT ĐẦU THAY</>
-                    )}
-                  </button>
+                    {isEcomThayGenerating ? 'Đang xử lý…' : 'Bắt đầu Thay'}
+                  </Button>
 
                   {(!ecomThayModelImage || !ecomThayProductImage) && (
-                    <p className="text-[10px] text-gray-500 text-center">
+                    <p className="text-center" style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                       👉 Tải ảnh Giường Đích & Chăn Ga ở khu vực bên phải
                     </p>
                   )}
