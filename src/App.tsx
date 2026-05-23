@@ -2305,8 +2305,8 @@ function App() {
       templateB64 = ecomTemplateImage!.split(',')[1];
     }
 
-    // Gộp prompt bổ sung (chỉ áp dụng cho Gen new)
-    if (ecomSubTab === 'gen-new' && ecomSupplementaryPrompt.trim()) {
+    // Gộp prompt bổ sung (áp dụng cho Gen new + Clone Templates)
+    if ((ecomSubTab === 'gen-new' || ecomSubTab === 'clone-template') && ecomSupplementaryPrompt.trim()) {
       currentPrompt = `${currentPrompt}\n\n[YÊU CẦU BỔ SUNG — ƯU TIÊN CAO]:\n${ecomSupplementaryPrompt.trim()}`;
     }
 
@@ -3236,6 +3236,48 @@ function App() {
                       </p>
                     </div>
                   )}
+
+                  {/* Bổ sung prompt thủ công — áp cho mọi user */}
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <p
+                        className="uppercase font-semibold"
+                        style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
+                      >
+                        + Bổ sung prompt (tuỳ chọn)
+                      </p>
+                      {ecomSupplementaryPrompt && (
+                        <button
+                          onClick={() => setEcomSupplementaryPrompt('')}
+                          className="font-semibold transition-colors"
+                          style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-danger)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-tertiary)')}
+                        >
+                          XOÁ
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={ecomSupplementaryPrompt}
+                      onChange={(e) => setEcomSupplementaryPrompt(e.target.value)}
+                      placeholder="VD: Tiêu đề tiếng Việt, tông màu pastel, thêm icon bảo hành, không có chữ Trung Quốc trên ảnh…"
+                      className="w-full h-24 outline-none transition-colors p-3 resize-none"
+                      style={{
+                        background: 'var(--color-accent-soft)',
+                        color: 'var(--color-text)',
+                        borderRadius: 12,
+                        border: '0.5px solid color-mix(in srgb, var(--color-accent) 35%, transparent)',
+                        fontSize: 13,
+                        letterSpacing: '-0.01em',
+                      }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--color-accent) 35%, transparent)')}
+                    />
+                    <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
+                      Nội dung này sẽ được nối vào cuối prompt template với độ ưu tiên cao.
+                    </p>
+                  </div>
                 </div>
               ) : ecomSubTab === 'pattern-replace' ? (
                 <div className="flex flex-col gap-6">
