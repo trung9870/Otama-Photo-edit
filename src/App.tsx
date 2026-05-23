@@ -341,6 +341,11 @@ function App() {
   // Kho prompt riêng cho tab Thay (type 'ecom-thay'), tách khỏi Gen new
   const [ecomThaySavedPrompts, setEcomThaySavedPrompts] = useState<SavedPrompt[]>([]);
   const [showThayPromptAll, setShowThayPromptAll] = useState(false);
+  const [isAddingThayPrompt, setIsAddingThayPrompt] = useState(false);
+  const [newThayPromptName, setNewThayPromptName] = useState('');
+  const [newThayPromptText, setNewThayPromptText] = useState('');
+  const [editingThayPromptId, setEditingThayPromptId] = useState<string | null>(null);
+  const [thayManualMode, setThayManualMode] = useState(false);
 
   useEffect(() => {
     if (selectedEcomPromptId !== 'manual') {
@@ -2491,25 +2496,37 @@ function App() {
     }
   };
 
-  // Lưu prompt Thay hiện tại thành mẫu (dùng chung kho ecomSavedPrompts)
-  const handleSaveThayPrompt = async () => {
+  // Thêm / cập nhật prompt mẫu cho tab Thay (kho riêng type 'ecom-thay')
+  const handleAddThayPrompt = async () => {
+    if (!newThayPromptName || !newThayPromptText) return;
     if (!user) { setGlobalError('Vui lòng đăng nhập để lưu prompt!'); return; }
-    if (!ecomThayPrompt.trim()) return;
-    const name = window.prompt('Đặt tên cho prompt mẫu này:');
-    if (!name) return;
-    const id = Math.random().toString(36).substr(2, 9);
+    const id = editingThayPromptId || Math.random().toString(36).substr(2, 9);
+    const isDefaultPrompt = isAdmin && ecomThaySavedPrompts.some(p => p.id === id && p.isDefault);
     try {
       await setDoc(doc(db, 'prompts', id), {
         id,
-        name,
-        prompt: ecomThayPrompt,
+        name: newThayPromptName,
+        prompt: newThayPromptText,
         type: 'ecom-thay',
-        uid: user.uid,
+        uid: isDefaultPrompt ? 'admin' : user.uid,
         createdAt: Timestamp.now(),
+        ...(isDefaultPrompt ? { isDefault: true } : {}),
       });
+      setIsAddingThayPrompt(false);
+      setEditingThayPromptId(null);
+      setNewThayPromptName('');
+      setNewThayPromptText('');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `prompts/${id}`);
     }
+  };
+
+  const startEditThayPrompt = (p: SavedPrompt, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingThayPromptId(p.id);
+    setNewThayPromptName(p.name);
+    setNewThayPromptText(p.prompt);
+    setIsAddingThayPrompt(true);
   };
 
   const handleEcomThay = async () => {
@@ -3648,37 +3665,96 @@ function App() {
                     />
                   </div>
 
-                  {/* Saved prompts */}
+                  {/* Saved prompts — full gen-new style */}
                   <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Prompt mẫu đã lưu</p>
-                      <button
-                        onClick={handleSaveThayPrompt}
-                        className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
-                        style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
-                        title="Lưu prompt hiện tại thành mẫu"
-                      >
-                        <Plus size={12} /> LƯU MẪU
-                      </button>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Danh sách đã lưu</p>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => { setThayManualMode(true); setEcomThayPrompt(''); }}
+                          className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
+                          style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
+                        >
+                          <Edit2 size={12} /> THỦ CÔNG
+                        </button>
+                        <button
+                          onClick={() => {
+                            setNewThayPromptName('');
+                            setNewThayPromptText(ecomThayPrompt);
+                            setEditingThayPromptId(null);
+                            setIsAddingThayPrompt(true);
+                          }}
+                          className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
+                          style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
+                        >
+                          <Plus size={12} /> THÊM
+                        </button>
+                      </div>
                     </div>
-                    {ecomThaySavedPrompts.length === 0 ? (
-                      <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>Chưa có prompt mẫu. Bấm "Lưu mẫu" để lưu prompt hiện tại.</p>
+
+                    {isAddingThayPrompt ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 rounded-xl space-y-3 mb-2"
+                        style={{ background: 'var(--color-accent-soft)', border: '0.5px solid var(--color-accent)' }}
+                      >
+                        <input
+                          type="text"
+                          placeholder="Tên prompt..."
+                          value={newThayPromptName}
+                          onChange={(e) => setNewThayPromptName(e.target.value)}
+                          className="w-full outline-none p-2.5"
+                          style={{ background: 'var(--color-card)', color: 'var(--color-text)', borderRadius: 10, fontSize: 12, border: '0.5px solid var(--color-border-soft)' }}
+                        />
+                        <textarea
+                          placeholder="Nội dung prompt chi tiết..."
+                          value={newThayPromptText}
+                          onChange={(e) => setNewThayPromptText(e.target.value)}
+                          className="w-full outline-none p-2.5 min-h-[80px] resize-none"
+                          style={{ background: 'var(--color-card)', color: 'var(--color-text)', borderRadius: 10, fontSize: 12, border: '0.5px solid var(--color-border-soft)' }}
+                        />
+                        <div className="flex gap-2">
+                          <Button variant="filled" size="sm" fullWidth onClick={handleAddThayPrompt}>
+                            {editingThayPromptId ? 'Cập nhật' : 'Lưu prompt'}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              setIsAddingThayPrompt(false);
+                              setEditingThayPromptId(null);
+                              setNewThayPromptName('');
+                              setNewThayPromptText('');
+                            }}
+                          >
+                            Hủy
+                          </Button>
+                        </div>
+                      </motion.div>
                     ) : (
                       <div className="space-y-1" style={showThayPromptAll ? { maxHeight: 200, overflowY: 'auto' } : undefined}>
+                        {thayManualMode && (
+                          <PromptRow name="📝 Nhập thủ công" active onClick={() => {}} showEdit={false} showDelete={false} />
+                        )}
                         {(showThayPromptAll ? ecomThaySavedPrompts : ecomThaySavedPrompts.slice(0, 3)).map((p) => (
                           <PromptRow
                             key={p.id}
                             name={p.name}
-                            active={ecomThayPrompt === p.prompt}
+                            active={!thayManualMode && ecomThayPrompt === p.prompt}
                             synced={p.isDefault}
-                            onClick={() => setEcomThayPrompt(p.prompt)}
+                            onClick={() => { setEcomThayPrompt(p.prompt); setThayManualMode(false); }}
                             showSync={isAdmin}
                             onSync={(e) => toggleSyncEcomPrompt(p, e)}
-                            showEdit={false}
+                            showEdit={isAdmin || !p.isDefault}
                             showDelete={isAdmin || !p.isDefault}
+                            onEdit={(e) => startEditThayPrompt(p, e)}
                             onDelete={(e) => deleteEcomPrompt(p.id, e)}
                           />
                         ))}
+                        {ecomThaySavedPrompts.length === 0 && !thayManualMode && (
+                          <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>Chưa có prompt mẫu. Bấm "THÊM" để tạo, hoặc "THỦ CÔNG" để nhập trực tiếp.</p>
+                        )}
                         {ecomThaySavedPrompts.length > 3 && (
                           <button
                             onClick={() => setShowThayPromptAll((v) => !v)}
@@ -3695,12 +3771,14 @@ function App() {
                     )}
                   </div>
 
-                  {/* Manual prompt content */}
+                  {/* Nội dung prompt hiện tại / thủ công */}
                   <div>
-                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Nội dung prompt (nhập thủ công)</p>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                      {thayManualMode ? 'Nhập Prompt mới' : 'Nội dung Prompt hiện tại'}
+                    </p>
                     <textarea
                       value={ecomThayPrompt}
-                      onChange={(e) => setEcomThayPrompt(e.target.value)}
+                      onChange={(e) => { setEcomThayPrompt(e.target.value); if (!thayManualMode) setThayManualMode(true); }}
                       placeholder="Mô tả cách thay thế…"
                       className="w-full h-32 outline-none transition-colors p-3 resize-none"
                       style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 12, border: '0.5px solid transparent', fontSize: 13, letterSpacing: '-0.01em' }}
