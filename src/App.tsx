@@ -3054,7 +3054,7 @@ function App() {
   return (
     <div
       className="min-h-screen flex flex-col"
-      style={appMode === 'clothing' || appMode === 'ecom' ? { background: 'var(--color-bg)' } : undefined}
+      style={{ background: 'var(--color-bg)' }}
     >
       <Header
         appMode={appMode}
