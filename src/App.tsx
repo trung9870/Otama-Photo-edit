@@ -49,7 +49,8 @@ import {
   Check,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  Key
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -7037,74 +7038,138 @@ function App() {
       </footer>
       <AnimatePresence>
         {isSettingsOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="glass-panel p-6 w-full max-w-md relative"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSettingsOpen(false)}
+              className="absolute inset-0"
+              style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)' }}
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 34 }}
+              className="relative w-full md:w-[480px] flex flex-col"
+              style={{
+                maxHeight: '88vh',
+                background: 'var(--color-card)',
+                border: '0.5px solid var(--color-border-soft)',
+                boxShadow: 'var(--shadow-sheet)',
+                borderRadius: 22,
+                borderBottomLeftRadius: 0,
+                borderBottomRightRadius: 0,
+              }}
             >
-              <button 
-                onClick={() => setIsSettingsOpen(false)}
-                className="absolute top-4 right-4 text-gray-400 hover:text-white"
-              >
-                <X size={20} />
-              </button>
-              
-              <div className="flex items-center gap-3 mb-6">
-                <Settings className="text-editor-accent" size={24} />
-                <h2 className="text-xl font-bold">Cài đặt API Key</h2>
-              </div>
-              
-              <div className="space-y-6">
-                <div className="bg-editor-border/30 p-4 rounded-xl border border-editor-border space-y-3">
-                  <h3 className="text-sm font-bold text-amber-500 flex items-center gap-2">
-                    Kie.ai API Key
-                  </h3>
-                  <p className="text-[10px] text-gray-400 leading-relaxed">
-                    Sử dụng cho các mô hình "GPT2" và "Banana Pro".
-                    <br/>Lấy tại <a href="https://kie.ai" target="_blank" rel="noopener noreferrer" className="text-editor-accent underline">kie.ai</a>.
-                  </p>
-                  <input 
-                    type="password"
-                    placeholder="sk-..."
-                    value={kieApiKey}
-                    onChange={(e) => {
-                      setKieApiKey(e.target.value);
-                      localStorage.setItem('kieApiKey', e.target.value);
-                    }}
-                    className="w-full bg-black/50 border border-editor-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-editor-accent"
-                  />
-                </div>
-
-                <div className="bg-editor-border/30 p-4 rounded-xl border border-editor-border space-y-3">
-                  <h3 className="text-sm font-bold text-blue-400 flex items-center gap-2">
-                    Google AI Studio API Key  
-                  </h3>
-                  <p className="text-[10px] text-gray-400 leading-relaxed">
-                    Sử dụng cho mô hình "Banana 2" (miễn phí).
-                    <br/>Lấy tại <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-editor-accent underline">aistudio.google.com</a>.
-                  </p>
-                  <input 
-                    type="password"
-                    placeholder="AIzaSy..."
-                    value={googleApiKey}
-                    onChange={(e) => {
-                      setGoogleApiKey(e.target.value);
-                      localStorage.setItem('googleApiKey', e.target.value);
-                    }}
-                    className="w-full bg-black/50 border border-editor-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-editor-accent"
-                  />
-                </div>
+              {/* Mobile drag handle */}
+              <div className="md:hidden flex justify-center pt-3">
+                <div style={{ width: 36, height: 5, borderRadius: 999, background: 'var(--color-border)' }} />
               </div>
 
-              <div className="mt-6 flex justify-end">
+              <div className="flex items-center justify-between px-6 pt-5 pb-4" style={{ borderBottom: '0.5px solid var(--color-border-soft)' }}>
+                <h2 className="font-bold flex items-center gap-2" style={{ fontSize: 20, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
+                  <Settings size={20} style={{ color: 'var(--color-accent)' }} /> Cài đặt
+                </h2>
                 <button
                   onClick={() => setIsSettingsOpen(false)}
-                  className="bg-editor-accent text-white font-bold px-6 py-2 rounded-lg hover:shadow-[0_0_15px_rgba(212,255,0,0.3)] transition-all"
+                  className="rounded-full p-1.5 transition-colors"
+                  style={{ color: 'var(--color-text-tertiary)' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-fill)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
-                  Xong
+                  <X size={20} />
                 </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                {/* SECTION: API Keys */}
+                <div>
+                  <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>API Keys</p>
+                  <div className="space-y-3">
+                    <div className="p-4 space-y-2" style={{ background: 'var(--color-fill)', borderRadius: 14 }}>
+                      <div className="flex items-center gap-2">
+                        <Key size={14} style={{ color: 'var(--color-warning)' }} />
+                        <h3 className="font-bold" style={{ fontSize: 13, color: 'var(--color-text)' }}>Kie.ai API Key</h3>
+                      </div>
+                      <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                        Dùng cho "GPT2" và "Banana Pro". Lấy tại <a href="https://kie.ai" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>kie.ai</a>.
+                      </p>
+                      <input
+                        type="password"
+                        placeholder="sk-..."
+                        value={kieApiKey}
+                        onChange={(e) => { setKieApiKey(e.target.value); localStorage.setItem('kieApiKey', e.target.value); }}
+                        className="w-full outline-none transition-colors p-2.5"
+                        style={{ background: 'var(--color-card)', color: 'var(--color-text)', borderRadius: 10, fontSize: 13, border: '0.5px solid var(--color-border-soft)' }}
+                        onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                        onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-soft)')}
+                      />
+                    </div>
+                    <div className="p-4 space-y-2" style={{ background: 'var(--color-fill)', borderRadius: 14 }}>
+                      <div className="flex items-center gap-2">
+                        <Key size={14} style={{ color: 'var(--color-teal)' }} />
+                        <h3 className="font-bold" style={{ fontSize: 13, color: 'var(--color-text)' }}>Google AI Studio API Key</h3>
+                      </div>
+                      <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                        Dùng cho "Banana 2" (miễn phí). Lấy tại <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>aistudio.google.com</a>.
+                      </p>
+                      <input
+                        type="password"
+                        placeholder="AIzaSy..."
+                        value={googleApiKey}
+                        onChange={(e) => { setGoogleApiKey(e.target.value); localStorage.setItem('googleApiKey', e.target.value); }}
+                        className="w-full outline-none transition-colors p-2.5"
+                        style={{ background: 'var(--color-card)', color: 'var(--color-text)', borderRadius: 10, fontSize: 13, border: '0.5px solid var(--color-border-soft)' }}
+                        onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                        onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-soft)')}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECTION: Giao diện */}
+                <div>
+                  <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Giao diện</p>
+                  <div className="p-4 flex items-center justify-between" style={{ background: 'var(--color-fill)', borderRadius: 14 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text)' }}>Chế độ hiển thị</span>
+                    <Segmented<'light' | 'dark' | 'system'>
+                      value={theme}
+                      onChange={(v) => setTheme(v)}
+                      size="sm"
+                      options={[
+                        { value: 'light', label: 'Sáng', icon: Sun },
+                        { value: 'dark', label: 'Tối', icon: Moon },
+                        { value: 'system', label: 'Auto', icon: Monitor },
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                {/* SECTION: Tài khoản */}
+                {user && (
+                  <div>
+                    <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tài khoản</p>
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      tone="danger"
+                      icon={LogOut}
+                      fullWidth
+                      onClick={() => { setIsSettingsOpen(false); handleLogout(); }}
+                      style={{ color: 'var(--color-danger)' }}
+                    >
+                      Đăng xuất ({user.email})
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="px-6 py-4" style={{ borderTop: '0.5px solid var(--color-border-soft)' }}>
+                <Button variant="filled" size="md" fullWidth onClick={() => setIsSettingsOpen(false)}>
+                  Xong
+                </Button>
               </div>
             </motion.div>
           </div>
