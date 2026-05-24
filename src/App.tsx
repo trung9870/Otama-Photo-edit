@@ -71,6 +71,10 @@ import {
   Timestamp,
   OperationType,
   handleFirestoreError,
+  storage,
+  storageRef,
+  uploadString,
+  getDownloadURL,
   User as FirebaseUser
 } from './firebase';
 import AdminPanel from './components/AdminPanel';
@@ -1872,9 +1876,10 @@ function App() {
           }
 
           if (resultUrl) {
-            setImages(prev => prev.map((item, idx) => 
+            setImages(prev => prev.map((item, idx) =>
               idx === i ? { ...item, processed: resultUrl, isProcessing: false } : item
             ));
+            pushHistory(resultUrl, { feature: 'clothing-gen', model: modelId, size: '1k' });
           } else {
             throw new Error("AI did not return an image.");
           }
@@ -2349,6 +2354,45 @@ function App() {
     }
   };
 
+  // Lưu 1 ảnh kết quả vào Lịch sử (Firebase Storage + Firestore 'history').
+  // Nhận data URL (base64) hoặc URL remote (Kie). Nén JPEG trước khi upload.
+  const pushHistory = async (imageSrc: string, meta: { feature: string; model: string; size?: string }) => {
+    if (!user || !imageSrc) return;
+    try {
+      // Chuẩn hoá về data URL
+      let dataUrl = imageSrc;
+      if (!imageSrc.startsWith('data:')) {
+        const resp = await fetch(`/api/proxy-image?url=${encodeURIComponent(imageSrc)}`);
+        if (!resp.ok) return;
+        const blob = await resp.blob();
+        dataUrl = await new Promise<string>((resolve) => {
+          const r = new FileReader();
+          r.onloadend = () => resolve(r.result as string);
+          r.readAsDataURL(blob);
+        });
+      }
+      const compressed = await compressImageDataUrl(dataUrl, 1600, 0.8);
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const path = `history/${user.uid}/${id}.jpg`;
+      const sref = storageRef(storage, path);
+      await uploadString(sref, compressed, 'data_url');
+      const url = await getDownloadURL(sref);
+      await setDoc(doc(collection(db, 'history'), id), {
+        id,
+        url,
+        path,
+        feature: meta.feature,
+        model: meta.model,
+        size: meta.size || '',
+        uid: user.uid,
+        email: user.email,
+        ts: Timestamp.now(),
+      });
+    } catch (e) {
+      console.warn('pushHistory failed', e);
+    }
+  };
+
   const logView = async (view: string) => {
     if (!user) return;
     try {
@@ -2512,7 +2556,9 @@ function App() {
 
       if (generatedImages.length > 0) {
         setEcomResults(generatedImages);
-        logUsage(ecomSubTab === 'clone-template' ? 'ecom-clone' : 'ecom-gen-new', config.id, generatedImages.length, ecomImageSize);
+        const feat = ecomSubTab === 'clone-template' ? 'ecom-clone' : 'ecom-gen-new';
+        logUsage(feat, config.id, generatedImages.length, ecomImageSize);
+        generatedImages.forEach((u) => pushHistory(u, { feature: feat, model: config.id, size: ecomImageSize }));
       } else {
         throw new Error("Không có ảnh kết quả trả về.");
       }
@@ -2680,6 +2726,7 @@ function App() {
       if (results.length === 0) throw new Error('Không có ảnh kết quả trả về.');
       setComposeResults(results);
       logUsage('ecom-compose', MODEL_CONFIG[composeModel]?.id || composeModel, results.length, composeQuality);
+      results.forEach((u) => pushHistory(u, { feature: 'ecom-compose', model: MODEL_CONFIG[composeModel]?.id || composeModel, size: composeQuality }));
     } catch (err: any) {
       console.error('Compose error:', err);
       setGlobalError(err.message || 'Có lỗi xảy ra khi ghép ảnh.');
@@ -2729,18 +2776,21 @@ function App() {
 
       const data = await response.json();
       // GPT2 (Kie.ai) trả về async — cần poll; Gemini trả về base64 ngay
+      let thayResultUrl = '';
       if (data.isAsync && Array.isArray(data.taskIds)) {
         const urls = await pollKieTasks(data.taskIds, kieApiKey);
         if (!urls[0]) throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
-        setEcomThayResult(urls[0]);
+        thayResultUrl = urls[0];
       } else {
         const b64 = data.imagesBase64?.[0] || data.imageBase64;
         if (!b64) {
           throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
         }
-        setEcomThayResult(`data:image/png;base64,${b64}`);
+        thayResultUrl = `data:image/png;base64,${b64}`;
       }
+      setEcomThayResult(thayResultUrl);
       logUsage('ecom-thay', actualModelId, 1, '1k');
+      pushHistory(thayResultUrl, { feature: 'ecom-thay', model: actualModelId, size: '1k' });
     } catch (err: any) {
       console.error(err);
       setGlobalError(err.message || "Có lỗi xảy ra khi thực hiện THAY.");
@@ -2810,6 +2860,7 @@ function App() {
         }
         setEcomResults(generatedImages);
         logUsage('ecom-pattern', config.id, generatedImages.length || ecomImageCount, ecomImageSize);
+        generatedImages.forEach((u) => pushHistory(u, { feature: 'ecom-pattern', model: config.id, size: ecomImageSize }));
       } else {
         const err = await response.json();
         throw new Error(err.error || "Lỗi Server");
@@ -3008,11 +3059,15 @@ function App() {
                 console.warn("Enhance error for piece", errData);
              } else {
                 const data = await res.json();
-                if (data.imageBase64) finalUrl = `data:image/jpeg;base64,${data.imageBase64}`;
+                if (data.isAsync && Array.isArray(data.taskIds)) {
+                  const urls = await pollKieTasks(data.taskIds, kieApiKey);
+                  if (urls[0]) finalUrl = urls[0];
+                } else if (data.imageBase64) finalUrl = `data:image/jpeg;base64,${data.imageBase64}`;
                 else if (data.imagesBase64?.length > 0) finalUrl = `data:image/jpeg;base64,${data.imagesBase64[0]}`;
              }
 
              setEcomFinalImages(prev => prev.map(img => img.id === box.id ? { ...img, url: finalUrl, loading: false } : img));
+             if (finalUrl !== box.cropUrl) pushHistory(finalUrl, { feature: 'ecom-enhance', model: enhanceModel === 'banana-pro' ? 'nano-banana-pro' : 'nano-banana-2', size: ecomImageSize });
           } catch(e) {
              console.warn("Exception during piece enhancement", e);
              setEcomFinalImages(prev => prev.map(img => img.id === box.id ? { ...img, loading: false } : img));

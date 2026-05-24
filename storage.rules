@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Lịch sử ảnh gen: mỗi user ghi vào thư mục của mình; mọi user đăng nhập đọc được
+    // (admin cần xem toàn bộ lịch sử). Giới hạn 8 MB/ảnh.
+    match /history/{userId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.uid == userId
+                   && request.resource.size < 8 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null;
+    }
+  }
+}

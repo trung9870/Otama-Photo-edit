@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType, storage, storageRef, deleteObject } from '../firebase';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '../firebase';
-import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3, ImageIcon, DollarSign, MousePointerClick, Sparkles, Wallet, RotateCw } from 'lucide-react';
+import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3, ImageIcon, DollarSign, MousePointerClick, Sparkles, Wallet, RotateCw, Clock, Download, Trash2, ZoomIn } from 'lucide-react';
 import { Button, Pill, Switch, Segmented } from './ui';
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -27,7 +27,9 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 export default function AdminPanel({ currentUser }: { currentUser: any }) {
-  const [adminTab, setAdminTab] = useState<'users' | 'stats'>('users');
+  const [adminTab, setAdminTab] = useState<'users' | 'stats' | 'history'>('users');
+  const [history, setHistory] = useState<any[]>([]);
+  const [zoomUrl, setZoomUrl] = useState<string | null>(null);
   const [timeFilter, setTimeFilter] = useState<'today' | '7d' | '30d' | 'all' | 'custom'>('30d');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -80,6 +82,31 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   useEffect(() => {
     if (adminTab === 'stats') fetchKieCredits();
   }, [adminTab]);
+
+  // Lịch sử ảnh đã gen
+  useEffect(() => {
+    if (adminTab !== 'history') return;
+    const unsub = onSnapshot(collection(db, 'history'), (snap) => {
+      const items = snap.docs.map(d => d.data());
+      items.sort((a, b) => {
+        const ta = a.ts?.toMillis ? a.ts.toMillis() : (a.ts?.seconds || 0) * 1000;
+        const tb = b.ts?.toMillis ? b.ts.toMillis() : (b.ts?.seconds || 0) * 1000;
+        return tb - ta;
+      });
+      setHistory(items);
+    }, (err) => console.warn('history subscribe error', err));
+    return () => unsub();
+  }, [adminTab]);
+
+  const deleteHistoryItem = async (item: any) => {
+    if (!window.confirm('Xóa ảnh này khỏi lịch sử?')) return;
+    try {
+      if (item.path) await deleteObject(storageRef(storage, item.path)).catch(() => {});
+      await deleteDoc(doc(db, 'history', item.id));
+    } catch (e) {
+      console.warn('delete history failed', e);
+    }
+  };
 
   const analytics = useMemo(() => {
     // Lọc theo thời gian dựa trên ts (Firestore Timestamp)
@@ -231,17 +258,61 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         </div>
       )}
 
-      <Segmented<'users' | 'stats'>
+      <Segmented<'users' | 'stats' | 'history'>
         value={adminTab}
         onChange={(v) => setAdminTab(v)}
         size="lg"
         options={[
           { value: 'users', label: 'Người dùng', icon: Users },
           { value: 'stats', label: 'Thống kê', icon: Sparkles },
+          { value: 'history', label: 'Lịch sử', icon: Clock },
         ]}
       />
 
-      {adminTab === 'stats' ? (
+      {adminTab === 'history' ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{history.length} ảnh đã lưu</p>
+          </div>
+          {history.length === 0 ? (
+            <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', textAlign: 'center', padding: '40px 0' }}>
+              Chưa có ảnh nào trong lịch sử. Ảnh sẽ tự lưu sau mỗi lần gen.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              {history.map((h) => {
+                const d = h.ts?.toMillis ? new Date(h.ts.toMillis()) : h.ts?.seconds ? new Date(h.ts.seconds * 1000) : null;
+                return (
+                  <div key={h.id} className="relative group overflow-hidden" style={{ background: 'var(--color-card)', borderRadius: 14, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
+                    <div className="aspect-square overflow-hidden" style={{ background: 'var(--color-card-secondary)' }}>
+                      <img src={h.url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    </div>
+                    <div className="p-2.5">
+                      <p className="font-semibold truncate" style={{ fontSize: 12, color: 'var(--color-text)' }}>{MODEL_LABELS[h.model] || h.model}</p>
+                      <p className="truncate" style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                        {FEATURE_LABELS[h.feature] || h.feature}{h.size ? ` · ${String(h.size).toUpperCase()}` : ''}
+                      </p>
+                      <p className="truncate" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                        {h.email}{d ? ` · ${d.toLocaleDateString('vi-VN')} ${d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                      </p>
+                    </div>
+                    <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => setZoomUrl(h.url)} className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', color: '#fff', boxShadow: 'var(--shadow-pop)' }} title="Phóng to"><ZoomIn size={14} /></button>
+                      <button onClick={() => { const a = document.createElement('a'); a.href = h.url; a.download = `${h.id}.jpg`; a.target = '_blank'; a.click(); }} className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, background: 'var(--color-accent)', color: '#fff', boxShadow: 'var(--shadow-pop)' }} title="Tải về"><Download size={14} /></button>
+                      <button onClick={() => deleteHistoryItem(h)} className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', color: '#fff', boxShadow: 'var(--shadow-pop)' }} title="Xóa"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {zoomUrl && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center p-6" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }} onClick={() => setZoomUrl(null)}>
+              <img src={zoomUrl} alt="" className="max-w-full max-h-full object-contain rounded-xl" onClick={(e) => e.stopPropagation()} />
+            </div>
+          )}
+        </div>
+      ) : adminTab === 'stats' ? (
         <div className="space-y-6">
           {/* Time filter */}
           <div className="flex items-center justify-between flex-wrap gap-3">
