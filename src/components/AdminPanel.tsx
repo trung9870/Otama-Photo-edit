@@ -28,6 +28,7 @@ const MODEL_LABELS: Record<string, string> = {
 
 export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [adminTab, setAdminTab] = useState<'users' | 'stats'>('users');
+  const [timeFilter, setTimeFilter] = useState<'today' | '7d' | '30d' | 'all'>('30d');
   const [users, setUsers] = useState<any[]>([]);
   const [usage, setUsage] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,8 +61,22 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   }, [adminTab]);
 
   const analytics = useMemo(() => {
-    const gens = usage.filter(u => u.type === 'gen');
-    const views = usage.filter(u => u.type === 'view');
+    // Lọc theo thời gian dựa trên ts (Firestore Timestamp)
+    const now = Date.now();
+    const cutoff = timeFilter === 'today' ? now - 24 * 3600 * 1000
+      : timeFilter === '7d' ? now - 7 * 24 * 3600 * 1000
+      : timeFilter === '30d' ? now - 30 * 24 * 3600 * 1000
+      : 0;
+    const tsMillis = (u: any) => {
+      const t = u.ts;
+      if (!t) return 0;
+      if (typeof t.toMillis === 'function') return t.toMillis();
+      if (typeof t.seconds === 'number') return t.seconds * 1000;
+      return 0;
+    };
+    const inRange = usage.filter(u => cutoff === 0 || tsMillis(u) >= cutoff);
+    const gens = inRange.filter(u => u.type === 'gen');
+    const views = inRange.filter(u => u.type === 'view');
     const totalImages = gens.reduce((s, g) => s + (g.count || 0), 0);
     const totalCost = gens.reduce((s, g) => s + (g.cost || 0), 0);
     const byModel: Record<string, { count: number; cost: number }> = {};
@@ -88,7 +103,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     });
     views.forEach(v => { byView[v.view || 'unknown'] = (byView[v.view || 'unknown'] || 0) + 1; });
     return { totalImages, totalCost, totalViews: views.length, byModel, byModelSize, byFeature, byUser, byView };
-  }, [usage]);
+  }, [usage, timeFilter]);
 
   const stats = useMemo(() => ({
     total: users.length,
@@ -191,6 +206,24 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
 
       {adminTab === 'stats' ? (
         <div className="space-y-6">
+          {/* Time filter */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <Segmented<'today' | '7d' | '30d' | 'all'>
+              value={timeFilter}
+              onChange={(v) => setTimeFilter(v)}
+              size="sm"
+              options={[
+                { value: 'today', label: 'Hôm nay' },
+                { value: '7d', label: '7 ngày' },
+                { value: '30d', label: '30 ngày' },
+                { value: 'all', label: 'Tất cả' },
+              ]}
+            />
+            <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+              {timeFilter === 'today' ? '24 giờ qua' : timeFilter === '7d' ? '7 ngày qua' : timeFilter === '30d' ? '30 ngày qua' : 'Toàn bộ thời gian'}
+            </span>
+          </div>
+
           {/* Top stats */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
