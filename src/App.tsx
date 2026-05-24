@@ -2310,13 +2310,15 @@ function App() {
   };
 
   // ───────── Usage tracking (Admin analytics) ─────────
-  // Ước tính chi phí USD/ảnh theo model + chất lượng (tham khảo giá Google/Kie 5/2026)
+  // Chi phí USD/ảnh theo model + chất lượng.
+  //  - GPT2 (Kie.ai): giá thật từ dashboard — 1K $0.03 / 2K $0.05 / 4K $0.08
+  //  - Banana Pro / Banana 2: giá Google trực tiếp (Standard tier, 5/2026)
   const estimateGenCost = (modelId: string, count: number, size?: string) => {
     const s = (size || '1k').toLowerCase();
     let per = 0;
     if (modelId === 'gemini-3-pro-image-preview') per = s === '4k' ? 0.24 : 0.134;
     else if (modelId === 'gemini-3.1-flash-image-preview') per = s === '4k' ? 0.151 : s === '2k' ? 0.101 : s.includes('0.5') ? 0.045 : 0.067;
-    else if (modelId === 'gpt-image-2-image-to-image') per = 0.04; // ước tính Kie.ai
+    else if (modelId === 'gpt-image-2-image-to-image') per = s === '4k' ? 0.08 : s === '2k' ? 0.05 : 0.03;
     return per * (count || 1);
   };
 
