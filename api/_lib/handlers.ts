@@ -188,8 +188,9 @@ async function uploadBase64WithFallback(b64: string, apiKey: string): Promise<st
 // ============== /api/generate ==============
 export async function handleGenerate(req: Req, res: Res) {
   try {
-    const { modelId, prompt, imageBase64, templateBase64, aspectRatio, imageSize, numberOfImages, clientKieApiKey, clientGoogleApiKey } = req.body;
-    console.log(`[api] /generate modelId=${modelId} numberOfImages=${numberOfImages} imageSize=${imageSize} hasTemplate=${!!templateBase64}`);
+    const { modelId, prompt, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, clientKieApiKey, clientGoogleApiKey } = req.body;
+    const composeList: string[] = Array.isArray(composeImages) ? composeImages.filter((b: any) => typeof b === 'string' && b.length > 0) : [];
+    console.log(`[api] /generate modelId=${modelId} numberOfImages=${numberOfImages} imageSize=${imageSize} hasTemplate=${!!templateBase64} composeCount=${composeList.length}`);
 
     const defaultGoogleKey = process.env.GEMINI_API_KEY;
     const defaultKieKey = process.env.KIE_API_KEY;
@@ -200,7 +201,10 @@ export async function handleGenerate(req: Req, res: Res) {
 
       let inputUrls: string[] = [];
       try {
-        if (templateBase64) {
+        if (composeList.length > 0) {
+          // Composition mode: upload all N images as input
+          inputUrls = await Promise.all(composeList.map((b64) => uploadBase64WithFallback(b64, apiKey)));
+        } else if (templateBase64) {
           inputUrls = await Promise.all([
             uploadBase64WithFallback(templateBase64, apiKey),
             uploadBase64WithFallback(imageBase64, apiKey)
@@ -247,10 +251,17 @@ export async function handleGenerate(req: Req, res: Res) {
     const callGeminiOnce = async (variantIdx: number): Promise<string[]> => {
       const variedPrompt = prompt + ' '.repeat(variantIdx);
       const parts: any[] = [];
-      if (templateBase64) {
-        parts.push({ inlineData: { data: templateBase64, mimeType: "image/jpeg" } });
+      if (composeList.length > 0) {
+        // Composition mode: send all N images as input parts
+        for (const b64 of composeList) {
+          parts.push({ inlineData: { data: b64, mimeType: "image/jpeg" } });
+        }
+      } else {
+        if (templateBase64) {
+          parts.push({ inlineData: { data: templateBase64, mimeType: "image/jpeg" } });
+        }
+        parts.push({ inlineData: { data: imageBase64, mimeType: "image/jpeg" } });
       }
-      parts.push({ inlineData: { data: imageBase64, mimeType: "image/jpeg" } });
       parts.push({ text: variedPrompt });
       const response = await ai.models.generateContent({
         model: modelId,

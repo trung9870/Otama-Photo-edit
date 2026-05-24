@@ -428,7 +428,7 @@ function App() {
   const [ecomLastFinalImages, setEcomLastFinalImages] = useState<{ id: string, url: string, loading: boolean }[]>([]);
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
-  const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay'>('gen-new');
+  const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>('gen-new');
   const [ecomTemplateImage, setEcomTemplateImage] = useState<string | null>(null);
   const [clonePromptType, setClonePromptType] = useState<'amazon' | 'taobao'>('amazon');
   const [cloneManualMode, setCloneManualMode] = useState(false);
@@ -502,6 +502,17 @@ function App() {
   const ecomThayProductInputRef = useRef<HTMLInputElement>(null);
   const [thayDragOver, setThayDragOver] = useState<'model' | 'product' | null>(null);
   const [thayPasteTarget, setThayPasteTarget] = useState<'model' | 'product'>('model');
+
+  // Compose (Ghép ảnh) state
+  const [composeImages, setComposeImages] = useState<(string | null)[]>([null, null, null, null, null]);
+  const [composeModel, setComposeModel] = useState<'gpt2' | 'banana-pro'>('banana-pro');
+  const [composeQuality, setComposeQuality] = useState<string>('1k');
+  const [composeCount, setComposeCount] = useState<number>(1);
+  const [composePrompt, setComposePrompt] = useState<string>('Ghép tất cả nhân vật trong các ảnh vào cùng một khung hình, đứng cạnh nhau tự nhiên. Giữ nguyên khuôn mặt, trang phục và đặc điểm của từng người. Ánh sáng và bối cảnh hài hòa, chân thực.');
+  const [composeResults, setComposeResults] = useState<string[]>([]);
+  const [isComposing, setIsComposing] = useState(false);
+  const [composeDragOver, setComposeDragOver] = useState<number | null>(null);
+  const composeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [isEditingSavedRooms, setIsEditingSavedRooms] = useState(false);
   const [draftDeletedRoomIds, setDraftDeletedRoomIds] = useState<Set<string>>(new Set());
   const [isEditingSavedModels, setIsEditingSavedModels] = useState(false);
@@ -2529,6 +2540,78 @@ function App() {
     setIsAddingThayPrompt(true);
   };
 
+  // Load a file into a specific compose slot
+  const loadFileToCompose = (file: File, slotIndex: number) => {
+    if (!file.type.startsWith('image/')) {
+      setGlobalError('File không phải ảnh hợp lệ.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      if (!result) return;
+      setComposeImages((prev) => prev.map((img, i) => (i === slotIndex ? result : img)));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleEcomCompose = async () => {
+    const imgs = composeImages.filter((x): x is string => !!x);
+    if (imgs.length < 2) {
+      setGlobalError('Cần ít nhất 2 ảnh để ghép.');
+      return;
+    }
+    setIsComposing(true);
+    setGlobalError(null);
+    setComposeResults([]);
+    try {
+      // Compress every input image to stay under Vercel's 4.5 MB body limit
+      const compressed = await Promise.all(imgs.map((u) => compressImageDataUrl(u, 1600, 0.85)));
+      const base64s = compressed.map((c) => c.split(',')[1]);
+      const config = MODEL_CONFIG[composeModel];
+      const fullPrompt = `${composePrompt} (Quality: ${composeQuality.toUpperCase()})`;
+
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelId: config.id,
+          prompt: fullPrompt,
+          composeImages: base64s,
+          imageBase64: base64s[0],
+          aspectRatio: '1:1',
+          imageSize: composeQuality,
+          numberOfImages: composeCount,
+          clientKieApiKey: kieApiKey,
+          clientGoogleApiKey: googleApiKey,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Lỗi server' }));
+        throw new Error(err.error || 'Lỗi server');
+      }
+      const data = await response.json();
+      let results: string[] = [];
+      if (data.isAsync && Array.isArray(data.taskIds)) {
+        results = await pollKieTasks(data.taskIds, kieApiKey);
+      } else if (data.isUrl) {
+        results = data.imagesBase64;
+      } else if (Array.isArray(data.imagesBase64)) {
+        results = data.imagesBase64.map((b: string) => `data:image/png;base64,${b}`);
+      } else if (data.imageBase64) {
+        results = [`data:image/png;base64,${data.imageBase64}`];
+      }
+      if (results.length === 0) throw new Error('Không có ảnh kết quả trả về.');
+      setComposeResults(results);
+    } catch (err: any) {
+      console.error('Compose error:', err);
+      setGlobalError(err.message || 'Có lỗi xảy ra khi ghép ảnh.');
+    } finally {
+      setIsComposing(false);
+    }
+  };
+
   const handleEcomThay = async () => {
     if (!ecomThayModelImage || !ecomThayProductImage) {
       setGlobalError("Vui lòng tải lên cả ẢNH GIƯỜNG (MODEL) và ẢNH SẢN PHẨM (PRODUCT).");
@@ -3026,7 +3109,7 @@ function App() {
       {appMode === 'ecom' && (
         <main ref={ecomMainRef} className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
           {/* Left panel: Upload and Settings — full width on gen-new, pattern-replace + clone */}
-          <div className={`flex flex-col gap-6 ${ecomSubTab === 'thay' ? 'lg:col-span-4' : 'lg:col-span-12'}`}>
+          <div className={`flex flex-col gap-6 ${ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-4' : 'lg:col-span-12'}`}>
             <div
               className="p-6"
               style={{
@@ -3050,7 +3133,7 @@ function App() {
               </p>
 
               <div className="mb-6">
-                <Segmented<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay'>
+                <Segmented<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>
                   value={ecomSubTab}
                   onChange={(v) => setEcomSubTab(v)}
                   size="md"
@@ -3060,6 +3143,7 @@ function App() {
                     { value: 'clone-template', label: 'Clone' },
                     { value: 'pattern-replace', label: 'Pattern' },
                     { value: 'thay', label: 'Thay' },
+                    { value: 'ghep-anh', label: 'Ghép ảnh' },
                   ]}
                 />
               </div>
@@ -3804,6 +3888,113 @@ function App() {
                     </p>
                   )}
                 </div>
+              ) : ecomSubTab === 'ghep-anh' ? (
+                <div className="flex flex-col gap-5">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
+                    <h3 className="font-bold" style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>Cấu hình Ghép ảnh</h3>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    Tải 2-5 ảnh (mỗi ảnh 1 người/vật) ở khu vực bên phải → AI ghép thành 1 ảnh chung.
+                  </p>
+
+                  {/* Model — chỉ GPT2 + Banana Pro */}
+                  <div>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chọn mô hình AI</p>
+                    <ModelCardPicker<'gpt2' | 'banana-pro'>
+                      value={composeModel}
+                      onChange={(m) => setComposeModel(m)}
+                      columns={2}
+                      options={[
+                        { value: 'banana-pro', name: MODEL_CONFIG['banana-pro'].name, sub: 'Google', best: true },
+                        { value: 'gpt2', name: MODEL_CONFIG['gpt2'].name, sub: 'Kie.ai' },
+                      ]}
+                    />
+                  </div>
+
+                  {/* Chất lượng + Số ảnh */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chất lượng</p>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {['1k', '2k', '4k'].map((size) => {
+                          const active = composeQuality === size;
+                          return (
+                            <button
+                              key={size}
+                              onClick={() => setComposeQuality(size)}
+                              className="py-2 text-center transition-all"
+                              style={{
+                                borderRadius: 10,
+                                background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+                              }}
+                            >
+                              {size.toUpperCase()}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Số ảnh</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {[1, 2].map((count) => {
+                          const active = composeCount === count;
+                          return (
+                            <button
+                              key={count}
+                              onClick={() => setComposeCount(count)}
+                              className="py-2 text-center transition-all"
+                              style={{
+                                borderRadius: 10,
+                                background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                fontSize: 12, fontWeight: 600,
+                              }}
+                            >
+                              {count}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Prompt */}
+                  <div>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Nội dung Prompt</p>
+                    <textarea
+                      value={composePrompt}
+                      onChange={(e) => setComposePrompt(e.target.value)}
+                      placeholder="Mô tả cách ghép các ảnh…"
+                      className="w-full h-32 outline-none transition-colors p-3 resize-none"
+                      style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 12, border: '0.5px solid transparent', fontSize: 13, letterSpacing: '-0.01em' }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
+                    />
+                  </div>
+
+                  <Button
+                    variant="filled"
+                    size="lg"
+                    fullWidth
+                    icon={isComposing ? Loader2 : Sparkles}
+                    onClick={handleEcomCompose}
+                    disabled={composeImages.filter(Boolean).length < 2 || isComposing}
+                  >
+                    {isComposing ? 'Đang ghép…' : 'Bắt đầu Ghép'}
+                  </Button>
+
+                  {composeImages.filter(Boolean).length < 2 && (
+                    <p className="text-center" style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                      👉 Cần ít nhất 2 ảnh. Tải ảnh ở khu vực bên phải.
+                    </p>
+                  )}
+                </div>
               ) : (
                 <div className="flex flex-col gap-6">
                 {/* Settings card — moved on top, with dividers */}
@@ -4245,7 +4436,7 @@ function App() {
               </div>
             </div>
           {/* Right panel: Results — hidden on pattern-replace; full-width below on gen-new/clone */}
-          <div className={`flex-col gap-4 ${ecomSubTab === 'pattern-replace' ? 'hidden' : ecomSubTab === 'thay' ? 'lg:col-span-8 flex' : 'lg:col-span-12 flex'}`}>
+          <div className={`flex-col gap-4 ${ecomSubTab === 'pattern-replace' ? 'hidden' : ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-8 flex' : 'lg:col-span-12 flex'}`}>
             <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
               {ecomSubTab === 'gen-new' && ecomLastFinalImages.length > 0 && (
                 <div className="mb-4 pb-4 border-b border-editor-border/50">
@@ -4278,7 +4469,109 @@ function App() {
                   </div>
                 </div>
               )}
-              {ecomSubTab === 'thay' ? (
+              {ecomSubTab === 'ghep-anh' ? (
+                <div className="flex flex-col gap-6 w-full">
+                  {/* Upload slots */}
+                  <div>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-3">
+                      Ảnh thành phần ({composeImages.filter(Boolean).length}/5) — tối thiểu 2
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                      {composeImages.map((img, i) => (
+                        <div
+                          key={i}
+                          className={`w-full aspect-[3/4] border-2 border-dashed rounded-xl flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group bg-black/20 ${
+                            composeDragOver === i ? 'border-editor-accent bg-editor-accent/10' : 'border-editor-border hover:border-editor-accent'
+                          }`}
+                          onClick={() => composeInputRefs.current[i]?.click()}
+                          onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setComposeDragOver(i); }}
+                          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                          onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setComposeDragOver(null); }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setComposeDragOver(null);
+                            const file = e.dataTransfer.files?.[0];
+                            if (file) loadFileToCompose(file, i);
+                          }}
+                        >
+                          {img ? (
+                            <>
+                              <img src={img} alt={`Ảnh ${i + 1}`} className="w-full h-full object-contain" />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <span className="text-white font-bold text-[10px]">Đổi ảnh</span>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setComposeImages((prev) => prev.map((x, idx) => (idx === i ? null : x))); }}
+                                className="absolute top-1 right-1 p-1 bg-black/70 hover:bg-red-500 text-white rounded-md transition-colors z-10"
+                                title="Xoá ảnh"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </>
+                          ) : (
+                            <div className="flex flex-col items-center gap-1 text-gray-500 group-hover:text-editor-accent text-center px-2">
+                              <Plus size={22} />
+                              <span className="text-[10px] font-medium">Ảnh {i + 1}</span>
+                            </div>
+                          )}
+                          <input
+                            type="file"
+                            ref={(el) => { composeInputRefs.current[i] = el; }}
+                            className="hidden"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) loadFileToCompose(file, i);
+                              e.target.value = '';
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Results */}
+                  <div>
+                    <p className="text-[10px] text-editor-accent uppercase tracking-widest font-bold mb-3">Kết quả ghép</p>
+                    {isComposing ? (
+                      <div className="w-full aspect-video border-2 border-dashed border-editor-border rounded-xl flex flex-col items-center justify-center gap-3 bg-black/30">
+                        <Loader2 className="animate-spin text-editor-accent" size={40} />
+                        <p className="text-editor-accent text-xs font-bold uppercase tracking-widest animate-pulse">Đang ghép ảnh…</p>
+                        <p className="text-gray-400 text-[10px]">AI đang xử lý, 30s — 2 phút.</p>
+                      </div>
+                    ) : composeResults.length > 0 ? (
+                      <div className={`grid gap-4 ${composeResults.length > 1 ? 'grid-cols-2' : 'grid-cols-1 max-w-md'}`}>
+                        {composeResults.map((res, i) => (
+                          <div key={i} className="relative group rounded-xl overflow-hidden border border-editor-border bg-black aspect-[3/4] flex items-center justify-center">
+                            <img src={res} alt={`Kết quả ${i + 1}`} className="w-full h-full object-contain" />
+                            <button
+                              onClick={() => setZoomImage(res)}
+                              className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10"
+                              title="Phóng to"
+                            >
+                              <ZoomIn size={14} />
+                            </button>
+                            <button
+                              onClick={() => { const link = document.createElement('a'); link.href = res; link.download = `ghep-anh-${Date.now()}-${i + 1}.png`; link.click(); }}
+                              className="absolute bottom-3 right-3 p-3 bg-editor-accent text-white rounded-full shadow-lg hover:scale-110 transition-transform"
+                              title="Tải ảnh về"
+                            >
+                              <Download size={18} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="w-full aspect-video border-2 border-dashed border-editor-border rounded-xl flex flex-col items-center justify-center gap-3 text-gray-500 bg-black/20">
+                        <ImageIcon size={40} className="opacity-50" />
+                        <p className="font-bold tracking-widest uppercase text-[10px]">CHƯA CÓ KẾT QUẢ</p>
+                        <p className="text-[10px] opacity-70">Tải 2-5 ảnh & bấm Bắt Đầu Ghép</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : ecomSubTab === 'thay' ? (
                 <div className="flex flex-col gap-6 w-full">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* 1. Model Image */}
