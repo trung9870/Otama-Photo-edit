@@ -310,7 +310,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               { label: 'Tổng ảnh đã gen', value: analytics.totalImages.toLocaleString(), sub: '', icon: ImageIcon, color: 'var(--color-accent)' },
-              { label: 'Credit đã dùng', value: `${analytics.totalCredits.toLocaleString()}`, sub: `≈ $${analytics.totalCost.toFixed(2)}`, icon: DollarSign, color: 'var(--color-success)' },
+              { label: 'Chi phí ước tính', value: `$${analytics.totalCost.toFixed(2)}`, sub: `${analytics.totalCredits.toLocaleString()} credits`, icon: DollarSign, color: 'var(--color-success)' },
               { label: 'Lượt truy cập tab', value: analytics.totalViews.toLocaleString(), sub: '', icon: MousePointerClick, color: 'var(--color-warning)' },
             ].map((s) => (
               <div key={s.label} className="p-4 flex flex-col gap-2" style={{ background: 'var(--color-card)', borderRadius: 16, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
@@ -319,7 +319,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                 </div>
                 <div className="flex items-baseline gap-2">
                   <div className="font-bold" style={{ fontSize: 26, letterSpacing: '-0.02em' }}>{s.value}</div>
-                  {s.sub && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-success)' }}>{s.sub}</span>}
+                  {s.sub && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>{s.sub}</span>}
                 </div>
                 <div className="uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>{s.label}</div>
               </div>
