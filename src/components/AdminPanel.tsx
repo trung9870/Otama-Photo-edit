@@ -28,7 +28,9 @@ const MODEL_LABELS: Record<string, string> = {
 
 export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [adminTab, setAdminTab] = useState<'users' | 'stats'>('users');
-  const [timeFilter, setTimeFilter] = useState<'today' | '7d' | '30d' | 'all'>('30d');
+  const [timeFilter, setTimeFilter] = useState<'today' | '7d' | '30d' | 'all' | 'custom'>('30d');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [usage, setUsage] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,10 +65,6 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const analytics = useMemo(() => {
     // Lọc theo thời gian dựa trên ts (Firestore Timestamp)
     const now = Date.now();
-    const cutoff = timeFilter === 'today' ? now - 24 * 3600 * 1000
-      : timeFilter === '7d' ? now - 7 * 24 * 3600 * 1000
-      : timeFilter === '30d' ? now - 30 * 24 * 3600 * 1000
-      : 0;
     const tsMillis = (u: any) => {
       const t = u.ts;
       if (!t) return 0;
@@ -74,9 +72,27 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       if (typeof t.seconds === 'number') return t.seconds * 1000;
       return 0;
     };
-    const inRange = usage.filter(u => cutoff === 0 || tsMillis(u) >= cutoff);
+    let lo = 0;
+    let hi = Infinity;
+    if (timeFilter === 'today') lo = now - 24 * 3600 * 1000;
+    else if (timeFilter === '7d') lo = now - 7 * 24 * 3600 * 1000;
+    else if (timeFilter === '30d') lo = now - 30 * 24 * 3600 * 1000;
+    else if (timeFilter === 'custom') {
+      if (customFrom) lo = new Date(customFrom + 'T00:00:00').getTime();
+      if (customTo) hi = new Date(customTo + 'T23:59:59').getTime();
+    }
+    const inRange = usage.filter(u => { const m = tsMillis(u); return m >= lo && m <= hi; });
     const gens = inRange.filter(u => u.type === 'gen');
     const views = inRange.filter(u => u.type === 'view');
+    // Theo ngày (cho biểu đồ)
+    const byDay: Record<string, { count: number; cost: number }> = {};
+    gens.forEach(g => {
+      const d = new Date(tsMillis(g));
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      byDay[key] = byDay[key] || { count: 0, cost: 0 };
+      byDay[key].count += g.count || 0;
+      byDay[key].cost += g.cost || 0;
+    });
     const totalImages = gens.reduce((s, g) => s + (g.count || 0), 0);
     const totalCost = gens.reduce((s, g) => s + (g.cost || 0), 0);
     const byModel: Record<string, { count: number; cost: number }> = {};
@@ -102,8 +118,9 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       byUser[u].cost += g.cost || 0;
     });
     views.forEach(v => { byView[v.view || 'unknown'] = (byView[v.view || 'unknown'] || 0) + 1; });
-    return { totalImages, totalCost, totalViews: views.length, byModel, byModelSize, byFeature, byUser, byView };
-  }, [usage, timeFilter]);
+    const dailySeries = Object.entries(byDay).sort((a, b) => a[0].localeCompare(b[0])).map(([day, v]) => ({ day, ...v }));
+    return { totalImages, totalCost, totalViews: views.length, byModel, byModelSize, byFeature, byUser, byView, dailySeries };
+  }, [usage, timeFilter, customFrom, customTo]);
 
   const stats = useMemo(() => ({
     total: users.length,
@@ -208,7 +225,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         <div className="space-y-6">
           {/* Time filter */}
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <Segmented<'today' | '7d' | '30d' | 'all'>
+            <Segmented<'today' | '7d' | '30d' | 'all' | 'custom'>
               value={timeFilter}
               onChange={(v) => setTimeFilter(v)}
               size="sm"
@@ -217,11 +234,32 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                 { value: '7d', label: '7 ngày' },
                 { value: '30d', label: '30 ngày' },
                 { value: 'all', label: 'Tất cả' },
+                { value: 'custom', label: 'Tùy chọn' },
               ]}
             />
-            <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-              {timeFilter === 'today' ? '24 giờ qua' : timeFilter === '7d' ? '7 ngày qua' : timeFilter === '30d' ? '30 ngày qua' : 'Toàn bộ thời gian'}
-            </span>
+            {timeFilter === 'custom' ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="outline-none"
+                  style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 8, padding: '4px 8px', fontSize: 12, border: '0.5px solid var(--color-border-soft)' }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>→</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="outline-none"
+                  style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 8, padding: '4px 8px', fontSize: 12, border: '0.5px solid var(--color-border-soft)' }}
+                />
+              </div>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+                {timeFilter === 'today' ? '24 giờ qua' : timeFilter === '7d' ? '7 ngày qua' : timeFilter === '30d' ? '30 ngày qua' : 'Toàn bộ thời gian'}
+              </span>
+            )}
           </div>
 
           {/* Top stats */}
@@ -245,6 +283,47 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
             <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', textAlign: 'center', padding: '24px 0' }}>
               Chưa có dữ liệu. Số liệu sẽ xuất hiện khi nhân viên bắt đầu gen ảnh.
             </p>
+          )}
+
+          {/* Biểu đồ cột theo ngày */}
+          {analytics.dailySeries.length > 0 && (
+            <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
+              <p className="uppercase font-semibold mb-4" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Ảnh gen theo ngày</p>
+              {(() => {
+                const data = analytics.dailySeries;
+                const maxCount = Math.max(...data.map(d => d.count), 1);
+                const barW = 28;
+                const gap = 8;
+                const chartH = 160;
+                const labelEvery = Math.ceil(data.length / 12); // tránh nhãn chồng nhau
+                return (
+                  <div className="overflow-x-auto pb-1">
+                    <div className="flex items-end gap-2" style={{ height: chartH + 36, minWidth: data.length * (barW + gap) }}>
+                      {data.map((d, i) => {
+                        const h = Math.max(2, Math.round((d.count / maxCount) * chartH));
+                        const [, mm, dd] = d.day.split('-');
+                        return (
+                          <div key={d.day} className="flex flex-col items-center justify-end group" style={{ width: barW }}>
+                            <span className="font-semibold mb-1" style={{ fontSize: 10, color: 'var(--color-text-secondary)' }}>{d.count}</span>
+                            <div
+                              className="w-full rounded-t transition-all relative"
+                              style={{ height: h, background: 'var(--color-accent)' }}
+                              title={`${d.day}: ${d.count} ảnh · $${d.cost.toFixed(2)}`}
+                            />
+                            <span style={{ fontSize: 9, color: 'var(--color-text-tertiary)', marginTop: 4, transform: 'rotate(-45deg)', whiteSpace: 'nowrap', height: 24 }}>
+                              {(i % labelEvery === 0 || i === data.length - 1) ? `${dd}/${mm}` : ''}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+              <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 8 }}>
+                Di chuột vào cột để xem số ảnh + chi phí từng ngày.
+              </p>
+            </div>
           )}
 
           {/* By model + By feature */}
