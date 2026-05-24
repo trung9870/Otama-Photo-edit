@@ -2314,29 +2314,31 @@ function App() {
   };
 
   // ───────── Usage tracking (Admin analytics) ─────────
-  // Chi phí USD/ảnh theo giá Kie.ai (tất cả model giờ route qua Kie):
-  //  - GPT2:        1K $0.03 / 2K $0.05 / 4K $0.08
-  //  - Banana Pro:  1K-2K $0.09 / 4K $0.12
-  //  - Banana 2:    1K $0.04 / 2K $0.06 / 4K $0.09
-  const estimateGenCost = (modelId: string, count: number, size?: string) => {
+  // Số CREDIT Kie.ai tiêu thụ/ảnh (đúng bảng giá Kie — 1 credit = $0.005):
+  //  - GPT2:        1K=6  / 2K=10 / 4K=16 credits
+  //  - Banana Pro:  1K-2K=18 / 4K=24 credits
+  //  - Banana 2:    1K=8  / 2K=12 / 4K=18 credits
+  const KIE_CREDIT_USD = 0.005;
+  const creditsPerImage = (modelId: string, size?: string) => {
     const s = (size || '1k').toLowerCase();
-    let per = 0;
-    if (modelId === 'nano-banana-pro' || modelId === 'gemini-3-pro-image-preview') per = s === '4k' ? 0.12 : 0.09;
-    else if (modelId === 'nano-banana-2' || modelId === 'gemini-3.1-flash-image-preview') per = s === '4k' ? 0.09 : s === '2k' ? 0.06 : 0.04;
-    else if (modelId === 'gpt-image-2-image-to-image') per = s === '4k' ? 0.08 : s === '2k' ? 0.05 : 0.03;
-    return per * (count || 1);
+    if (modelId === 'nano-banana-pro' || modelId === 'gemini-3-pro-image-preview') return s === '4k' ? 24 : 18;
+    if (modelId === 'nano-banana-2' || modelId === 'gemini-3.1-flash-image-preview') return s === '4k' ? 18 : s === '2k' ? 12 : 8;
+    if (modelId === 'gpt-image-2-image-to-image') return s === '4k' ? 16 : s === '2k' ? 10 : 6;
+    return 0; // analyze (text) — không tính credit ảnh
   };
 
   const logUsage = async (feature: string, modelId: string, count: number, size?: string) => {
     if (!user) return;
     try {
-      const cost = estimateGenCost(modelId, count, size);
+      const credits = creditsPerImage(modelId, size) * (count || 1);
+      const cost = credits * KIE_CREDIT_USD;
       await setDoc(doc(collection(db, 'usage')), {
         type: 'gen',
         feature,
         model: modelId,
         count: count || 1,
         size: size || '',
+        credits,
         cost,
         uid: user.uid,
         email: user.email,

@@ -114,6 +114,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     });
     const totalImages = gens.reduce((s, g) => s + (g.count || 0), 0);
     const totalCost = gens.reduce((s, g) => s + (g.cost || 0), 0);
+    const totalCredits = gens.reduce((s, g) => s + (g.credits || 0), 0);
     const byModel: Record<string, { count: number; cost: number }> = {};
     // Chi tiết: model → size → { count, cost }
     const byModelSize: Record<string, Record<string, { count: number; cost: number }>> = {};
@@ -138,7 +139,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     });
     views.forEach(v => { byView[v.view || 'unknown'] = (byView[v.view || 'unknown'] || 0) + 1; });
     const dailySeries = Object.entries(byDay).sort((a, b) => a[0].localeCompare(b[0])).map(([day, v]) => ({ day, ...v }));
-    return { totalImages, totalCost, totalViews: views.length, byModel, byModelSize, byFeature, byUser, byView, dailySeries };
+    return { totalImages, totalCost, totalCredits, totalViews: views.length, byModel, byModelSize, byFeature, byUser, byView, dailySeries };
   }, [usage, timeFilter, customFrom, customTo]);
 
   const stats = useMemo(() => ({
@@ -308,15 +309,18 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           {/* Top stats */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { label: 'Tổng ảnh đã gen', value: analytics.totalImages.toLocaleString(), icon: ImageIcon, color: 'var(--color-accent)' },
-              { label: 'Chi phí ước tính', value: `$${analytics.totalCost.toFixed(2)}`, icon: DollarSign, color: 'var(--color-success)' },
-              { label: 'Lượt truy cập tab', value: analytics.totalViews.toLocaleString(), icon: MousePointerClick, color: 'var(--color-warning)' },
+              { label: 'Tổng ảnh đã gen', value: analytics.totalImages.toLocaleString(), sub: '', icon: ImageIcon, color: 'var(--color-accent)' },
+              { label: 'Credit đã dùng', value: `${analytics.totalCredits.toLocaleString()}`, sub: `≈ $${analytics.totalCost.toFixed(2)}`, icon: DollarSign, color: 'var(--color-success)' },
+              { label: 'Lượt truy cập tab', value: analytics.totalViews.toLocaleString(), sub: '', icon: MousePointerClick, color: 'var(--color-warning)' },
             ].map((s) => (
               <div key={s.label} className="p-4 flex flex-col gap-2" style={{ background: 'var(--color-card)', borderRadius: 16, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
                 <div className="flex items-center justify-center rounded-full" style={{ width: 32, height: 32, background: `color-mix(in srgb, ${s.color} 14%, transparent)`, color: s.color }}>
                   <s.icon size={16} />
                 </div>
-                <div className="font-bold" style={{ fontSize: 26, letterSpacing: '-0.02em' }}>{s.value}</div>
+                <div className="flex items-baseline gap-2">
+                  <div className="font-bold" style={{ fontSize: 26, letterSpacing: '-0.02em' }}>{s.value}</div>
+                  {s.sub && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-success)' }}>{s.sub}</span>}
+                </div>
                 <div className="uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>{s.label}</div>
               </div>
             ))}
@@ -443,7 +447,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           </div>
 
           <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-            * Chi phí là ước tính theo bảng giá Google/Kie (5/2026), dùng để tham khảo tương đối.
+            * Tính theo số credit thật của Kie.ai (1 credit = $0.005). Tổng credit đã dùng khớp với mức trừ trên số dư.
           </p>
         </div>
       ) : (
