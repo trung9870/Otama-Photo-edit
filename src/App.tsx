@@ -219,16 +219,16 @@ const MODEL_CONFIG = {
     requiredKey: 'kie'
   },
   'banana-pro': {
-    id: 'gemini-3-pro-image-preview',
+    id: 'nano-banana-pro',
     name: 'Banana Pro',
-    description: 'Sử dụng Google (Yêu cầu Google API Key trong cài đặt)',
-    requiredKey: 'google'
+    description: 'Google Nano Banana Pro qua Kie.ai (rẻ hơn ~33-50% so với Google trực tiếp).',
+    requiredKey: 'kie'
   },
   'banana-2': {
-    id: 'gemini-3.1-flash-image-preview',
+    id: 'nano-banana-2',
     name: 'Banana 2',
-    description: 'Sử dụng Google (Yêu cầu Google API Key trong cài đặt)',
-    requiredKey: 'google'
+    description: 'Google Nano Banana 2 qua Kie.ai (rẻ hơn ~40% so với Google trực tiếp).',
+    requiredKey: 'kie'
   }
 };
 
@@ -1784,7 +1784,11 @@ function App() {
 
             if (response.ok) {
               const data = await response.json();
-              if (data.isUrl) {
+              if (data.isAsync && Array.isArray(data.taskIds)) {
+                const urls = await pollKieTasks(data.taskIds, kieApiKey);
+                if (!urls[0]) throw new Error("Kie.ai không trả về ảnh.");
+                resultUrl = urls[0];
+              } else if (data.isUrl) {
                 resultUrl = data.imagesBase64[0];
               } else {
                 resultUrl = `data:image/png;base64,${data.imageBase64}`;
@@ -2310,14 +2314,15 @@ function App() {
   };
 
   // ───────── Usage tracking (Admin analytics) ─────────
-  // Chi phí USD/ảnh theo model + chất lượng.
-  //  - GPT2 (Kie.ai): giá thật từ dashboard — 1K $0.03 / 2K $0.05 / 4K $0.08
-  //  - Banana Pro / Banana 2: giá Google trực tiếp (Standard tier, 5/2026)
+  // Chi phí USD/ảnh theo giá Kie.ai (tất cả model giờ route qua Kie):
+  //  - GPT2:        1K $0.03 / 2K $0.05 / 4K $0.08
+  //  - Banana Pro:  1K-2K $0.09 / 4K $0.12
+  //  - Banana 2:    1K $0.04 / 2K $0.06 / 4K $0.09
   const estimateGenCost = (modelId: string, count: number, size?: string) => {
     const s = (size || '1k').toLowerCase();
     let per = 0;
-    if (modelId === 'gemini-3-pro-image-preview') per = s === '4k' ? 0.24 : 0.134;
-    else if (modelId === 'gemini-3.1-flash-image-preview') per = s === '4k' ? 0.151 : s === '2k' ? 0.101 : s.includes('0.5') ? 0.045 : 0.067;
+    if (modelId === 'nano-banana-pro' || modelId === 'gemini-3-pro-image-preview') per = s === '4k' ? 0.12 : 0.09;
+    else if (modelId === 'nano-banana-2' || modelId === 'gemini-3.1-flash-image-preview') per = s === '4k' ? 0.09 : s === '2k' ? 0.06 : 0.04;
     else if (modelId === 'gpt-image-2-image-to-image') per = s === '4k' ? 0.08 : s === '2k' ? 0.05 : 0.03;
     return per * (count || 1);
   };
@@ -2697,7 +2702,7 @@ function App() {
       const compressedProduct = await compressImageDataUrl(ecomThayProductImage, 1600, 0.85);
       const modelB64 = compressedModel.split(',')[1];
       const productB64 = compressedProduct.split(',')[1];
-      const actualModelId = MODEL_CONFIG[ecomThayModel]?.id || 'gemini-3-pro-image-preview';
+      const actualModelId = MODEL_CONFIG[ecomThayModel]?.id || 'nano-banana-pro';
 
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -2956,7 +2961,7 @@ function App() {
     setIsEcomEnhancing(true);
     setGlobalError(null);
 
-    logUsage('ecom-enhance', enhanceModel === 'banana-pro' ? 'gemini-3-pro-image-preview' : 'gemini-3.1-flash-image-preview', selectedBoxIds.length, '1k');
+    logUsage('ecom-enhance', enhanceModel === 'banana-pro' ? 'nano-banana-pro' : 'nano-banana-2', selectedBoxIds.length, '1k');
 
     const selectedBoxesList = ecomBoxes.filter(b => selectedBoxIds.includes(b.id));
 
@@ -2983,7 +2988,7 @@ function App() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  modelId: enhanceModel === 'banana-pro' ? 'gemini-3-pro-image-preview' : 'gemini-3.1-flash-image-preview',
+                  modelId: enhanceModel === 'banana-pro' ? 'nano-banana-pro' : 'nano-banana-2',
                   prompt: 'High-resolution upscale of this product image. Preserve all details, colors, and the original composition. Enhance sharpness, clarity and remove any compression artifacts. Professional studio quality.',
                   imageBase64: base64Data,
                   aspectRatio: enhanceAspectRatio,
@@ -3055,7 +3060,7 @@ function App() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  modelId: 'gemini-3.1-flash-image-preview', // Force Banana 2 (free tier)
+                  modelId: 'nano-banana-2', // Banana 2 qua Kie.ai (rẻ)
                   prompt: 'Translate all Chinese text in this image into Vietnamese. Keep the exact same layout, background, font style, formatting and colors. Only change the text to Vietnamese.',
                   imageBase64: base64Data,
                   aspectRatio: enhanceAspectRatio,
@@ -3073,7 +3078,10 @@ function App() {
                 console.warn("Translation error for piece", errData);
              } else {
                 const data = await res.json();
-                if (data.imageBase64) finalUrl = `data:image/jpeg;base64,${data.imageBase64}`;
+                if (data.isAsync && Array.isArray(data.taskIds)) {
+                  const urls = await pollKieTasks(data.taskIds, kieApiKey);
+                  if (urls[0]) finalUrl = urls[0];
+                } else if (data.imageBase64) finalUrl = `data:image/jpeg;base64,${data.imageBase64}`;
                 else if (data.imagesBase64?.length > 0) finalUrl = `data:image/jpeg;base64,${data.imagesBase64[0]}`;
              }
 

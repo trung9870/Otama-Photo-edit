@@ -18,8 +18,10 @@ const FEATURE_LABELS: Record<string, string> = {
   'ecom-compose': 'Ecom · Ghép ảnh',
 };
 const MODEL_LABELS: Record<string, string> = {
-  'gemini-3-pro-image-preview': 'Banana Pro',
-  'gemini-3.1-flash-image-preview': 'Banana 2',
+  'nano-banana-pro': 'Banana Pro',
+  'nano-banana-2': 'Banana 2',
+  'gemini-3-pro-image-preview': 'Banana Pro (Google)',
+  'gemini-3.1-flash-image-preview': 'Banana 2 (Google)',
   'gpt-image-2-image-to-image': 'GPT2 (Kie)',
   'gemini-3-flash-preview': 'Phân tích (text)',
 };

@@ -73,21 +73,39 @@ export async function handleProxyImage(req: Req, res: Res) {
 }
 
 // ============== Kie.ai helpers ==============
+const KIE_MODELS = ['gpt-image-2-image-to-image', 'kie-ai-gpt2', 'nano-banana-pro', 'nano-banana-2'];
+
 // Create a task and return the taskId immediately (no polling).
-async function createKieImageTask(inputUrls: string[], prompt: string, apiKey: string, aspectRatio: string, imageSize: string): Promise<string> {
-  const finalAspectRatio = aspectRatio === '1:1' ? '1:1' : (aspectRatio === '9:16' ? '9:16' : 'auto');
-  const requestedSize = (imageSize || '1K').toUpperCase();
-  const finalResolution = finalAspectRatio === 'auto'
-    ? '1K'
-    : (finalAspectRatio === '1:1' && requestedSize === '4K' ? '2K' : requestedSize);
+// Supports both GPT Image 2 (input_urls + constrained aspect/resolution) and
+// Google Nano Banana Pro / 2 (image_input + full aspect/resolution support).
+async function createKieImageTask(model: string, inputUrls: string[], prompt: string, apiKey: string, aspectRatio: string, imageSize: string): Promise<string> {
+  const kieModel = model === 'kie-ai-gpt2' ? 'gpt-image-2-image-to-image' : model;
+  const isGpt2 = kieModel === 'gpt-image-2-image-to-image';
+
+  let input: any;
+  if (isGpt2) {
+    // GPT Image 2: chỉ hỗ trợ 1:1 / 9:16 / auto; 1:1 không có 4K
+    const finalAspectRatio = aspectRatio === '1:1' ? '1:1' : (aspectRatio === '9:16' ? '9:16' : 'auto');
+    const requestedSize = (imageSize || '1K').toUpperCase();
+    const finalResolution = finalAspectRatio === 'auto'
+      ? '1K'
+      : (finalAspectRatio === '1:1' && requestedSize === '4K' ? '2K' : requestedSize);
+    input = { prompt, input_urls: inputUrls, aspect_ratio: finalAspectRatio, resolution: finalResolution };
+  } else {
+    // Nano Banana Pro / 2: dùng image_input, hỗ trợ trực tiếp các tỉ lệ + 1K/2K/4K
+    input = {
+      prompt,
+      image_input: inputUrls,
+      aspect_ratio: aspectRatio || 'auto',
+      resolution: (imageSize || '1K').toUpperCase(),
+      output_format: 'png',
+    };
+  }
 
   const createRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gpt-image-2-image-to-image',
-      input: { prompt, input_urls: inputUrls, aspect_ratio: finalAspectRatio, resolution: finalResolution }
-    })
+    body: JSON.stringify({ model: kieModel, input })
   });
   if (!createRes.ok) throw new Error(`Kie.ai error: ${await createRes.text()}`);
   const createData = await createRes.json();
@@ -195,9 +213,9 @@ export async function handleGenerate(req: Req, res: Res) {
     const defaultGoogleKey = process.env.GEMINI_API_KEY;
     const defaultKieKey = process.env.KIE_API_KEY;
 
-    if (modelId === 'gpt-image-2-image-to-image' || modelId === 'kie-ai-gpt2') {
+    if (KIE_MODELS.includes(modelId)) {
       const apiKey = clientKieApiKey || defaultKieKey;
-      if (!apiKey) return res.status(401).json({ error: "Chưa cấu hình API key cho GPT2 (Kie.ai). Vui lòng liên hệ Admin." });
+      if (!apiKey) return res.status(401).json({ error: "Chưa cấu hình API key Kie.ai. Vui lòng liên hệ Admin." });
 
       let inputUrls: string[] = [];
       try {
@@ -223,7 +241,7 @@ export async function handleGenerate(req: Req, res: Res) {
         const taskIds = await Promise.all(
           Array.from({ length: count }).map((_, i) => {
             const variedPrompt = prompt + ' '.repeat(i);
-            return createKieImageTask(inputUrls, variedPrompt, apiKey, aspectRatio, imageSize);
+            return createKieImageTask(modelId, inputUrls, variedPrompt, apiKey, aspectRatio, imageSize);
           })
         );
         console.log("[api] Created Kie taskIds:", taskIds);
