@@ -63,14 +63,21 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     const totalImages = gens.reduce((s, g) => s + (g.count || 0), 0);
     const totalCost = gens.reduce((s, g) => s + (g.cost || 0), 0);
     const byModel: Record<string, { count: number; cost: number }> = {};
+    // Chi tiết: model → size → { count, cost }
+    const byModelSize: Record<string, Record<string, { count: number; cost: number }>> = {};
     const byFeature: Record<string, number> = {};
     const byUser: Record<string, { count: number; cost: number }> = {};
     const byView: Record<string, number> = {};
     gens.forEach(g => {
       const m = g.model || 'unknown';
+      const size = (g.size || '—').toString().toUpperCase();
       byModel[m] = byModel[m] || { count: 0, cost: 0 };
       byModel[m].count += g.count || 0;
       byModel[m].cost += g.cost || 0;
+      byModelSize[m] = byModelSize[m] || {};
+      byModelSize[m][size] = byModelSize[m][size] || { count: 0, cost: 0 };
+      byModelSize[m][size].count += g.count || 0;
+      byModelSize[m][size].cost += g.cost || 0;
       byFeature[g.feature || 'unknown'] = (byFeature[g.feature || 'unknown'] || 0) + (g.count || 0);
       const u = g.email || 'ẩn danh';
       byUser[u] = byUser[u] || { count: 0, cost: 0 };
@@ -78,7 +85,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       byUser[u].cost += g.cost || 0;
     });
     views.forEach(v => { byView[v.view || 'unknown'] = (byView[v.view || 'unknown'] || 0) + 1; });
-    return { totalImages, totalCost, totalViews: views.length, byModel, byFeature, byUser, byView };
+    return { totalImages, totalCost, totalViews: views.length, byModel, byModelSize, byFeature, byUser, byView };
   }, [usage]);
 
   const stats = useMemo(() => ({
@@ -208,15 +215,32 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           {/* By model + By feature */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
-              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo model</p>
-              <div className="space-y-2">
-                {Object.entries(analytics.byModel).sort((a, b) => b[1].count - a[1].count).map(([m, v]) => (
-                  <div key={m} className="flex items-center justify-between" style={{ fontSize: 13 }}>
-                    <span style={{ color: 'var(--color-text)' }}>{MODEL_LABELS[m] || m}</span>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>{v.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${v.cost.toFixed(2)}</span></span>
-                  </div>
-                ))}
-                {Object.keys(analytics.byModel).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo model · chất lượng</p>
+              <div className="space-y-3">
+                {Object.entries(analytics.byModelSize).sort((a, b) => {
+                  const ca = Object.values(a[1]).reduce((s, x) => s + x.count, 0);
+                  const cb = Object.values(b[1]).reduce((s, x) => s + x.count, 0);
+                  return cb - ca;
+                }).map(([m, sizes]) => {
+                  const modelTotal = Object.values(sizes).reduce((acc, x) => ({ count: acc.count + x.count, cost: acc.cost + x.cost }), { count: 0, cost: 0 });
+                  return (
+                    <div key={m}>
+                      <div className="flex items-center justify-between mb-1.5" style={{ fontSize: 13 }}>
+                        <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{MODEL_LABELS[m] || m}</span>
+                        <span className="font-semibold" style={{ color: 'var(--color-text-secondary)' }}>{modelTotal.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${modelTotal.cost.toFixed(2)}</span></span>
+                      </div>
+                      <div className="space-y-1 pl-3" style={{ borderLeft: '2px solid var(--color-border-soft)' }}>
+                        {Object.entries(sizes).sort((a, b) => a[0].localeCompare(b[0])).map(([size, v]) => (
+                          <div key={size} className="flex items-center justify-between" style={{ fontSize: 12 }}>
+                            <span style={{ color: 'var(--color-text-tertiary)' }}>{size}</span>
+                            <span style={{ color: 'var(--color-text-secondary)' }}>{v.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${v.cost.toFixed(2)}</span></span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {Object.keys(analytics.byModelSize).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
               </div>
             </div>
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
