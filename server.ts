@@ -9,7 +9,8 @@ import {
   handleGenerate,
   handleGenerateCheck,
   handleAnalyze,
-  handleDetectGrid
+  handleDetectGrid,
+  handleKieCredits
 } from "./api/_lib/handlers";
 
 dotenv.config({ path: ['.env.local', '.env'] });
@@ -29,6 +30,7 @@ async function startServer() {
   app.get("/api/generate-check", (req, res) => handleGenerateCheck(req as any, res as any));
   app.post("/api/analyze", (req, res) => handleAnalyze(req as any, res as any));
   app.post("/api/detect-grid", (req, res) => handleDetectGrid(req as any, res as any));
+  app.get("/api/kie-credits", (req, res) => handleKieCredits(req as any, res as any));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

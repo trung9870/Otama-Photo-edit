@@ -481,3 +481,26 @@ export async function handleDetectGrid(req: Req, res: Res) {
     return res.status(500).json({ error: formatGeminiError(error.message || "Internal Server Error") });
   }
 }
+
+// ============== /api/kie-credits ==============
+// Trả về số credit còn lại trong tài khoản Kie.ai (dùng key server, không lộ ra client).
+export async function handleKieCredits(req: Req, res: Res) {
+  try {
+    const apiKey = (req.query?.clientKieApiKey as string) || process.env.KIE_API_KEY;
+    if (!apiKey) return res.status(401).json({ error: "Chưa cấu hình Kie API key." });
+    const r = await fetch('https://api.kie.ai/api/v1/chat/credit', {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+    if (!r.ok) return res.status(502).json({ error: `Kie.ai trả về ${r.status}` });
+    const data: any = await r.json();
+    // Chuẩn hoá: số credit có thể nằm ở data.data (number) hoặc data.data.credits
+    let credits: number | null = null;
+    if (typeof data?.data === 'number') credits = data.data;
+    else if (typeof data?.data?.credits === 'number') credits = data.data.credits;
+    else if (typeof data?.credits === 'number') credits = data.credits;
+    return res.json({ credits, raw: data?.data ?? data });
+  } catch (e: any) {
+    console.error("[api] Kie credits error:", e);
+    return res.status(500).json({ error: e.message || "Lỗi lấy số dư Kie.ai" });
+  }
+}

@@ -4,7 +4,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '../firebase';
-import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3, ImageIcon, DollarSign, MousePointerClick, Sparkles } from 'lucide-react';
+import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3, ImageIcon, DollarSign, MousePointerClick, Sparkles, Wallet, RotateCw } from 'lucide-react';
 import { Button, Pill, Switch, Segmented } from './ui';
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -31,6 +31,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [timeFilter, setTimeFilter] = useState<'today' | '7d' | '30d' | 'all' | 'custom'>('30d');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [kieCredits, setKieCredits] = useState<number | null>(null);
+  const [kieCreditsLoading, setKieCreditsLoading] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
   const [usage, setUsage] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +62,23 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       setUsage(snap.docs.map(d => d.data()));
     }, (err) => console.warn('usage subscribe error', err));
     return () => unsub();
+  }, [adminTab]);
+
+  // Lấy số dư credit Kie.ai khi vào tab Thống kê
+  const fetchKieCredits = async () => {
+    setKieCreditsLoading(true);
+    try {
+      const r = await fetch('/api/kie-credits');
+      const data = await r.json();
+      setKieCredits(typeof data.credits === 'number' ? data.credits : null);
+    } catch (e) {
+      console.warn('fetch kie credits failed', e);
+    } finally {
+      setKieCreditsLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (adminTab === 'stats') fetchKieCredits();
   }, [adminTab]);
 
   const analytics = useMemo(() => {
@@ -260,6 +279,30 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                 {timeFilter === 'today' ? '24 giờ qua' : timeFilter === '7d' ? '7 ngày qua' : timeFilter === '30d' ? '30 ngày qua' : 'Toàn bộ thời gian'}
               </span>
             )}
+          </div>
+
+          {/* Số dư Kie.ai */}
+          <div className="p-5 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, var(--color-accent-soft), transparent)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center rounded-full" style={{ width: 40, height: 40, background: 'var(--color-accent)', color: '#fff' }}>
+                <Wallet size={20} />
+              </div>
+              <div>
+                <p className="uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Số dư Kie.ai</p>
+                <div className="font-bold" style={{ fontSize: 26, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
+                  {kieCreditsLoading ? '…' : kieCredits !== null ? `${kieCredits.toLocaleString()} credits` : 'Không lấy được'}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={fetchKieCredits}
+              disabled={kieCreditsLoading}
+              className="rounded-full p-2 transition-colors"
+              style={{ color: 'var(--color-text-secondary)', background: 'var(--color-fill)' }}
+              title="Làm mới số dư"
+            >
+              <RotateCw size={16} className={kieCreditsLoading ? 'animate-spin' : ''} />
+            </button>
           </div>
 
           {/* Top stats */}
