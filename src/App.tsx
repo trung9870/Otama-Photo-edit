@@ -2321,6 +2321,7 @@ function App() {
     let currentPrompt = ecomPromptText || "帮我给我们这件产品做一个详情页,高级感,像山下有松一样表达的售卖详情页。帮我生成电商详情页9:16详情图8张图一张图一页面一卖点";
     let config = MODEL_CONFIG[ecomModel];
     let templateB64: string | undefined = undefined;
+    let templateSource: string | undefined = undefined;
 
     if (ecomSubTab === 'clone-template') {
       // Manual mode: dùng prompt người dùng tự nhập; ngược lại dùng prompt template Amazon/Taobao
@@ -2328,7 +2329,7 @@ function App() {
         ? ecomPromptText.trim()
         : (clonePrompts[clonePromptType] || DEFAULT_CLONE_PROMPTS[clonePromptType]);
       config = MODEL_CONFIG['gpt2']; // force GPT2
-      templateB64 = ecomTemplateImage!.split(',')[1];
+      templateSource = ecomTemplateImage!;
     }
 
     // Gộp prompt bổ sung (chỉ áp dụng cho Gen new)
@@ -2337,7 +2338,11 @@ function App() {
     }
 
     try {
-      const mainBase64 = ecomProductImage.split(',')[1];
+      // Compress images to stay under Vercel's 4.5 MB request body limit
+      const mainBase64 = (await compressImageDataUrl(ecomProductImage, 1600, 0.85)).split(',')[1];
+      if (templateSource) {
+        templateB64 = (await compressImageDataUrl(templateSource, 1600, 0.85)).split(',')[1];
+      }
       
       let generatedImages: string[] = [];
       let serverFailed = false;
@@ -2459,7 +2464,7 @@ function App() {
     const config = MODEL_CONFIG[ecomModel];
 
     try {
-      const mainBase64 = patternSourceImage.split(',')[1];
+      const mainBase64 = (await compressImageDataUrl(patternSourceImage, 1600, 0.85)).split(',')[1];
       const fullPrompt = `${currentPrompt} (Quality: 1K)`;
 
       const response = await fetch('/api/generate', {
@@ -2682,8 +2687,8 @@ function App() {
     const config = MODEL_CONFIG[ecomModel];
 
     try {
-      const mainBase64 = patternMockupImage.split(',')[1];
-      
+      const mainBase64 = (await compressImageDataUrl(patternMockupImage, 1600, 0.85)).split(',')[1];
+
       let finalTemplateBase64 = generatedPattern;
       if (generatedPattern.startsWith('http')) {
         const proxyUrl = generatedPattern.includes('tmpfiles.org') 
@@ -2699,7 +2704,7 @@ function App() {
         });
       }
       
-      const templateBase64 = finalTemplateBase64.split(',')[1];
+      const templateBase64 = (await compressImageDataUrl(finalTemplateBase64, 1600, 0.85)).split(',')[1];
       const fullPrompt = `${currentPrompt} (Quality: ${ecomImageSize.toUpperCase()})`;
 
       const response = await fetch('/api/generate', {
