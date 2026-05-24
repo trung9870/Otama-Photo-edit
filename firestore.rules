@@ -94,6 +94,14 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
     }
 
+    // Usage logs (Admin analytics): bất kỳ user đăng nhập đều ghi được log của mình;
+    // chỉ admin đọc. Không cho sửa/xóa để giữ tính toàn vẹn số liệu.
+    match /usage/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isAuthenticated() && (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);

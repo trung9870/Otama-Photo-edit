@@ -4,11 +4,30 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '../firebase';
-import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3 } from 'lucide-react';
-import { Button, Pill, Switch } from './ui';
+import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3, ImageIcon, DollarSign, MousePointerClick, Sparkles } from 'lucide-react';
+import { Button, Pill, Switch, Segmented } from './ui';
+
+const FEATURE_LABELS: Record<string, string> = {
+  'clothing-gen': 'Quần áo · Gen',
+  'analyze': 'Quần áo · Phân tích',
+  'ecom-gen-new': 'Ecom · Gen new',
+  'ecom-clone': 'Ecom · Clone',
+  'ecom-pattern': 'Ecom · Pattern',
+  'ecom-enhance': 'Ecom · Tách/Enhance',
+  'ecom-thay': 'Ecom · Thay',
+  'ecom-compose': 'Ecom · Ghép ảnh',
+};
+const MODEL_LABELS: Record<string, string> = {
+  'gemini-3-pro-image-preview': 'Banana Pro',
+  'gemini-3.1-flash-image-preview': 'Banana 2',
+  'gpt-image-2-image-to-image': 'GPT2 (Kie)',
+  'gemini-3-flash-preview': 'Phân tích (text)',
+};
 
 export default function AdminPanel({ currentUser }: { currentUser: any }) {
+  const [adminTab, setAdminTab] = useState<'users' | 'stats'>('users');
   const [users, setUsers] = useState<any[]>([]);
+  const [usage, setUsage] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,6 +47,39 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     });
     return () => unsub();
   }, []);
+
+  // Subscribe usage logs only when on stats tab
+  useEffect(() => {
+    if (adminTab !== 'stats') return;
+    const unsub = onSnapshot(collection(db, 'usage'), (snap) => {
+      setUsage(snap.docs.map(d => d.data()));
+    }, (err) => console.warn('usage subscribe error', err));
+    return () => unsub();
+  }, [adminTab]);
+
+  const analytics = useMemo(() => {
+    const gens = usage.filter(u => u.type === 'gen');
+    const views = usage.filter(u => u.type === 'view');
+    const totalImages = gens.reduce((s, g) => s + (g.count || 0), 0);
+    const totalCost = gens.reduce((s, g) => s + (g.cost || 0), 0);
+    const byModel: Record<string, { count: number; cost: number }> = {};
+    const byFeature: Record<string, number> = {};
+    const byUser: Record<string, { count: number; cost: number }> = {};
+    const byView: Record<string, number> = {};
+    gens.forEach(g => {
+      const m = g.model || 'unknown';
+      byModel[m] = byModel[m] || { count: 0, cost: 0 };
+      byModel[m].count += g.count || 0;
+      byModel[m].cost += g.cost || 0;
+      byFeature[g.feature || 'unknown'] = (byFeature[g.feature || 'unknown'] || 0) + (g.count || 0);
+      const u = g.email || 'ẩn danh';
+      byUser[u] = byUser[u] || { count: 0, cost: 0 };
+      byUser[u].count += g.count || 0;
+      byUser[u].cost += g.cost || 0;
+    });
+    views.forEach(v => { byView[v.view || 'unknown'] = (byView[v.view || 'unknown'] || 0) + 1; });
+    return { totalImages, totalCost, totalViews: views.length, byModel, byFeature, byUser, byView };
+  }, [usage]);
 
   const stats = useMemo(() => ({
     total: users.length,
@@ -118,6 +170,103 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         </div>
       )}
 
+      <Segmented<'users' | 'stats'>
+        value={adminTab}
+        onChange={(v) => setAdminTab(v)}
+        size="lg"
+        options={[
+          { value: 'users', label: 'Người dùng', icon: Users },
+          { value: 'stats', label: 'Thống kê', icon: Sparkles },
+        ]}
+      />
+
+      {adminTab === 'stats' ? (
+        <div className="space-y-6">
+          {/* Top stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { label: 'Tổng ảnh đã gen', value: analytics.totalImages.toLocaleString(), icon: ImageIcon, color: 'var(--color-accent)' },
+              { label: 'Chi phí ước tính', value: `$${analytics.totalCost.toFixed(2)}`, icon: DollarSign, color: 'var(--color-success)' },
+              { label: 'Lượt truy cập tab', value: analytics.totalViews.toLocaleString(), icon: MousePointerClick, color: 'var(--color-warning)' },
+            ].map((s) => (
+              <div key={s.label} className="p-4 flex flex-col gap-2" style={{ background: 'var(--color-card)', borderRadius: 16, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
+                <div className="flex items-center justify-center rounded-full" style={{ width: 32, height: 32, background: `color-mix(in srgb, ${s.color} 14%, transparent)`, color: s.color }}>
+                  <s.icon size={16} />
+                </div>
+                <div className="font-bold" style={{ fontSize: 26, letterSpacing: '-0.02em' }}>{s.value}</div>
+                <div className="uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {usage.length === 0 && (
+            <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', textAlign: 'center', padding: '24px 0' }}>
+              Chưa có dữ liệu. Số liệu sẽ xuất hiện khi nhân viên bắt đầu gen ảnh.
+            </p>
+          )}
+
+          {/* By model + By feature */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
+              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo model</p>
+              <div className="space-y-2">
+                {Object.entries(analytics.byModel).sort((a, b) => b[1].count - a[1].count).map(([m, v]) => (
+                  <div key={m} className="flex items-center justify-between" style={{ fontSize: 13 }}>
+                    <span style={{ color: 'var(--color-text)' }}>{MODEL_LABELS[m] || m}</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>{v.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${v.cost.toFixed(2)}</span></span>
+                  </div>
+                ))}
+                {Object.keys(analytics.byModel).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+              </div>
+            </div>
+            <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
+              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo tính năng</p>
+              <div className="space-y-2">
+                {Object.entries(analytics.byFeature).sort((a, b) => b[1] - a[1]).map(([f, c]) => (
+                  <div key={f} className="flex items-center justify-between" style={{ fontSize: 13 }}>
+                    <span style={{ color: 'var(--color-text)' }}>{FEATURE_LABELS[f] || f}</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>{c} ảnh</span>
+                  </div>
+                ))}
+                {Object.keys(analytics.byFeature).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* By user + tab views */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
+              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo nhân viên</p>
+              <div className="space-y-2">
+                {Object.entries(analytics.byUser).sort((a, b) => b[1].count - a[1].count).map(([u, v]) => (
+                  <div key={u} className="flex items-center justify-between" style={{ fontSize: 13 }}>
+                    <span className="truncate" style={{ color: 'var(--color-text)', maxWidth: 200 }}>{u}</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>{v.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${v.cost.toFixed(2)}</span></span>
+                  </div>
+                ))}
+                {Object.keys(analytics.byUser).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+              </div>
+            </div>
+            <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
+              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Lượt truy cập tab</p>
+              <div className="space-y-2">
+                {Object.entries(analytics.byView).sort((a, b) => b[1] - a[1]).map(([v, c]) => (
+                  <div key={v} className="flex items-center justify-between" style={{ fontSize: 13 }}>
+                    <span style={{ color: 'var(--color-text)' }}>{FEATURE_LABELS[v] || v}</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>{c} lượt</span>
+                  </div>
+                ))}
+                {Object.keys(analytics.byView).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+              </div>
+            </div>
+          </div>
+
+          <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            * Chi phí là ước tính theo bảng giá Google/Kie (5/2026), dùng để tham khảo tương đối.
+          </p>
+        </div>
+      ) : (
+        <>
       {/* Stats cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statCards.map((s) => (
@@ -267,6 +416,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

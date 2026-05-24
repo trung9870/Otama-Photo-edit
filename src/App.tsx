@@ -1740,6 +1740,8 @@ function App() {
     // Determine which images to process
     const indicesToProcess = isSingle ? [targetIndex!] : images.map((_, idx) => idx);
 
+    logUsage('clothing-gen', modelId, indicesToProcess.length, '1k');
+
     for (const i of indicesToProcess) {
       const img = images[i];
       
@@ -1900,6 +1902,7 @@ function App() {
     if (!analyzeImage) return;
     setIsAnalyzing(true);
     setGlobalError(null);
+    logUsage('analyze', 'gemini-3-flash-preview', 1, '');
 
     try {
       const base64 = analyzeImage.split(',')[1];
@@ -2306,6 +2309,62 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // ───────── Usage tracking (Admin analytics) ─────────
+  // Ước tính chi phí USD/ảnh theo model + chất lượng (tham khảo giá Google/Kie 5/2026)
+  const estimateGenCost = (modelId: string, count: number, size?: string) => {
+    const s = (size || '1k').toLowerCase();
+    let per = 0;
+    if (modelId === 'gemini-3-pro-image-preview') per = s === '4k' ? 0.24 : 0.134;
+    else if (modelId === 'gemini-3.1-flash-image-preview') per = s === '4k' ? 0.151 : s === '2k' ? 0.101 : s.includes('0.5') ? 0.045 : 0.067;
+    else if (modelId === 'gpt-image-2-image-to-image') per = 0.04; // ước tính Kie.ai
+    return per * (count || 1);
+  };
+
+  const logUsage = async (feature: string, modelId: string, count: number, size?: string) => {
+    if (!user) return;
+    try {
+      const cost = estimateGenCost(modelId, count, size);
+      await setDoc(doc(collection(db, 'usage')), {
+        type: 'gen',
+        feature,
+        model: modelId,
+        count: count || 1,
+        size: size || '',
+        cost,
+        uid: user.uid,
+        email: user.email,
+        ts: Timestamp.now(),
+      });
+    } catch (e) {
+      console.warn('logUsage failed', e);
+    }
+  };
+
+  const logView = async (view: string) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(collection(db, 'usage')), {
+        type: 'view',
+        view,
+        uid: user.uid,
+        email: user.email,
+        ts: Timestamp.now(),
+      });
+    } catch (e) {
+      console.warn('logView failed', e);
+    }
+  };
+
+  // Log lượt truy cập tab khi đổi mode / sub-tab
+  useEffect(() => {
+    if (!user || !isAuthReady) return;
+    let view: string = appMode;
+    if (appMode === 'clothing') view = `clothing-${activeTab}`;
+    else if (appMode === 'ecom') view = `ecom-${ecomSubTab}`;
+    logView(view);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appMode, activeTab, ecomSubTab, user, isAuthReady]);
+
   const handleEcomGenerate = async () => {
     if (!ecomProductImage) return;
     if (ecomSubTab === 'clone-template' && !ecomTemplateImage) {
@@ -2444,6 +2503,7 @@ function App() {
 
       if (generatedImages.length > 0) {
         setEcomResults(generatedImages);
+        logUsage(ecomSubTab === 'clone-template' ? 'ecom-clone' : 'ecom-gen-new', config.id, generatedImages.length, ecomImageSize);
       } else {
         throw new Error("Không có ảnh kết quả trả về.");
       }
@@ -2610,6 +2670,7 @@ function App() {
       }
       if (results.length === 0) throw new Error('Không có ảnh kết quả trả về.');
       setComposeResults(results);
+      logUsage('ecom-compose', MODEL_CONFIG[composeModel]?.id || composeModel, results.length, composeQuality);
     } catch (err: any) {
       console.error('Compose error:', err);
       setGlobalError(err.message || 'Có lỗi xảy ra khi ghép ảnh.');
@@ -2670,6 +2731,7 @@ function App() {
         }
         setEcomThayResult(`data:image/png;base64,${b64}`);
       }
+      logUsage('ecom-thay', actualModelId, 1, '1k');
     } catch (err: any) {
       console.error(err);
       setGlobalError(err.message || "Có lỗi xảy ra khi thực hiện THAY.");
@@ -2738,6 +2800,7 @@ function App() {
           generatedImages = [`data:image/png;base64,${data.imageBase64}`];
         }
         setEcomResults(generatedImages);
+        logUsage('ecom-pattern', config.id, generatedImages.length || ecomImageCount, ecomImageSize);
       } else {
         const err = await response.json();
         throw new Error(err.error || "Lỗi Server");
@@ -2890,6 +2953,8 @@ function App() {
     
     setIsEcomEnhancing(true);
     setGlobalError(null);
+
+    logUsage('ecom-enhance', enhanceModel === 'banana-pro' ? 'gemini-3-pro-image-preview' : 'gemini-3.1-flash-image-preview', selectedBoxIds.length, '1k');
 
     const selectedBoxesList = ecomBoxes.filter(b => selectedBoxIds.includes(b.id));
 
