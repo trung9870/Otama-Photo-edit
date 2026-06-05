@@ -512,6 +512,7 @@ function App() {
   const [composeImages, setComposeImages] = useState<(string | null)[]>([null, null, null, null, null]);
   const [composeModel, setComposeModel] = useState<'gpt2' | 'banana-pro'>('banana-pro');
   const [composeQuality, setComposeQuality] = useState<string>('1k');
+  const [composeAspectRatio, setComposeAspectRatio] = useState<string>('1:1');
   const [composeCount, setComposeCount] = useState<number>(1);
   const [composePrompt, setComposePrompt] = useState<string>('Ghép tất cả nhân vật trong các ảnh vào cùng một khung hình, đứng cạnh nhau tự nhiên. Giữ nguyên khuôn mặt, trang phục và đặc điểm của từng người. Ánh sáng và bối cảnh hài hòa, chân thực.');
   const [composeResults, setComposeResults] = useState<string[]>([]);
@@ -2700,7 +2701,7 @@ function App() {
           prompt: fullPrompt,
           composeImages: base64s,
           imageBase64: base64s[0],
-          aspectRatio: '1:1',
+          aspectRatio: composeAspectRatio,
           imageSize: composeQuality,
           numberOfImages: composeCount,
           clientKieApiKey: kieApiKey,
@@ -4048,6 +4049,12 @@ function App() {
                         { value: 'gpt2', name: MODEL_CONFIG['gpt2'].name, sub: 'Kie.ai' },
                       ]}
                     />
+                  </div>
+
+                  {/* Tỉ lệ khung hình */}
+                  <div>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ khung hình</p>
+                    <ARSelector value={composeAspectRatio as any} onChange={(v) => setComposeAspectRatio(v)} />
                   </div>
 
                   {/* Chất lượng + Số ảnh */}
