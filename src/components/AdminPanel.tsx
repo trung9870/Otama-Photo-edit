@@ -4,7 +4,7 @@ import { db, handleFirestoreError, OperationType, storage, storageRef, deleteObj
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '../firebase';
-import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3, ImageIcon, DollarSign, MousePointerClick, Sparkles, Wallet, RotateCw, Clock, Download, Trash2, ZoomIn } from 'lucide-react';
+import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3, ImageIcon, DollarSign, MousePointerClick, Sparkles, Wand2, Wallet, RotateCw, Clock, Download, Trash2, ZoomIn } from 'lucide-react';
 import { Button, Pill, Switch, Segmented } from './ui';
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -174,6 +174,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     admins: users.filter(u => u.role === 'admin').length,
     clothing: users.filter(u => u.canUseClothing).length,
     ecom: users.filter(u => u.canUseEcom).length,
+    ofa: users.filter(u => u.canUseOfa).length,
+    picset: users.filter(u => u.canUsePicset).length,
   }), [users]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -192,6 +194,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         role: 'user',
         canUseClothing: true,
         canUseEcom: true,
+        canUseOfa: true,
+        canUsePicset: true,
         createdAt: new Date(),
       });
       await secondaryAuth.signOut();
@@ -231,6 +235,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     { label: 'Quản trị viên', value: stats.admins, icon: Shield, color: 'var(--color-indigo)' },
     { label: 'Có quyền Quần áo', value: stats.clothing, icon: Shirt, color: 'var(--color-success)' },
     { label: 'Có quyền Ecom', value: stats.ecom, icon: Grid3x3, color: 'var(--color-warning)' },
+    { label: 'Có quyền OFA', value: stats.ofa, icon: Sparkles, color: 'var(--color-danger)' },
+    { label: 'Có quyền Picset', value: stats.picset, icon: Wand2, color: 'var(--color-accent)' },
   ];
 
   return (
@@ -524,7 +530,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       ) : (
         <>
       {/* Stats cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {statCards.map((s) => (
           <div
             key={s.label}
@@ -660,6 +666,14 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                       <div className="flex flex-col items-center gap-1">
                         <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Ecom</span>
                         <Switch checked={!!u.canUseEcom} onChange={() => togglePermission(u.uid, 'canUseEcom', !!u.canUseEcom)} ariaLabel="Quyền Ecom" />
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>OFA</span>
+                        <Switch checked={!!u.canUseOfa} onChange={() => togglePermission(u.uid, 'canUseOfa', !!u.canUseOfa)} ariaLabel="Quyền OFA" />
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Picset</span>
+                        <Switch checked={!!u.canUsePicset} onChange={() => togglePermission(u.uid, 'canUsePicset', !!u.canUsePicset)} ariaLabel="Quyền Picset" />
                       </div>
                     </div>
                   )}

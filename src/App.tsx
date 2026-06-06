@@ -6197,9 +6197,10 @@ function App() {
         </main>
       )}
 
-      {appMode === 'picset' && (
+      {/* Picset stays mounted across tab switches so in-flight analyze/generate doesn't lose state */}
+      <div style={{ display: appMode === 'picset' ? 'block' : 'none' }}>
         <PicsetTab />
-      )}
+      </div>
 
       {appMode === 'clothing' && (
         <>
