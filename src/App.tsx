@@ -84,6 +84,26 @@ import { Header } from './components/Header';
 import { Login } from './components/Login';
 import { Segmented } from './components/ui';
 import { ARSelector, ModelCardPicker, PromptRow, PromptListModal } from './components/clothing';
+import { OFA_PROMPT_LIBRARY, buildOfaPrompt, type OfaPromptCategory } from './utils/ofaPromptLibrary';
+import PicsetTab from './components/picset/PicsetTab';
+
+type OfaBatchStatus = 'queued' | 'running' | 'done' | 'cancelled' | 'error';
+interface OfaBatch {
+  id: string;
+  startedAt: number;
+  finishedAt?: number;
+  productName: string;
+  description: string;
+  imageBase64s: string[];
+  categoryIds: number[];
+  aspectRatio: string;
+  quality: string;
+  model: 'gpt2' | 'banana-pro';
+  results: { categoryId: number; urls: string[] }[];
+  status: OfaBatchStatus;
+  errorMessage?: string;
+}
+const OFA_MAX_CONCURRENT = 3;
 
 // Error Boundary Component
 class ErrorBoundary extends (Component as any) {
@@ -271,17 +291,33 @@ async function compressImageDataUrl(dataUrl: string, maxDim = 1600, quality = 0.
 // Returns the resulting image URLs in the same order as taskIds.
 // Each poll request hits /api/generate-check (~1s), so a Vercel function
 // timeout never applies to the long-running KIE task itself.
-async function pollKieTasks(taskIds: string[], clientKieApiKey?: string): Promise<string[]> {
+async function pollKieTasks(taskIds: string[], clientKieApiKey?: string, signal?: AbortSignal): Promise<string[]> {
+  const throwIfAborted = () => {
+    if (signal?.aborted) {
+      const err = new Error('Aborted');
+      (err as any).name = 'AbortError';
+      throw err;
+    }
+  };
   const pollSingle = async (taskId: string): Promise<string> => {
     const MAX_ATTEMPTS = 120; // ~6 minutes at 3s interval
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
-      await new Promise((r) => setTimeout(r, 3000));
+      // Sleep but wake immediately if aborted
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, 3000);
+        if (signal) {
+          const onAbort = () => { clearTimeout(t); resolve(); };
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
+      });
+      throwIfAborted();
       const params = new URLSearchParams({ taskId });
       if (clientKieApiKey) params.set('clientKieApiKey', clientKieApiKey);
       let res: Response;
       try {
-        res = await fetch(`/api/generate-check?${params.toString()}`);
-      } catch {
+        res = await fetch(`/api/generate-check?${params.toString()}`, { signal });
+      } catch (e: any) {
+        if (e?.name === 'AbortError') throw e;
         continue; // transient network error → retry
       }
       if (!res.ok) continue;
@@ -321,7 +357,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'generate' | 'analyze' | 'tryon'>('generate');
   
   // App Mode
-  const [appMode, setAppMode] = useState<'clothing' | 'ecom' | 'admin'>('clothing');
+  const [appMode, setAppMode] = useState<'clothing' | 'ecom' | 'ofa' | 'picset' | 'admin'>('clothing');
 
   // API Keys and Settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -519,6 +555,20 @@ function App() {
   const [isComposing, setIsComposing] = useState(false);
   const [composeDragOver, setComposeDragOver] = useState<number | null>(null);
   const composeInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // OFA tab state — detail page generator for product listings
+  const [ofaProductName, setOfaProductName] = useState<string>('');
+  const [ofaDescription, setOfaDescription] = useState<string>('');
+  const [ofaImages, setOfaImages] = useState<(string | null)[]>([null, null, null]);
+  const [ofaSelectedCategoryIds, setOfaSelectedCategoryIds] = useState<number[]>([1]);
+  const [ofaAspectRatio, setOfaAspectRatio] = useState<string>('3:4');
+  const [ofaQuality, setOfaQuality] = useState<string>('2k');
+  const [ofaModel, setOfaModel] = useState<'gpt2' | 'banana-pro'>('banana-pro');
+  const [ofaBatches, setOfaBatches] = useState<OfaBatch[]>([]);
+  const [ofaDragOver, setOfaDragOver] = useState<number | null>(null);
+  const ofaInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const ofaCancelMapRef = useRef<Map<string, { current: boolean }>>(new Map());
+  const ofaAbortMapRef = useRef<Map<string, AbortController>>(new Map());
   const [isEditingSavedRooms, setIsEditingSavedRooms] = useState(false);
   const [draftDeletedRoomIds, setDraftDeletedRoomIds] = useState<Set<string>>(new Set());
   const [isEditingSavedModels, setIsEditingSavedModels] = useState(false);
@@ -783,12 +833,18 @@ function App() {
     if (!user || isAdmin || !userPermissions) return;
     const canClothing = !!userPermissions.canUseClothing;
     const canEcom = !!userPermissions.canUseEcom;
+    const canOfa = !!(userPermissions.canUseOfa ?? userPermissions.canUseEcom);
+    const canPicset = !!(userPermissions.canUsePicset ?? userPermissions.canUseEcom);
     const currentNotAllowed =
       appMode === 'admin' ||
       (appMode === 'clothing' && !canClothing) ||
-      (appMode === 'ecom' && !canEcom);
+      (appMode === 'ecom' && !canEcom) ||
+      (appMode === 'ofa' && !canOfa) ||
+      (appMode === 'picset' && !canPicset);
     if (!currentNotAllowed) return;
     if (canEcom) setAppMode('ecom');
+    else if (canOfa) setAppMode('ofa');
+    else if (canPicset) setAppMode('picset');
     else if (canClothing) setAppMode('clothing');
   }, [user, isAdmin, userPermissions, appMode]);
 
@@ -2736,6 +2792,176 @@ function App() {
     }
   };
 
+  // ---------- OFA tab ----------
+  const loadFileToOfa = (file: File, slotIndex: number) => {
+    if (!file.type.startsWith('image/')) {
+      setGlobalError('File không phải ảnh hợp lệ.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      if (!result) return;
+      setOfaImages((prev) => prev.map((img, i) => (i === slotIndex ? result : img)));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const toggleOfaCategory = (id: number) => {
+    setOfaSelectedCategoryIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const runOfaBatch = async (batch: OfaBatch) => {
+    const cancelRef = { current: false };
+    const controller = new AbortController();
+    ofaCancelMapRef.current.set(batch.id, cancelRef);
+    ofaAbortMapRef.current.set(batch.id, controller);
+
+    try {
+      const config = MODEL_CONFIG[batch.model];
+      const selected = OFA_PROMPT_LIBRARY.filter((c) => batch.categoryIds.includes(c.id));
+
+      for (const category of selected) {
+        if (cancelRef.current) break;
+        const fullPrompt = `${buildOfaPrompt(category, batch.productName, batch.description)}\n\n(Quality: ${batch.quality.toUpperCase()})`;
+        try {
+          const response = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              modelId: config.id,
+              prompt: fullPrompt,
+              composeImages: batch.imageBase64s,
+              imageBase64: batch.imageBase64s[0],
+              aspectRatio: batch.aspectRatio,
+              imageSize: batch.quality,
+              numberOfImages: 1,
+              clientKieApiKey: kieApiKey,
+              clientGoogleApiKey: googleApiKey,
+            }),
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            const err = await response.json().catch(() => ({ error: 'Lỗi server' }));
+            throw new Error(err.error || 'Lỗi server');
+          }
+          const data = await response.json();
+          let urls: string[] = [];
+          if (data.isAsync && Array.isArray(data.taskIds)) {
+            urls = await pollKieTasks(data.taskIds, kieApiKey, controller.signal);
+          } else if (data.isUrl) {
+            urls = data.imagesBase64;
+          } else if (Array.isArray(data.imagesBase64)) {
+            urls = data.imagesBase64.map((b: string) => `data:image/png;base64,${b}`);
+          } else if (data.imageBase64) {
+            urls = [`data:image/png;base64,${data.imageBase64}`];
+          }
+          if (cancelRef.current) break;
+          if (urls.length > 0) {
+            setOfaBatches((prev) =>
+              prev.map((b) =>
+                b.id === batch.id
+                  ? { ...b, results: [...b.results, { categoryId: category.id, urls }] }
+                  : b
+              )
+            );
+            logUsage(`ofa-${category.code}`, config.id, urls.length, batch.quality);
+            urls.forEach((u) => pushHistory(u, { feature: `ofa-${category.code}`, model: config.id, size: batch.quality }));
+          }
+        } catch (err: any) {
+          if (err?.name === 'AbortError') break;
+          console.error(`OFA gen failed for ${category.name}:`, err);
+        }
+      }
+
+      setOfaBatches((prev) =>
+        prev.map((b) =>
+          b.id === batch.id
+            ? { ...b, status: cancelRef.current ? 'cancelled' : 'done', finishedAt: Date.now() }
+            : b
+        )
+      );
+    } catch (err: any) {
+      setOfaBatches((prev) =>
+        prev.map((b) =>
+          b.id === batch.id
+            ? { ...b, status: 'error', errorMessage: err.message || 'Lỗi không xác định', finishedAt: Date.now() }
+            : b
+        )
+      );
+    } finally {
+      ofaCancelMapRef.current.delete(batch.id);
+      ofaAbortMapRef.current.delete(batch.id);
+    }
+  };
+
+  // Auto-promote queued batches when a running slot opens up (cap = OFA_MAX_CONCURRENT)
+  useEffect(() => {
+    const running = ofaBatches.filter((b) => b.status === 'running').length;
+    if (running >= OFA_MAX_CONCURRENT) return;
+    const next = ofaBatches.find((b) => b.status === 'queued');
+    if (!next) return;
+    setOfaBatches((prev) => prev.map((b) => (b.id === next.id ? { ...b, status: 'running' } : b)));
+    queueMicrotask(() => runOfaBatch({ ...next, status: 'running' }));
+  }, [ofaBatches]);
+
+  const handleOfaGenerate = async () => {
+    if (!ofaProductName.trim()) {
+      setGlobalError('Vui lòng nhập tên sản phẩm.');
+      return;
+    }
+    if (ofaSelectedCategoryIds.length === 0) {
+      setGlobalError('Vui lòng chọn ít nhất 1 mục prompt.');
+      return;
+    }
+    const imgs = ofaImages.filter((x): x is string => !!x);
+    if (imgs.length === 0) {
+      setGlobalError('Vui lòng tải lên ít nhất 1 ảnh tham khảo.');
+      return;
+    }
+    setGlobalError(null);
+    try {
+      const compressed = await Promise.all(imgs.map((u) => compressImageDataUrl(u, 1600, 0.85)));
+      const base64s = compressed.map((c) => c.split(',')[1]);
+      const newBatch: OfaBatch = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        startedAt: Date.now(),
+        productName: ofaProductName.trim(),
+        description: ofaDescription.trim(),
+        imageBase64s: base64s,
+        categoryIds: [...ofaSelectedCategoryIds],
+        aspectRatio: ofaAspectRatio,
+        quality: ofaQuality,
+        model: ofaModel,
+        results: [],
+        status: 'queued',
+      };
+      setOfaBatches((prev) => [...prev, newBatch]);
+    } catch (err: any) {
+      setGlobalError(err.message || 'Có lỗi khi chuẩn bị ảnh.');
+    }
+  };
+
+  const handleOfaCancel = (batchId: string) => {
+    const cancelRef = ofaCancelMapRef.current.get(batchId);
+    if (cancelRef) cancelRef.current = true;
+    const controller = ofaAbortMapRef.current.get(batchId);
+    controller?.abort();
+    setOfaBatches((prev) =>
+      prev.map((b) =>
+        b.id === batchId && (b.status === 'queued' || b.status === 'running')
+          ? { ...b, status: 'cancelled', finishedAt: Date.now() }
+          : b
+      )
+    );
+  };
+
+  const handleOfaClearFinished = () => {
+    setOfaBatches((prev) => prev.filter((b) => b.status === 'queued' || b.status === 'running'));
+  };
+
   const handleEcomThay = async () => {
     if (!ecomThayModelImage || !ecomThayProductImage) {
       setGlobalError("Vui lòng tải lên cả ẢNH GIƯỜNG (MODEL) và ẢNH SẢN PHẨM (PRODUCT).");
@@ -3196,6 +3422,8 @@ function App() {
         isAdmin={isAdmin}
         canUseClothing={!!userPermissions?.canUseClothing}
         canUseEcom={!!userPermissions?.canUseEcom}
+        canUseOfa={!!(userPermissions?.canUseOfa ?? userPermissions?.canUseEcom)}
+        canUsePicset={!!(userPermissions?.canUsePicset ?? userPermissions?.canUseEcom)}
         theme={theme}
         resolvedTheme={resolvedTheme}
         onThemeChange={setTheme}
@@ -5550,6 +5778,427 @@ function App() {
             </div>
           </div>
         </main>
+      )}
+
+      {appMode === 'ofa' && (
+        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left panel: settings */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            <div
+              className="p-6"
+              style={{
+                background: 'var(--color-card)',
+                border: '0.5px solid var(--color-border-soft)',
+                borderRadius: 18,
+                boxShadow: 'var(--shadow-card)',
+              }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
+                <h2 className="text-lg font-bold" style={{ color: 'var(--color-text)' }}>OFA Studio</h2>
+              </div>
+              <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
+                Gen bộ ảnh trang chi tiết TMĐT — 16 đầu mục theo phong cách cao cấp.
+              </p>
+
+              {/* 1. Tên sản phẩm */}
+              <div className="mb-4">
+                <label className="block uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                  Tên sản phẩm <span style={{ color: 'var(--color-danger)' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={ofaProductName}
+                  onChange={(e) => setOfaProductName(e.target.value)}
+                  placeholder="VD: Set chăn ga gối 4 món hoạ tiết hoa"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm"
+                  style={{
+                    background: 'var(--color-bg)',
+                    border: '0.5px solid var(--color-border-soft)',
+                    color: 'var(--color-text)',
+                  }}
+                />
+              </div>
+
+              {/* 2. Mô tả bổ sung */}
+              <div className="mb-4">
+                <label className="block uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                  Mô tả / bổ sung prompt (tuỳ chọn)
+                </label>
+                <textarea
+                  value={ofaDescription}
+                  onChange={(e) => setOfaDescription(e.target.value)}
+                  placeholder="Nhập điểm bán, đặc tính, gam màu... cách nhau bằng dấu phẩy"
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-lg text-sm resize-none"
+                  style={{
+                    background: 'var(--color-bg)',
+                    border: '0.5px solid var(--color-border-soft)',
+                    color: 'var(--color-text)',
+                  }}
+                />
+              </div>
+
+              {/* 3. Ảnh tham khảo */}
+              <div className="mb-5">
+                <label className="block uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                  Ảnh tham khảo (tối đa 3, nền trắng tốt nhất)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[0, 1, 2].map((slot) => {
+                    const img = ofaImages[slot];
+                    return (
+                      <div
+                        key={slot}
+                        onDragOver={(e) => { e.preventDefault(); setOfaDragOver(slot); }}
+                        onDragLeave={() => setOfaDragOver(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setOfaDragOver(null);
+                          const f = e.dataTransfer.files?.[0];
+                          if (f) loadFileToOfa(f, slot);
+                        }}
+                        onClick={() => ofaInputRefs.current[slot]?.click()}
+                        className="aspect-square rounded-lg flex flex-col items-center justify-center cursor-pointer relative overflow-hidden transition-all"
+                        style={{
+                          background: img ? 'var(--color-bg)' : 'var(--color-fill)',
+                          border: `1px dashed ${ofaDragOver === slot ? 'var(--color-accent)' : 'var(--color-border-soft)'}`,
+                        }}
+                      >
+                        {img ? (
+                          <>
+                            <img src={img} alt="" className="w-full h-full object-cover" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOfaImages((prev) => prev.map((v, i) => (i === slot ? null : v)));
+                              }}
+                              className="absolute top-1 right-1 rounded-full p-1"
+                              style={{ background: 'rgba(0,0,0,0.6)' }}
+                            >
+                              <X size={12} color="white" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={20} style={{ color: 'var(--color-text-tertiary)' }} />
+                            <span className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Thêm</span>
+                          </>
+                        )}
+                        <input
+                          ref={(el) => { ofaInputRefs.current[slot] = el; }}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) loadFileToOfa(f, slot);
+                            e.currentTarget.value = '';
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 4. 16 mục prompt */}
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                    Loại hình ảnh (chọn nhiều)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setOfaSelectedCategoryIds(OFA_PROMPT_LIBRARY.map((c) => c.id))}
+                      className="text-xs font-medium"
+                      style={{ color: 'var(--color-accent)' }}
+                    >
+                      Chọn tất cả
+                    </button>
+                    <span style={{ color: 'var(--color-text-tertiary)' }}>·</span>
+                    <button
+                      type="button"
+                      onClick={() => setOfaSelectedCategoryIds([])}
+                      className="text-xs font-medium"
+                      style={{ color: 'var(--color-text-tertiary)' }}
+                    >
+                      Bỏ chọn
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {OFA_PROMPT_LIBRARY.map((c) => {
+                    const selected = ofaSelectedCategoryIds.includes(c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => toggleOfaCategory(c.id)}
+                        className="px-2 py-2 rounded-lg text-xs text-left transition-all"
+                        style={{
+                          background: selected ? 'var(--color-accent)' : 'var(--color-fill)',
+                          color: selected ? 'white' : 'var(--color-text)',
+                          border: selected ? '0.5px solid transparent' : '0.5px solid var(--color-border-soft)',
+                          fontWeight: selected ? 600 : 500,
+                        }}
+                      >
+                        <span style={{ opacity: 0.7, fontSize: 10 }}>{c.id}.</span> {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                  Đã chọn {ofaSelectedCategoryIds.length}/{OFA_PROMPT_LIBRARY.length} mục
+                </p>
+              </div>
+
+              {/* 5. Cài đặt: Model + AR + Quality + Count */}
+              <div
+                className="p-4 mb-4"
+                style={{
+                  background: 'var(--color-fill)',
+                  borderRadius: 14,
+                  border: '0.5px solid var(--color-border-soft)',
+                }}
+              >
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Model</p>
+                    <ModelCardPicker<'gpt2' | 'banana-pro'>
+                      columns={2}
+                      value={ofaModel}
+                      onChange={(v) => setOfaModel(v)}
+                      options={[
+                        { value: 'gpt2', name: 'GPT2', sub: 'KIE.AI' },
+                        { value: 'banana-pro', name: 'Banana Pro', sub: 'KIE.AI', best: true },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ khung hình</p>
+                    <ARSelector value={ofaAspectRatio as any} onChange={(v) => setOfaAspectRatio(v)} />
+                  </div>
+                </div>
+                <div>
+                  <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chất lượng</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {['1k', '2k', '4k'].map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => setOfaQuality(q)}
+                        className="py-2 rounded-lg text-xs font-semibold transition-all"
+                        style={{
+                          background: ofaQuality === q ? 'var(--color-accent)' : 'var(--color-bg)',
+                          color: ofaQuality === q ? 'white' : 'var(--color-text)',
+                          border: ofaQuality === q ? '0.5px solid transparent' : '0.5px solid var(--color-border-soft)',
+                        }}
+                      >
+                        {q.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 6. Gen button — always enabled; per-batch cancel lives in result panel */}
+              <button
+                onClick={handleOfaGenerate}
+                className="w-full py-3 rounded-xl flex items-center justify-center gap-2 font-semibold transition-all"
+                style={{
+                  background: 'var(--color-accent)',
+                  color: 'white',
+                  boxShadow: '0 4px 12px rgba(0,122,255,0.25)',
+                }}
+              >
+                <Sparkles size={16} /> Gen ảnh OFA ({ofaSelectedCategoryIds.length} ảnh)
+              </button>
+              {(() => {
+                const running = ofaBatches.filter((b) => b.status === 'running').length;
+                const queued = ofaBatches.filter((b) => b.status === 'queued').length;
+                if (running + queued === 0) return null;
+                return (
+                  <p className="text-xs text-center mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                    {running} lượt đang chạy{queued > 0 ? `, ${queued} đang chờ` : ''} (cap {OFA_MAX_CONCURRENT})
+                  </p>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Right panel: results */}
+          <div className="lg:col-span-7 flex flex-col gap-4">
+            <div
+              className="p-6 flex-1"
+              style={{
+                background: 'var(--color-card)',
+                border: '0.5px solid var(--color-border-soft)',
+                borderRadius: 18,
+                boxShadow: 'var(--shadow-card)',
+                minHeight: 600,
+              }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>Kết quả</h3>
+                {ofaBatches.some((b) => b.status === 'done' || b.status === 'cancelled' || b.status === 'error') && (
+                  <button
+                    type="button"
+                    onClick={handleOfaClearFinished}
+                    className="text-xs font-medium"
+                    style={{ color: 'var(--color-text-tertiary)' }}
+                  >
+                    Xoá lượt đã xong
+                  </button>
+                )}
+              </div>
+              {ofaBatches.length === 0 ? (
+                <div className="flex flex-col items-center justify-center text-center py-20" style={{ color: 'var(--color-text-tertiary)' }}>
+                  <ImageIcon size={56} className="opacity-20 mb-3" />
+                  <p className="text-sm">Ảnh kết quả sẽ hiển thị ở đây — Sếp có thể bấm Gen liên tục, mỗi lượt là 1 section riêng.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-6">
+                  {[...ofaBatches].reverse().map((batch) => {
+                    const seq = ofaBatches.indexOf(batch) + 1;
+                    const doneCount = batch.results.length;
+                    const total = batch.categoryIds.length;
+                    const time = new Date(batch.startedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                    const statusBadge = (() => {
+                      switch (batch.status) {
+                        case 'queued': return { label: 'Đang chờ', bg: 'var(--color-fill)', color: 'var(--color-text-secondary)' };
+                        case 'running': return { label: `Đang chạy ${doneCount}/${total}`, bg: 'rgba(0,122,255,0.15)', color: 'var(--color-accent)' };
+                        case 'done': return { label: `Xong ${doneCount}/${total}`, bg: 'rgba(52,199,89,0.15)', color: 'var(--color-success)' };
+                        case 'cancelled': return { label: `Đã huỷ ${doneCount}/${total}`, bg: 'rgba(255,149,0,0.15)', color: 'var(--color-warning)' };
+                        case 'error': return { label: 'Lỗi', bg: 'rgba(255,59,48,0.15)', color: 'var(--color-danger)' };
+                      }
+                    })();
+                    const canCancel = batch.status === 'queued' || batch.status === 'running';
+                    return (
+                      <div
+                        key={batch.id}
+                        className="p-3"
+                        style={{
+                          background: 'var(--color-fill)',
+                          border: '0.5px solid var(--color-border-soft)',
+                          borderRadius: 14,
+                        }}
+                      >
+                        {/* Batch header */}
+                        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
+                            <span className="text-sm font-bold shrink-0" style={{ color: 'var(--color-text)' }}>
+                              Lượt {seq}
+                            </span>
+                            <span className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
+                              {batch.productName} · {total} mục · {batch.quality.toUpperCase()} · {batch.aspectRatio} · {time}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className="px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1"
+                              style={{ background: statusBadge.bg, color: statusBadge.color }}
+                            >
+                              {batch.status === 'running' && <Loader2 size={10} className="animate-spin" />}
+                              {statusBadge.label}
+                            </span>
+                            {canCancel && (
+                              <button
+                                type="button"
+                                onClick={() => handleOfaCancel(batch.id)}
+                                className="px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1"
+                                style={{ background: 'var(--color-danger)', color: 'white' }}
+                                title="Huỷ lượt này"
+                              >
+                                <X size={10} /> Huỷ
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Batch grid */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {batch.categoryIds.map((catId) => {
+                            const cat = OFA_PROMPT_LIBRARY.find((c) => c.id === catId);
+                            if (!cat) return null;
+                            const group = batch.results.find((g) => g.categoryId === catId);
+                            const isDone = !!group;
+                            const url = isDone ? group!.urls[0] : null;
+                            const showSpinner = !isDone && (batch.status === 'running' || batch.status === 'queued');
+                            return (
+                              <div key={catId} className="flex flex-col gap-1">
+                                <p className="text-xs font-semibold flex items-center gap-1 leading-tight" style={{ color: 'var(--color-text)' }}>
+                                  <span style={{ color: 'var(--color-accent)' }}>#{cat.id}</span>
+                                  <span className="truncate">{cat.name}</span>
+                                </p>
+                                {isDone && url ? (
+                                  <div
+                                    className="relative aspect-square rounded-md overflow-hidden group"
+                                    style={{ background: 'var(--color-bg)' }}
+                                  >
+                                    <img
+                                      src={url}
+                                      alt={cat.name}
+                                      className="w-full h-full object-cover cursor-zoom-in"
+                                      onClick={() => setZoomImage(url)}
+                                    />
+                                    <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        type="button"
+                                        onClick={() => setZoomImage(url)}
+                                        className="rounded-full p-1.5"
+                                        style={{ background: 'rgba(0,0,0,0.7)' }}
+                                        title="Phóng to"
+                                      >
+                                        <ZoomIn size={12} color="white" />
+                                      </button>
+                                      <a
+                                        href={url}
+                                        download={`ofa-${seq}-${cat.code}.png`}
+                                        className="rounded-full p-1.5"
+                                        style={{ background: 'rgba(0,0,0,0.7)' }}
+                                        title="Tải về"
+                                      >
+                                        <Download size={12} color="white" />
+                                      </a>
+                                    </div>
+                                  </div>
+                                ) : showSpinner ? (
+                                  <div
+                                    className="relative aspect-square rounded-md overflow-hidden flex items-center justify-center"
+                                    style={{
+                                      background: 'linear-gradient(90deg, var(--color-bg) 0%, var(--color-fill) 50%, var(--color-bg) 100%)',
+                                      backgroundSize: '200% 100%',
+                                      animation: 'ofa-shimmer 1.4s ease-in-out infinite',
+                                    }}
+                                  >
+                                    <Loader2 size={20} className="animate-spin" style={{ color: 'var(--color-text-tertiary)' }} />
+                                  </div>
+                                ) : (
+                                  <div
+                                    className="relative aspect-square rounded-md flex items-center justify-center"
+                                    style={{ background: 'var(--color-bg)', border: '1px dashed var(--color-border-soft)' }}
+                                  >
+                                    <X size={16} style={{ color: 'var(--color-text-tertiary)', opacity: 0.5 }} />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+      )}
+
+      {appMode === 'picset' && (
+        <PicsetTab />
       )}
 
       {appMode === 'clothing' && (

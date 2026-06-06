@@ -147,3 +147,8 @@ html[data-theme="dark"] {
 }
 .primary-btn:hover:not(:disabled) { filter: brightness(1.1); }
 .primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+@keyframes ofa-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

@@ -8,6 +8,8 @@
     "api/generate-check.ts": { "maxDuration": 10 },
     "api/analyze.ts": { "maxDuration": 60 },
     "api/detect-grid.ts": { "maxDuration": 60 },
-    "api/kie-credits.ts": { "maxDuration": 10 }
+    "api/kie-credits.ts": { "maxDuration": 10 },
+    "api/picset/analyze.ts": { "maxDuration": 60 },
+    "api/picset/generate.ts": { "maxDuration": 60 }
   }
 }

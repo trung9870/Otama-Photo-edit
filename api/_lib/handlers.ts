@@ -73,12 +73,12 @@ export async function handleProxyImage(req: Req, res: Res) {
 }
 
 // ============== Kie.ai helpers ==============
-const KIE_MODELS = ['gpt-image-2-image-to-image', 'kie-ai-gpt2', 'nano-banana-pro', 'nano-banana-2'];
+export const KIE_MODELS = ['gpt-image-2-image-to-image', 'kie-ai-gpt2', 'nano-banana-pro', 'nano-banana-2'];
 
 // Create a task and return the taskId immediately (no polling).
 // Supports both GPT Image 2 (input_urls + constrained aspect/resolution) and
 // Google Nano Banana Pro / 2 (image_input + full aspect/resolution support).
-async function createKieImageTask(model: string, inputUrls: string[], prompt: string, apiKey: string, aspectRatio: string, imageSize: string): Promise<string> {
+export async function createKieImageTask(model: string, inputUrls: string[], prompt: string, apiKey: string, aspectRatio: string, imageSize: string): Promise<string> {
   const kieModel = model === 'kie-ai-gpt2' ? 'gpt-image-2-image-to-image' : model;
   const isGpt2 = kieModel === 'gpt-image-2-image-to-image';
 
@@ -143,7 +143,7 @@ async function pollKieTaskOnce(taskId: string, apiKey: string): Promise<{ status
   return { status: 'pending' };
 }
 
-async function uploadBase64WithFallback(b64: string, apiKey: string): Promise<string> {
+export async function uploadBase64WithFallback(b64: string, apiKey: string): Promise<string> {
   const buffer = Buffer.from(b64, 'base64');
   const uploadToKieAi = async () => {
     const res = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {

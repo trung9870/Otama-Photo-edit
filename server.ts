@@ -12,6 +12,7 @@ import {
   handleDetectGrid,
   handleKieCredits
 } from "./api/_lib/handlers";
+import { handlePicsetAnalyze, handlePicsetGenerate } from "./api/_lib/picset";
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -31,6 +32,8 @@ async function startServer() {
   app.post("/api/analyze", (req, res) => handleAnalyze(req as any, res as any));
   app.post("/api/detect-grid", (req, res) => handleDetectGrid(req as any, res as any));
   app.get("/api/kie-credits", (req, res) => handleKieCredits(req as any, res as any));
+  app.post("/api/picset/analyze", (req, res) => handlePicsetAnalyze(req as any, res as any));
+  app.post("/api/picset/generate", (req, res) => handlePicsetGenerate(req as any, res as any));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
