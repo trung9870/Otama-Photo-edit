@@ -833,8 +833,8 @@ function App() {
     if (!user || isAdmin || !userPermissions) return;
     const canClothing = !!userPermissions.canUseClothing;
     const canEcom = !!userPermissions.canUseEcom;
-    const canOfa = !!(userPermissions.canUseOfa ?? userPermissions.canUseEcom);
-    const canPicset = !!(userPermissions.canUsePicset ?? userPermissions.canUseEcom);
+    const canOfa = !!userPermissions.canUseOfa;
+    const canPicset = !!userPermissions.canUsePicset;
     const currentNotAllowed =
       appMode === 'admin' ||
       (appMode === 'clothing' && !canClothing) ||
@@ -3422,8 +3422,8 @@ function App() {
         isAdmin={isAdmin}
         canUseClothing={!!userPermissions?.canUseClothing}
         canUseEcom={!!userPermissions?.canUseEcom}
-        canUseOfa={!!(userPermissions?.canUseOfa ?? userPermissions?.canUseEcom)}
-        canUsePicset={!!(userPermissions?.canUsePicset ?? userPermissions?.canUseEcom)}
+        canUseOfa={!!userPermissions?.canUseOfa}
+        canUsePicset={!!userPermissions?.canUsePicset}
         theme={theme}
         resolvedTheme={resolvedTheme}
         onThemeChange={setTheme}
