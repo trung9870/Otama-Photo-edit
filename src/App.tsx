@@ -50,7 +50,8 @@ import {
   Sun,
   Moon,
   Monitor,
-  Key
+  Key,
+  GripVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -396,6 +397,7 @@ function App() {
   });
   const [selectedEcomPromptId, setSelectedEcomPromptId] = useState<string>('e1');
   const [ecomPromptText, setEcomPromptText] = useState<string>(defaultEcomPrompts[0].prompt);
+  const [draggedEcomPromptIndex, setDraggedEcomPromptIndex] = useState<number | null>(null);
   const [ecomSupplementaryPrompt, setEcomSupplementaryPrompt] = useState<string>('');
   // Kho prompt riêng cho tab Thay (type 'ecom-thay'), tách khỏi Gen new
   const [ecomThaySavedPrompts, setEcomThaySavedPrompts] = useState<SavedPrompt[]>([]);
@@ -4449,27 +4451,30 @@ function App() {
                   <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Cài đặt</p>
                 </div>
                 <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
-                  <div>
-                    <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Model</p>
-                    <ModelCardPicker<ModelType>
-                      value={ecomModel}
-                      onChange={(m) => setEcomModel(m)}
-                      size="sm"
-                      options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
-                        value: m,
-                        name: MODEL_CONFIG[m].name,
-                        sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
-                        best: m === 'banana-pro',
-                      }))}
-                    />
+                  <div className="flex items-center gap-2">
+                    <p className="shrink-0 uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', minWidth: 48 }}>Model</p>
+                    <div className="flex-1 min-w-0">
+                      <ModelCardPicker<ModelType>
+                        value={ecomModel}
+                        onChange={(m) => setEcomModel(m)}
+                        size="sm"
+                        options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                          value: m,
+                          name: MODEL_CONFIG[m].name,
+                          best: m === 'banana-pro',
+                        }))}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ khung hình</p>
-                    <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} size="xs" />
+                  <div className="flex items-center gap-2">
+                    <p className="shrink-0 uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', minWidth: 48 }}>Tỉ lệ</p>
+                    <div className="flex-1 min-w-0">
+                      <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} size="xs" />
+                    </div>
                   </div>
-                  <div>
-                    <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chất lượng</p>
-                    <div className="flex gap-1">
+                  <div className="flex items-center gap-2">
+                    <p className="shrink-0 uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', minWidth: 48 }}>Chất lượng</p>
+                    <div className="flex-1 min-w-0 flex gap-1">
                       {(() => {
                         const availableSizes: string[] = ecomModel === 'gpt2'
                           ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
@@ -4501,9 +4506,9 @@ function App() {
                       })()}
                     </div>
                   </div>
-                  <div>
-                    <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Số ảnh</p>
-                    <div className="flex gap-1">
+                  <div className="flex items-center gap-2">
+                    <p className="shrink-0 uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', minWidth: 48 }}>Số ảnh</p>
+                    <div className="flex-1 min-w-0 flex gap-1">
                       {[1, 2, 3].map((count) => {
                         const active = ecomImageCount === count;
                         return (
@@ -4647,20 +4652,77 @@ function App() {
                         {selectedEcomPromptId === 'manual' && (
                           <PromptRow name="📝 Nhập thủ công" active onClick={() => {}} showEdit={false} showDelete={false} />
                         )}
-                        {(showEcomPromptModal ? ecomSavedPrompts : ecomSavedPrompts.slice(0, 3)).map((p) => (
-                          <PromptRow
+                        {(showEcomPromptModal ? ecomSavedPrompts : ecomSavedPrompts.slice(0, 3)).map((p, idx) => (
+                          <motion.div
                             key={p.id}
-                            name={p.name}
-                            active={selectedEcomPromptId === p.id}
-                            synced={p.isDefault}
-                            onClick={() => { setSelectedEcomPromptId(p.id); setEcomPromptText(p.prompt); }}
-                            showSync={isAdmin}
-                            onSync={(e) => toggleSyncEcomPrompt(p, e)}
-                            showEdit={isAdmin || !p.isDefault}
-                            showDelete={isAdmin || !p.isDefault}
-                            onEdit={(e) => startEditEcomPrompt(p, e)}
-                            onDelete={(e) => deleteEcomPrompt(p.id, e)}
-                          />
+                            // Skip layout animation on the item being dragged — it's already moving
+                            // with the mouse cursor; double-animating causes jitter.
+                            layout={draggedEcomPromptIndex === idx ? false : 'position'}
+                            transition={{ type: 'tween', duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                              if (
+                                draggedEcomPromptIndex === null ||
+                                draggedEcomPromptIndex === idx
+                              ) return;
+                              // Only swap once the cursor crosses the midpoint of THIS row
+                              // (in the direction we're moving). Prevents thrashing on tiny mouse moves.
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const midY = rect.top + rect.height / 2;
+                              const movingDown = draggedEcomPromptIndex < idx;
+                              const crossed = movingDown ? e.clientY > midY : e.clientY < midY;
+                              if (!crossed) return;
+                              const from = draggedEcomPromptIndex;
+                              setEcomSavedPrompts((prev) => {
+                                if (from >= prev.length || idx >= prev.length) return prev;
+                                const next = [...prev];
+                                const [moved] = next.splice(from, 1);
+                                next.splice(idx, 0, moved);
+                                return next;
+                              });
+                              setDraggedEcomPromptIndex(idx);
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              setDraggedEcomPromptIndex(null);
+                            }}
+                            className="flex items-center gap-1"
+                            style={{
+                              opacity: draggedEcomPromptIndex === idx ? 0.4 : 1,
+                            }}
+                          >
+                            <div
+                              draggable
+                              onDragStart={(e) => {
+                                setDraggedEcomPromptIndex(idx);
+                                e.dataTransfer.effectAllowed = 'move';
+                                // Required in some browsers for drag to fire
+                                try { e.dataTransfer.setData('text/plain', String(idx)); } catch {}
+                              }}
+                              onDragEnd={() => setDraggedEcomPromptIndex(null)}
+                              className="cursor-grab active:cursor-grabbing shrink-0 p-1 rounded hover:bg-black/5"
+                              style={{ color: 'var(--color-text-tertiary)' }}
+                              title="Kéo để sắp xếp lại"
+                              aria-label="Kéo để sắp xếp"
+                            >
+                              <GripVertical size={14} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <PromptRow
+                                name={p.name}
+                                active={selectedEcomPromptId === p.id}
+                                synced={p.isDefault}
+                                onClick={() => { setSelectedEcomPromptId(p.id); setEcomPromptText(p.prompt); }}
+                                showSync={isAdmin}
+                                onSync={(e) => toggleSyncEcomPrompt(p, e)}
+                                showEdit={isAdmin || !p.isDefault}
+                                showDelete={isAdmin || !p.isDefault}
+                                onEdit={(e) => startEditEcomPrompt(p, e)}
+                                onDelete={(e) => deleteEcomPrompt(p.id, e)}
+                              />
+                            </div>
+                          </motion.div>
                         ))}
                         {ecomSavedPrompts.length > 3 && (
                           <button
