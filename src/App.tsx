@@ -105,6 +105,24 @@ interface OfaBatch {
 }
 const OFA_MAX_CONCURRENT = 3;
 
+// Concurrent Gen new batches in Ecom tab — submit + run in parallel without blocking input
+type EcomBatchStatus = 'running' | 'done' | 'failed';
+interface EcomBatch {
+  id: string;
+  startedAt: number;
+  finishedAt?: number;
+  promptText: string;              // full prompt used at submit time (incl. supplementary) — internal
+  promptSource: 'manual' | 'saved';// 'saved' → hide promptText in UI (admin protection)
+  promptLabel?: string;            // saved prompt name (only when source='saved')
+  imageCount: number;
+  model: 'banana-pro' | 'banana-2' | 'gpt2';
+  aspectRatio: string;
+  imageSize: string;
+  results: string[];               // URLs / data URIs
+  status: EcomBatchStatus;
+  errorMessage?: string;
+}
+
 // Error Boundary Component
 class ErrorBoundary extends (Component as any) {
   constructor(props: any) {
@@ -462,6 +480,8 @@ function App() {
   const [ecomImageCount, setEcomImageCount] = useState<number>(3);
   const [isEcomGenerating, setIsEcomGenerating] = useState(false);
   const [ecomResults, setEcomResults] = useState<string[]>([]);
+  // Concurrent gen-new batches — user can fire many in parallel without waiting
+  const [ecomBatches, setEcomBatches] = useState<EcomBatch[]>([]);
   const [selectedEcomGrid, setSelectedEcomGrid] = useState<string | null>(null);
   const [isEcomEnhancing, setIsEcomEnhancing] = useState(false);
   const [isTranslatingImages, setIsTranslatingImages] = useState(false);
@@ -2482,44 +2502,88 @@ function App() {
       return;
     }
 
-    setIsEcomGenerating(true);
-    setGlobalError(null);
-    setEcomResults([]);
-    setEcomBoxes([]);
-    setSelectedBoxIds([]);
+    // Gen-new uses concurrent batch mode (doesn't block UI); other sub-tabs use original single-batch flow.
+    const isConcurrent = ecomSubTab === 'gen-new';
 
-    let currentPrompt = ecomPromptText || "帮我给我们这件产品做一个详情页,高级感,像山下有松一样表达的售卖详情页。帮我生成电商详情页9:16详情图8张图一张图一页面一卖点";
-    let config = MODEL_CONFIG[ecomModel];
+    // Snapshot all inputs at submit time so async run uses values current when user clicked.
+    const snapshot = {
+      productImage: ecomProductImage,
+      promptText: ecomPromptText,
+      supplementaryPrompt: ecomSupplementaryPrompt,
+      model: ecomModel,
+      aspectRatio: ecomAspectRatio,
+      imageSize: ecomImageSize,
+      imageCount: ecomImageCount,
+      templateImage: ecomTemplateImage,
+      cloneManualMode,
+      clonePromptType,
+    };
+
+    let currentPrompt = snapshot.promptText || "帮我给我们这件产品做一个详情页,高级感,像山下有松一样表达的售卖详情页。帮我生成电商详情页9:16详情图8张图一张图一页面一卖点";
+    let config = MODEL_CONFIG[snapshot.model];
     let templateB64: string | undefined = undefined;
     let templateSource: string | undefined = undefined;
 
     if (ecomSubTab === 'clone-template') {
-      // Manual mode: dùng prompt người dùng tự nhập; ngược lại dùng prompt template Amazon/Taobao
-      currentPrompt = (cloneManualMode && ecomPromptText.trim())
-        ? ecomPromptText.trim()
-        : (clonePrompts[clonePromptType] || DEFAULT_CLONE_PROMPTS[clonePromptType]);
-      config = MODEL_CONFIG['gpt2']; // force GPT2
-      templateSource = ecomTemplateImage!;
+      currentPrompt = (snapshot.cloneManualMode && snapshot.promptText.trim())
+        ? snapshot.promptText.trim()
+        : (clonePrompts[snapshot.clonePromptType] || DEFAULT_CLONE_PROMPTS[snapshot.clonePromptType]);
+      config = MODEL_CONFIG['gpt2'];
+      templateSource = snapshot.templateImage!;
     }
 
     // Gộp prompt bổ sung (chỉ áp dụng cho Gen new)
-    if (ecomSubTab === 'gen-new' && ecomSupplementaryPrompt.trim()) {
-      currentPrompt = `${currentPrompt}\n\n[YÊU CẦU BỔ SUNG — ƯU TIÊN CAO]:\n${ecomSupplementaryPrompt.trim()}`;
+    if (ecomSubTab === 'gen-new' && snapshot.supplementaryPrompt.trim()) {
+      currentPrompt = `${currentPrompt}\n\n[YÊU CẦU BỔ SUNG — ƯU TIÊN CAO]:\n${snapshot.supplementaryPrompt.trim()}`;
+    }
+
+    // Branch on mode: concurrent batches vs single-batch blocking
+    let batchId: string | null = null;
+    if (isConcurrent) {
+      batchId = `ecom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // Distinguish manual-typed prompt from admin's saved prompts
+      // → saved ones are hidden in UI to protect prompt IP
+      const isPromptManual = selectedEcomPromptId === 'manual';
+      const promptLabel = isPromptManual
+        ? undefined
+        : ecomSavedPrompts.find(p => p.id === selectedEcomPromptId)?.name;
+      const newBatch: EcomBatch = {
+        id: batchId,
+        startedAt: Date.now(),
+        promptText: currentPrompt,
+        promptSource: isPromptManual ? 'manual' : 'saved',
+        promptLabel,
+        imageCount: snapshot.imageCount,
+        model: snapshot.model,
+        aspectRatio: snapshot.aspectRatio,
+        imageSize: snapshot.imageSize,
+        results: [],
+        status: 'running',
+      };
+      setEcomBatches((prev) => [newBatch, ...prev]);
+      setGlobalError(null);
+      // do NOT set isEcomGenerating — keep button enabled for next submission
+    } else {
+      setIsEcomGenerating(true);
+      setGlobalError(null);
+      setEcomResults([]);
+      setEcomBoxes([]);
+      setSelectedBoxIds([]);
     }
 
     try {
       // Compress images to stay under Vercel's 4.5 MB request body limit
-      const mainBase64 = (await compressImageDataUrl(ecomProductImage, 1600, 0.85)).split(',')[1];
+      const mainBase64 = (await compressImageDataUrl(snapshot.productImage, 1600, 0.85)).split(',')[1];
       if (templateSource) {
         templateB64 = (await compressImageDataUrl(templateSource, 1600, 0.85)).split(',')[1];
       }
-      
+
       let generatedImages: string[] = [];
       let serverFailed = false;
 
       // Try server first
       try {
-        const fullEcomPrompt = `${currentPrompt} (Quality: ${ecomImageSize.toUpperCase()})`;
+        const fullEcomPrompt = `${currentPrompt} (Quality: ${snapshot.imageSize.toUpperCase()})`;
         const response = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2528,9 +2592,9 @@ function App() {
             prompt: fullEcomPrompt,
             imageBase64: mainBase64,
             templateBase64: templateB64,
-            aspectRatio: ecomAspectRatio,
-            imageSize: ecomImageSize,
-            numberOfImages: ecomImageCount,
+            aspectRatio: snapshot.aspectRatio,
+            imageSize: snapshot.imageSize,
+            numberOfImages: snapshot.imageCount,
             clientKieApiKey: kieApiKey,
             clientGoogleApiKey: googleApiKey
           })
@@ -2593,14 +2657,14 @@ function App() {
                       mimeType: 'image/jpeg',
                     },
                   },
-                  { text: `${currentPrompt} (Quality: ${ecomImageSize.toUpperCase()})` }
+                  { text: `${currentPrompt} (Quality: ${snapshot.imageSize.toUpperCase()})` }
                 ]
               },
               config: {
                 imageConfig: {
-                  aspectRatio: ecomAspectRatio as any,
-                  numberOfImages: ecomImageCount,
-                  imageSize: ecomImageSize.toUpperCase()
+                  aspectRatio: snapshot.aspectRatio as any,
+                  numberOfImages: snapshot.imageCount,
+                  imageSize: snapshot.imageSize.toUpperCase()
                 } as any
               }
             });
@@ -2612,18 +2676,36 @@ function App() {
       }
 
       if (generatedImages.length > 0) {
-        setEcomResults(generatedImages);
         const feat = ecomSubTab === 'clone-template' ? 'ecom-clone' : 'ecom-gen-new';
-        logUsage(feat, config.id, generatedImages.length, ecomImageSize);
-        generatedImages.forEach((u) => pushHistory(u, { feature: feat, model: config.id, size: ecomImageSize }));
+        logUsage(feat, config.id, generatedImages.length, snapshot.imageSize);
+        generatedImages.forEach((u) => pushHistory(u, { feature: feat, model: config.id, size: snapshot.imageSize }));
+        if (isConcurrent && batchId) {
+          const finishedBatchId = batchId;
+          setEcomBatches((prev) => prev.map(b => b.id === finishedBatchId
+            ? { ...b, results: generatedImages, status: 'done' as const, finishedAt: Date.now() }
+            : b
+          ));
+        } else {
+          setEcomResults(generatedImages);
+        }
       } else {
         throw new Error("Không có ảnh kết quả trả về.");
       }
     } catch (error: any) {
       console.error(error);
-      setGlobalError(error.message);
+      if (isConcurrent && batchId) {
+        const failedBatchId = batchId;
+        setEcomBatches((prev) => prev.map(b => b.id === failedBatchId
+          ? { ...b, status: 'failed' as const, errorMessage: error.message, finishedAt: Date.now() }
+          : b
+        ));
+      } else {
+        setGlobalError(error.message);
+      }
     } finally {
-      setIsEcomGenerating(false);
+      if (!isConcurrent) {
+        setIsEcomGenerating(false);
+      }
     }
   };
 
@@ -3466,9 +3548,9 @@ function App() {
         }
       />
 
-      <div className="flex-1 flex flex-col p-4 md:p-8 max-w-7xl mx-auto w-full">
+      <div className="flex-1 flex flex-col p-4 md:p-8 max-w-[1800px] mx-auto w-full">
       {appMode === 'admin' && (
-        <main className="flex-1 w-full max-w-7xl mx-auto py-8">
+        <main className="flex-1 w-full max-w-[1800px] mx-auto py-8">
           <AdminPanel currentUser={user} />
         </main>
       )}
@@ -3476,9 +3558,13 @@ function App() {
       {appMode === 'ecom' && (
         <main ref={ecomMainRef} className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
           {/* Left panel: Upload and Settings — full width on gen-new, pattern-replace + clone */}
-          <div className={`flex flex-col gap-6 ${ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-4' : 'lg:col-span-12'}`}>
+          <div className={`flex flex-col gap-6 ${
+            ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-4'
+            : ecomSubTab === 'gen-new' ? 'lg:col-span-7 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1'
+            : 'lg:col-span-12'
+          }`}>
             <div
-              className="p-6"
+              className="p-4"
               style={{
                 background: 'var(--color-card)',
                 border: '0.5px solid var(--color-border-soft)',
@@ -3486,20 +3572,7 @@ function App() {
                 boxShadow: 'var(--shadow-card)',
               }}
             >
-              <h2
-                className="font-bold mb-1"
-                style={{ fontSize: 22, color: 'var(--color-text)', letterSpacing: '-0.02em' }}
-              >
-                Ecom Studio
-              </h2>
-              <p
-                className="mb-6"
-                style={{ fontSize: 13, color: 'var(--color-text-secondary)', letterSpacing: '-0.01em' }}
-              >
-                Tạo trang chi tiết TMĐT cho ảnh sản phẩm.
-              </p>
-
-              <div className="mb-6">
+              <div className="mb-4">
                 <Segmented<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>
                   value={ecomSubTab}
                   onChange={(v) => setEcomSubTab(v)}
@@ -4369,108 +4442,102 @@ function App() {
                   )}
                 </div>
               ) : (
-                <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-3">
                 {/* Settings card — moved on top, with dividers */}
                 <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
+                  <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
                   <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Cài đặt</p>
                 </div>
-                <div className="p-5 flex flex-col md:flex-row gap-5" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
-                  <div className="md:pr-5" style={{ flex: '0 0 auto', borderRight: '0.5px solid var(--color-border)' }}>
-                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Model</p>
-                    <div style={{ width: 230 }}>
-                      <ModelCardPicker<ModelType>
-                        value={ecomModel}
-                        onChange={(m) => setEcomModel(m)}
-                        options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
-                          value: m,
-                          name: MODEL_CONFIG[m].name,
-                          sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
-                          best: m === 'banana-pro',
-                        }))}
-                      />
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                  <div>
+                    <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Model</p>
+                    <ModelCardPicker<ModelType>
+                      value={ecomModel}
+                      onChange={(m) => setEcomModel(m)}
+                      options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                        value: m,
+                        name: MODEL_CONFIG[m].name,
+                        sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
+                        best: m === 'banana-pro',
+                      }))}
+                    />
+                  </div>
+                  <div>
+                    <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ khung hình</p>
+                    <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} size="sm" />
+                  </div>
+                  <div>
+                    <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chất lượng</p>
+                    <div className="flex gap-1">
+                      {(() => {
+                        const availableSizes: string[] = ecomModel === 'gpt2'
+                          ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
+                            : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
+                            : ['1k'])
+                          : ['1k', '2k', '4k'];
+                        return ['1k', '2k', '4k'].map((size) => {
+                          const isAvailable = availableSizes.includes(size);
+                          const active = ecomImageSize === size;
+                          return (
+                            <button
+                              key={size}
+                              onClick={() => isAvailable && setEcomImageSize(size)}
+                              disabled={!isAvailable}
+                              title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
+                              className="flex-1 py-1.5 text-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{
+                                borderRadius: 8,
+                                background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                                color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                                fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+                              }}
+                            >
+                              {size.toUpperCase()}
+                            </button>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
-                  <div className="md:pr-5 flex-1" style={{ borderRight: '0.5px solid var(--color-border)' }}>
-                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ khung hình</p>
-                    <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} />
-                  </div>
-                  <div style={{ flex: '0 0 auto' }}>
-                    <div className="flex gap-5">
-                      <div>
-                        <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chất lượng</p>
-                        <div className="flex gap-1.5">
-                          {(() => {
-                            const availableSizes: string[] = ecomModel === 'gpt2'
-                              ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
-                                : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
-                                : ['1k'])
-                              : ['1k', '2k', '4k'];
-                            return ['1k', '2k', '4k'].map((size) => {
-                              const isAvailable = availableSizes.includes(size);
-                              const active = ecomImageSize === size;
-                              return (
-                                <button
-                                  key={size}
-                                  onClick={() => isAvailable && setEcomImageSize(size)}
-                                  disabled={!isAvailable}
-                                  title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
-                                  className="px-3 py-2 text-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                                  style={{
-                                    borderRadius: 10,
-                                    background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
-                                    border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
-                                    color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                                    fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
-                                  }}
-                                >
-                                  {size.toUpperCase()}
-                                </button>
-                              );
-                            });
-                          })()}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Số ảnh</p>
-                        <div className="flex gap-1.5">
-                          {[1, 2, 3].map((count) => {
-                            const active = ecomImageCount === count;
-                            return (
-                              <button
-                                key={count}
-                                onClick={() => setEcomImageCount(count)}
-                                className="px-3 py-2 text-center transition-all"
-                                style={{
-                                  borderRadius: 10,
-                                  background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
-                                  border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
-                                  color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                                  fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
-                                }}
-                              >
-                                {count}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
+                  <div>
+                    <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Số ảnh</p>
+                    <div className="flex gap-1">
+                      {[1, 2, 3].map((count) => {
+                        const active = ecomImageCount === count;
+                        return (
+                          <button
+                            key={count}
+                            onClick={() => setEcomImageCount(count)}
+                            className="flex-1 py-1.5 text-center transition-all"
+                            style={{
+                              borderRadius: 8,
+                              background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                              border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+                              color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                              fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
+                            }}
+                          >
+                            {count}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* Col 1 — Ảnh sản phẩm */}
-                  <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
+                  <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
                       <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
                         Ảnh sản phẩm
                       </p>
                     </div>
                     <div
                       {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
-                      className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                      className="w-full aspect-[4/3] flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
                       style={{
                         background: dragOverId === 'ecom-product' ? 'var(--color-accent-soft)' : 'var(--color-card)',
                         border: `2px dashed ${dragOverId === 'ecom-product' || ecomProductImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
@@ -4498,15 +4565,15 @@ function App() {
                   </div>
 
                   {/* Col 2 — Prompt */}
-                  <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
-                    <div className="mb-3 flex items-center gap-2">
-                      <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>2</span>
+                  <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>2</span>
                       <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
                         Prompt
                       </p>
                     </div>
 
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2">
                       <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
                         Danh sách đã lưu
                       </p>
@@ -4787,16 +4854,37 @@ function App() {
                 )}
 
                 <div className="pt-2 space-y-3">
-                  <Button
-                    variant="filled"
-                    size="lg"
-                    fullWidth
-                    icon={isEcomGenerating ? Loader2 : Sparkles}
-                    onClick={handleEcomGenerate}
-                    disabled={!ecomProductImage || isEcomGenerating}
-                  >
-                    {isEcomGenerating ? 'Đang xử lý…' : 'Gen ảnh TMĐT'}
-                  </Button>
+                  {(() => {
+                    const runningBatches = ecomBatches.filter(b => b.status === 'running').length;
+                    if (ecomSubTab === 'gen-new') {
+                      return (
+                        <Button
+                          variant="filled"
+                          size="lg"
+                          fullWidth
+                          icon={Sparkles}
+                          onClick={handleEcomGenerate}
+                          disabled={!ecomProductImage}
+                        >
+                          {runningBatches > 0
+                            ? `Gen thêm batch (đang chạy ${runningBatches})`
+                            : 'Gen ảnh TMĐT'}
+                        </Button>
+                      );
+                    }
+                    return (
+                      <Button
+                        variant="filled"
+                        size="lg"
+                        fullWidth
+                        icon={isEcomGenerating ? Loader2 : Sparkles}
+                        onClick={handleEcomGenerate}
+                        disabled={!ecomProductImage || isEcomGenerating}
+                      >
+                        {isEcomGenerating ? 'Đang xử lý…' : 'Gen ảnh TMĐT'}
+                      </Button>
+                    );
+                  })()}
                 </div>
               </>
             )}
@@ -4808,8 +4896,13 @@ function App() {
             )}
               </div>
             </div>
-          {/* Right panel: Results — hidden on pattern-replace; full-width below on gen-new/clone */}
-          <div className={`flex-col gap-4 ${ecomSubTab === 'pattern-replace' ? 'hidden' : ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-8 flex' : 'lg:col-span-12 flex'}`}>
+          {/* Right panel: Results — hidden on pattern-replace; side-by-side 5-col on gen-new; full-width below on clone */}
+          <div className={`flex-col gap-4 ${
+            ecomSubTab === 'pattern-replace' ? 'hidden'
+            : ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-8 flex'
+            : ecomSubTab === 'gen-new' ? 'lg:col-span-5 flex'
+            : 'lg:col-span-12 flex'
+          }`}>
             <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
               {ecomSubTab === 'gen-new' && ecomLastFinalImages.length > 0 && (
                 <div className="mb-4 pb-4 border-b border-editor-border/50">
@@ -5711,8 +5804,146 @@ function App() {
                     </>
                   )}
                 </div>
+              ) : ecomSubTab === 'gen-new' ? (
+                ecomBatches.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center text-gray-500 h-full">
+                    <ImageIcon size={64} className="opacity-20 mb-4" />
+                    <p>Kết quả sẽ hiển thị ở đây</p>
+                    <p className="text-xs mt-2 opacity-60">Bấm "Gen ảnh TMĐT" để tạo batch đầu tiên</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-5 w-full">
+                    {ecomBatches.map((batch) => {
+                      const elapsed = ((batch.finishedAt || Date.now()) - batch.startedAt) / 1000;
+                      return (
+                        <div
+                          key={batch.id}
+                          className="rounded-2xl p-4 flex flex-col gap-3"
+                          style={{
+                            background: 'var(--color-card-secondary)',
+                            border: '0.5px solid var(--color-border-soft)',
+                          }}
+                        >
+                          {/* Batch header */}
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                {batch.status === 'running' && (
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase" style={{ background: 'rgba(0,122,255,0.15)', color: 'var(--color-accent)' }}>
+                                    <Loader2 size={10} className="animate-spin" />
+                                    Đang gen
+                                  </span>
+                                )}
+                                {batch.status === 'done' && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase" style={{ background: 'rgba(52,199,89,0.15)', color: 'var(--color-success)' }}>
+                                    <CheckCircle2 size={10} />
+                                    Xong ({elapsed.toFixed(0)}s)
+                                  </span>
+                                )}
+                                {batch.status === 'failed' && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase" style={{ background: 'rgba(255,59,48,0.15)', color: 'var(--color-danger)' }}>
+                                    <AlertCircle size={10} />
+                                    Fail
+                                  </span>
+                                )}
+                                <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--color-text-tertiary)', letterSpacing: '0.04em' }}>
+                                  {batch.model} • {batch.aspectRatio} • {batch.imageSize.toUpperCase()} • {batch.imageCount} ảnh
+                                </span>
+                              </div>
+                              {batch.promptSource === 'saved' ? (
+                                <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                  <Save size={11} style={{ color: 'var(--color-text-tertiary)' }} />
+                                  <span style={{ color: 'var(--color-text-tertiary)' }}>Prompt mẫu:</span>
+                                  <span className="font-semibold">{batch.promptLabel || '(không tên)'}</span>
+                                </p>
+                              ) : (
+                                <p className="text-xs line-clamp-2" style={{ color: 'var(--color-text-secondary)' }} title={batch.promptText}>
+                                  {batch.promptText}
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setEcomBatches((prev) => prev.filter(b => b.id !== batch.id))}
+                              className="p-1.5 rounded-lg shrink-0"
+                              style={{ color: 'var(--color-text-tertiary)' }}
+                              title="Xoá batch khỏi danh sách"
+                              aria-label="Xoá batch"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          {/* Batch body */}
+                          {(() => {
+                            // Fix card size at 1/3 width regardless of imageCount — empty cells stay invisible
+                            const batchGridCols = 'grid-cols-3';
+                            return batch.status === 'running' ? (
+                            <div className={`grid ${batchGridCols} gap-3`}>
+                              {Array.from({ length: batch.imageCount }).map((_, i) => (
+                                <div key={i} className="relative rounded-xl overflow-hidden border border-editor-border bg-[#0f0f13] aspect-[3/4] flex flex-col items-center justify-center gap-3">
+                                  <div className="animate-pulse absolute inset-0 bg-gray-800/20" />
+                                  <Loader2 className="animate-spin relative z-10" size={26} style={{ color: 'var(--color-accent)' }} />
+                                  <p className="text-gray-400 text-[11px] font-medium relative z-10 animate-pulse">Đang tạo ảnh {i + 1}...</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : batch.status === 'failed' ? (
+                            <div className="text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(255,59,48,0.08)', color: 'var(--color-danger)' }}>
+                              {batch.errorMessage || 'Lỗi không rõ'}
+                            </div>
+                          ) : (
+                            <div className={`grid ${batchGridCols} gap-3`}>
+                              {batch.results.map((res, i) => (
+                                <div key={i} className="relative group rounded-xl overflow-hidden border border-editor-border bg-black aspect-[3/4] flex items-center justify-center">
+                                  <img src={res} alt={`Batch ${batch.id} #${i+1}`} className="w-full h-full object-contain" />
+                                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => setZoomImage(res)}
+                                      className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition"
+                                      title="Phóng to"
+                                    >
+                                      <ZoomIn size={16} />
+                                    </button>
+                                    <button
+                                      onClick={() => setSelectedEcomGrid(res)}
+                                      className="px-3 py-1.5 bg-white text-black font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
+                                    >
+                                      <Crop size={12} /> Chọn Tách
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setEcomTemplateImage(res);
+                                        setEcomSubTab('clone-template');
+                                      }}
+                                      className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px] hover:bg-indigo-600 transition-colors"
+                                    >
+                                      <Copy size={12} /> Dùng làm Mẫu
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const link = document.createElement('a');
+                                        link.href = res;
+                                        link.download = `ecom-${batch.id}-${i+1}.png`;
+                                        link.click();
+                                      }}
+                                      className="px-3 py-1.5 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
+                                    >
+                                      <Download size={12} /> Tải
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                          })()}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
               ) : isEcomGenerating ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className={`grid gap-4 ${ecomSubTab === 'gen-new' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
                   {Array.from({ length: ecomImageCount }).map((_, i) => (
                     <div key={i} className="relative rounded-xl overflow-hidden border border-editor-border bg-[#0f0f13] aspect-[3/4] flex flex-col items-center justify-center gap-4">
                       <div className="animate-pulse absolute inset-0 bg-gray-800/20" />
@@ -5722,7 +5953,7 @@ function App() {
                   ))}
                 </div>
               ) : ecomResults.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className={`grid gap-4 ${ecomSubTab === 'gen-new' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
                   {ecomResults.map((res, i) => (
                     <div key={i} className="relative group rounded-xl overflow-hidden border border-editor-border bg-black aspect-[3/4] flex items-center justify-center">
                       <img src={res} alt={`Result ${i+1}`} className="w-full h-full object-contain" />
