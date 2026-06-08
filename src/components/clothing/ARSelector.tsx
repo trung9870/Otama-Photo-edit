@@ -6,7 +6,7 @@ export interface ARSelectorProps {
   value: AspectRatio | string;
   onChange: (v: AspectRatio) => void;
   options?: AspectRatio[];
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
 }
 
 const DEFAULT: AspectRatio[] = ['1:1', '3:4', '4:3', '9:16', '16:9'];
@@ -35,9 +35,10 @@ function ARIcon({ value, active }: { value: AspectRatio; active: boolean }) {
 }
 
 export function ARSelector({ value, onChange, options = DEFAULT, size = 'md' }: ARSelectorProps) {
-  const h = size === 'sm' ? 48 : 56;
+  const h = size === 'xs' ? 34 : size === 'sm' ? 48 : 56;
+  const fontSize = size === 'xs' ? 10 : 11;
   return (
-    <div className="grid grid-cols-5 gap-1.5">
+    <div className={`grid grid-cols-5 gap-1`}>
       {options.map((v) => {
         const active = v === value;
         return (
@@ -45,14 +46,14 @@ export function ARSelector({ value, onChange, options = DEFAULT, size = 'md' }: 
             key={v}
             type="button"
             onClick={() => onChange(v)}
-            className="flex flex-col items-center justify-center gap-1 transition-all"
+            className={`flex flex-col items-center justify-center ${size === 'xs' ? 'gap-0.5' : 'gap-1'} transition-all`}
             style={{
               height: h,
-              borderRadius: 10,
+              borderRadius: size === 'xs' ? 8 : 10,
               background: active ? 'var(--color-accent-soft)' : 'var(--color-fill)',
               color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
               border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
-              fontSize: 11,
+              fontSize,
               fontWeight: 600,
               letterSpacing: '-0.01em',
             }}

@@ -4454,6 +4454,7 @@ function App() {
                     <ModelCardPicker<ModelType>
                       value={ecomModel}
                       onChange={(m) => setEcomModel(m)}
+                      size="sm"
                       options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
                         value: m,
                         name: MODEL_CONFIG[m].name,
@@ -4464,7 +4465,7 @@ function App() {
                   </div>
                   <div>
                     <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ khung hình</p>
-                    <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} size="sm" />
+                    <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} size="xs" />
                   </div>
                   <div>
                     <p className="uppercase font-semibold mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chất lượng</p>
