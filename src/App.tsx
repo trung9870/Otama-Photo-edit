@@ -5936,7 +5936,7 @@ function App() {
           {/* Left panel: settings */}
           <div className="lg:col-span-5 flex flex-col gap-6">
             <div
-              className="p-6"
+              className="p-5 flex flex-col gap-4"
               style={{
                 background: 'var(--color-card)',
                 border: '0.5px solid var(--color-border-soft)',
@@ -5944,57 +5944,48 @@ function App() {
                 boxShadow: 'var(--shadow-card)',
               }}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
-                <h2 className="text-lg font-bold" style={{ color: 'var(--color-text)' }}>OFA Studio</h2>
+              {/* Title row */}
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles size={18} style={{ color: 'var(--color-accent)' }} />
+                  <h2 className="text-lg font-bold" style={{ color: 'var(--color-text)', letterSpacing: '-0.02em' }}>OFA Studio</h2>
+                  <span style={{ fontSize: 11, fontWeight: 500, padding: '4px 9px', borderRadius: 999, background: 'var(--color-fill)', color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>One-For-All</span>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                  Một sản phẩm → cả bộ ảnh detail page. Nhập thông tin, chọn các mục ảnh muốn có, AI tạo song song.
+                </p>
               </div>
-              <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
-                Gen bộ ảnh trang chi tiết TMĐT — 16 đầu mục theo phong cách cao cấp.
-              </p>
 
-              {/* 1. Tên sản phẩm */}
-              <div className="mb-4">
-                <label className="block uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                  Tên sản phẩm <span style={{ color: 'var(--color-danger)' }}>*</span>
-                </label>
+              {/* 1. Sản phẩm — name + description */}
+              <div className="p-3 flex flex-col gap-2" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
+                  <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Sản phẩm</p>
+                </div>
                 <input
                   type="text"
                   value={ofaProductName}
                   onChange={(e) => setOfaProductName(e.target.value)}
-                  placeholder="VD: Set chăn ga gối 4 món hoạ tiết hoa"
-                  className="w-full px-3 py-2.5 rounded-lg text-sm"
-                  style={{
-                    background: 'var(--color-bg)',
-                    border: '0.5px solid var(--color-border-soft)',
-                    color: 'var(--color-text)',
-                  }}
+                  placeholder="Tên sản phẩm (vd: Set chăn ga 4 món hoạ tiết hoa)"
+                  className="w-full outline-none"
+                  style={{ padding: '10px 12px', borderRadius: 11, border: '1px solid transparent', background: 'var(--color-fill)', color: 'var(--color-text)', fontSize: 12.5, fontWeight: 500 }}
                 />
-              </div>
-
-              {/* 2. Mô tả bổ sung */}
-              <div className="mb-4">
-                <label className="block uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                  Mô tả / bổ sung prompt (tuỳ chọn)
-                </label>
                 <textarea
                   value={ofaDescription}
                   onChange={(e) => setOfaDescription(e.target.value)}
-                  placeholder="Nhập điểm bán, đặc tính, gam màu... cách nhau bằng dấu phẩy"
+                  placeholder="Mô tả ngắn: chất liệu, ưu điểm, đối tượng…"
                   rows={3}
-                  className="w-full px-3 py-2.5 rounded-lg text-sm resize-none"
-                  style={{
-                    background: 'var(--color-bg)',
-                    border: '0.5px solid var(--color-border-soft)',
-                    color: 'var(--color-text)',
-                  }}
+                  className="w-full outline-none resize-none"
+                  style={{ padding: '10px 12px', borderRadius: 11, border: '1px solid transparent', background: 'var(--color-fill)', color: 'var(--color-text)', fontSize: 12, lineHeight: 1.5 }}
                 />
               </div>
 
-              {/* 3. Ảnh tham khảo */}
-              <div className="mb-5">
-                <label className="block uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                  Ảnh tham khảo (tối đa 3, nền trắng tốt nhất)
-                </label>
+              {/* 2. Ảnh tham khảo — 3 slots */}
+              <div className="p-3" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>2</span>
+                  <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Ảnh tham khảo (tối đa 3)</p>
+                </div>
                 <div className="grid grid-cols-3 gap-2">
                   {[0, 1, 2].map((slot) => {
                     const img = ofaImages[slot];
@@ -6010,10 +6001,12 @@ function App() {
                           if (f) loadFileToOfa(f, slot);
                         }}
                         onClick={() => ofaInputRefs.current[slot]?.click()}
-                        className="aspect-square rounded-lg flex flex-col items-center justify-center cursor-pointer relative overflow-hidden transition-all"
+                        className="aspect-square flex flex-col items-center justify-center cursor-pointer relative overflow-hidden transition-all"
                         style={{
-                          background: img ? 'var(--color-bg)' : 'var(--color-fill)',
-                          border: `1px dashed ${ofaDragOver === slot ? 'var(--color-accent)' : 'var(--color-border-soft)'}`,
+                          borderRadius: 11,
+                          background: img ? 'var(--color-card)' : 'var(--color-card)',
+                          border: `2px dashed ${ofaDragOver === slot ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                          color: 'var(--color-text-tertiary)',
                         }}
                       >
                         {img ? (
@@ -6031,10 +6024,7 @@ function App() {
                             </button>
                           </>
                         ) : (
-                          <>
-                            <Plus size={20} style={{ color: 'var(--color-text-tertiary)' }} />
-                            <span className="text-xs mt-1" style={{ color: 'var(--color-text-tertiary)' }}>Thêm</span>
-                          </>
+                          <Plus size={20} />
                         )}
                         <input
                           ref={(el) => { ofaInputRefs.current[slot] = el; }}
@@ -6053,33 +6043,36 @@ function App() {
                 </div>
               </div>
 
-              {/* 4. 16 mục prompt */}
-              <div className="mb-5">
+              {/* 3. Mục ảnh muốn tạo — chip pills */}
+              <div className="p-3" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                    Loại hình ảnh (chọn nhiều)
-                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
+                    <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                      Mục ảnh ({ofaSelectedCategoryIds.length}/{OFA_PROMPT_LIBRARY.length})
+                    </p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setOfaSelectedCategoryIds(OFA_PROMPT_LIBRARY.map((c) => c.id))}
-                      className="text-xs font-medium"
-                      style={{ color: 'var(--color-accent)' }}
+                      className="font-semibold hover:opacity-80"
+                      style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                     >
-                      Chọn tất cả
+                      TẤT CẢ
                     </button>
-                    <span style={{ color: 'var(--color-text-tertiary)' }}>·</span>
+                    <span style={{ color: 'var(--color-text-tertiary)', fontSize: 10 }}>·</span>
                     <button
                       type="button"
                       onClick={() => setOfaSelectedCategoryIds([])}
-                      className="text-xs font-medium"
-                      style={{ color: 'var(--color-text-tertiary)' }}
+                      className="font-semibold hover:opacity-80"
+                      style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.04em' }}
                     >
-                      Bỏ chọn
+                      BỎ
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="flex flex-wrap gap-1.5">
                   {OFA_PROMPT_LIBRARY.map((c) => {
                     const selected = ofaSelectedCategoryIds.includes(c.id);
                     return (
@@ -6087,91 +6080,81 @@ function App() {
                         key={c.id}
                         type="button"
                         onClick={() => toggleOfaCategory(c.id)}
-                        className="px-2 py-2 rounded-lg text-xs text-left transition-all"
+                        className="transition-all"
                         style={{
-                          background: selected ? 'var(--color-accent)' : 'var(--color-fill)',
-                          color: selected ? 'white' : 'var(--color-text)',
-                          border: selected ? '0.5px solid transparent' : '0.5px solid var(--color-border-soft)',
-                          fontWeight: selected ? 600 : 500,
+                          padding: '7px 12px',
+                          borderRadius: 9,
+                          border: selected ? '1px solid var(--color-accent)' : '1px solid var(--color-border-soft)',
+                          background: selected ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                          color: selected ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          boxShadow: selected ? 'none' : 'var(--sh-up-sm)',
+                          cursor: 'pointer',
                         }}
                       >
-                        <span style={{ opacity: 0.7, fontSize: 10 }}>{c.id}.</span> {c.name}
+                        {c.name}
                       </button>
                     );
                   })}
                 </div>
-                <p className="text-xs mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
-                  Đã chọn {ofaSelectedCategoryIds.length}/{OFA_PROMPT_LIBRARY.length} mục
-                </p>
               </div>
 
-              {/* 5. Cài đặt: Model + AR + Quality + Count */}
-              <div
-                className="p-4 mb-4"
-                style={{
-                  background: 'var(--color-fill)',
-                  borderRadius: 14,
-                  border: '0.5px solid var(--color-border-soft)',
-                }}
-              >
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Model</p>
-                    <ModelCardPicker<'gpt2' | 'banana-pro'>
-                      columns={2}
-                      value={ofaModel}
-                      onChange={(v) => setOfaModel(v)}
-                      options={[
-                        { value: 'gpt2', name: 'GPT2', sub: 'KIE.AI' },
-                        { value: 'banana-pro', name: 'Banana Pro', sub: 'KIE.AI', best: true },
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ khung hình</p>
-                    <ARSelector value={ofaAspectRatio as any} onChange={(v) => setOfaAspectRatio(v)} />
-                  </div>
-                </div>
-                <div>
-                  <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chất lượng</p>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {['1k', '2k', '4k'].map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => setOfaQuality(q)}
-                        className="py-2 rounded-lg text-xs font-semibold transition-all"
-                        style={{
-                          background: ofaQuality === q ? 'var(--color-accent)' : 'var(--color-bg)',
-                          color: ofaQuality === q ? 'white' : 'var(--color-text)',
-                          border: ofaQuality === q ? '0.5px solid transparent' : '0.5px solid var(--color-border-soft)',
-                        }}
-                      >
-                        {q.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              {/* 4. Cài đặt — compact dropdown row (Model / AR / Quality) */}
+              <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
+                {(() => {
+                  const modelOpts: SettingsDropdownOption<'gpt2' | 'banana-pro'>[] = [
+                    { value: 'banana-pro', label: 'Banana Pro', badge: { text: 'BEST', tone: 'accent' } },
+                    { value: 'gpt2', label: 'GPT2', badge: { text: 'FAST', tone: 'neutral' } },
+                  ];
+                  const arOpts: SettingsDropdownOption<string>[] = ['1:1', '3:4', '4:3', '9:16', '16:9'].map((a) => ({ value: a, label: a }));
+                  const sizeOpts: SettingsDropdownOption<string>[] = ['1k', '2k', '4k'].map((s) => ({ value: s, label: s.toUpperCase() }));
+                  return (
+                    <>
+                      <SettingsDropdown<'gpt2' | 'banana-pro'>
+                        value={ofaModel}
+                        onChange={(v) => setOfaModel(v)}
+                        options={modelOpts}
+                        width="fill"
+                      />
+                      <SettingsDropdown<string>
+                        value={ofaAspectRatio}
+                        onChange={(v) => setOfaAspectRatio(v)}
+                        options={arOpts}
+                      />
+                      <SettingsDropdown<string>
+                        value={ofaQuality}
+                        onChange={(v) => setOfaQuality(v)}
+                        options={sizeOpts}
+                      />
+                    </>
+                  );
+                })()}
               </div>
 
-              {/* 6. Gen button — always enabled; per-batch cancel lives in result panel */}
+              {/* 5. Gen button */}
               <button
                 onClick={handleOfaGenerate}
-                className="w-full py-3 rounded-xl flex items-center justify-center gap-2 font-semibold transition-all"
+                className="w-full flex items-center justify-center gap-2 font-semibold transition-all"
                 style={{
+                  padding: 14,
+                  borderRadius: 14,
                   background: 'var(--color-accent)',
-                  color: 'white',
-                  boxShadow: '0 4px 12px rgba(0,122,255,0.25)',
+                  color: '#fff',
+                  fontSize: 15,
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 6px 16px rgba(37, 112, 224, 0.32)',
                 }}
               >
-                <Sparkles size={16} /> Gen ảnh OFA ({ofaSelectedCategoryIds.length} ảnh)
+                <Sparkles size={18} /> Tạo bộ ảnh OFA ({ofaSelectedCategoryIds.length} ảnh)
               </button>
               {(() => {
                 const running = ofaBatches.filter((b) => b.status === 'running').length;
                 const queued = ofaBatches.filter((b) => b.status === 'queued').length;
                 if (running + queued === 0) return null;
                 return (
-                  <p className="text-xs text-center mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                  <p className="text-xs text-center" style={{ color: 'var(--color-text-tertiary)' }}>
                     {running} lượt đang chạy{queued > 0 ? `, ${queued} đang chờ` : ''} (cap {OFA_MAX_CONCURRENT})
                   </p>
                 );
