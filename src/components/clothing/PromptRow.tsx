@@ -1,10 +1,13 @@
 import React from 'react';
-import { CheckCircle2, Edit2, Trash2, Globe } from 'lucide-react';
+import { CheckCircle2, Edit2, Trash2, Globe, Star } from 'lucide-react';
 
 export interface PromptRowProps {
   name: string;
   active: boolean;
   synced?: boolean;
+  /** When true, render a soft fill background + a star marker indicating this
+   *  is one of the "top 4" pinned prompts surfaced as quick-pick tiles. */
+  pinned?: boolean;
   onClick: () => void;
   onEdit?: (e: React.MouseEvent) => void;
   onDelete?: (e: React.MouseEvent) => void;
@@ -15,7 +18,7 @@ export interface PromptRowProps {
 }
 
 export function PromptRow({
-  name, active, synced,
+  name, active, synced, pinned,
   onClick, onEdit, onDelete, onSync,
   showSync, showEdit = true, showDelete = true,
 }: PromptRowProps) {
@@ -26,8 +29,16 @@ export function PromptRow({
       style={{
         padding: '10px 12px',
         borderRadius: 10,
-        background: active ? 'var(--color-accent-soft)' : 'transparent',
-        border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
+        background: active
+          ? 'var(--color-accent-soft)'
+          : pinned
+            ? 'var(--color-fill)'
+            : 'transparent',
+        border: active
+          ? '1px solid var(--color-accent)'
+          : pinned
+            ? '1px solid var(--color-border-soft)'
+            : '1px solid transparent',
       }}
     >
       <div className="flex items-center gap-2.5 overflow-hidden">
@@ -51,6 +62,9 @@ export function PromptRow({
         >
           {name}
         </div>
+        {pinned && !active && (
+          <Star size={11} strokeWidth={2} style={{ color: 'var(--color-warning)', fill: 'var(--color-warning)', flexShrink: 0 }} />
+        )}
         {synced && <CheckCircle2 size={12} style={{ color: 'var(--color-success)', flexShrink: 0 }} />}
       </div>
       <div className="flex items-center gap-0.5 shrink-0">

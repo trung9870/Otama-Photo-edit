@@ -4608,6 +4608,7 @@ function App() {
                                         name={p.name}
                                         active={selectedEcomPromptId === p.id}
                                         synced={p.isDefault}
+                                        pinned={idx < 4}
                                         onClick={() => { setSelectedEcomPromptId(p.id); setEcomPromptText(p.prompt); }}
                                         showSync={isAdmin}
                                         onSync={(e) => toggleSyncEcomPrompt(p, e)}
