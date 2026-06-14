@@ -4502,96 +4502,126 @@ function App() {
                         </div>
                       </motion.div>
                     ) : (
-                      <div
-                        className="space-y-1 mb-4"
-                        style={showEcomPromptModal ? { maxHeight: 240, overflowY: 'auto' } : undefined}
-                      >
+                      <div className="mb-4">
                         {selectedEcomPromptId === 'manual' && (
-                          <PromptRow name="📝 Nhập thủ công" active onClick={() => {}} showEdit={false} showDelete={false} />
+                          <div className="mb-2">
+                            <PromptRow name="📝 Nhập thủ công" active onClick={() => {}} showEdit={false} showDelete={false} />
+                          </div>
                         )}
-                        {(showEcomPromptModal ? ecomSavedPrompts : ecomSavedPrompts.slice(0, 3)).map((p, idx) => (
-                          <motion.div
-                            key={p.id}
-                            // Skip layout animation on the item being dragged — it's already moving
-                            // with the mouse cursor; double-animating causes jitter.
-                            layout={draggedEcomPromptIndex === idx ? false : 'position'}
-                            transition={{ type: 'tween', duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              e.dataTransfer.dropEffect = 'move';
-                              if (
-                                draggedEcomPromptIndex === null ||
-                                draggedEcomPromptIndex === idx
-                              ) return;
-                              // Only swap once the cursor crosses the midpoint of THIS row
-                              // (in the direction we're moving). Prevents thrashing on tiny mouse moves.
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const midY = rect.top + rect.height / 2;
-                              const movingDown = draggedEcomPromptIndex < idx;
-                              const crossed = movingDown ? e.clientY > midY : e.clientY < midY;
-                              if (!crossed) return;
-                              const from = draggedEcomPromptIndex;
-                              setEcomSavedPrompts((prev) => {
-                                if (from >= prev.length || idx >= prev.length) return prev;
-                                const next = [...prev];
-                                const [moved] = next.splice(from, 1);
-                                next.splice(idx, 0, moved);
-                                return next;
-                              });
-                              setDraggedEcomPromptIndex(idx);
-                            }}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              setDraggedEcomPromptIndex(null);
-                            }}
-                            className="flex items-center gap-1"
-                            style={{
-                              opacity: draggedEcomPromptIndex === idx ? 0.4 : 1,
-                            }}
-                          >
-                            <div
-                              draggable
-                              onDragStart={(e) => {
-                                setDraggedEcomPromptIndex(idx);
-                                e.dataTransfer.effectAllowed = 'move';
-                                // Required in some browsers for drag to fire
-                                try { e.dataTransfer.setData('text/plain', String(idx)); } catch {}
-                              }}
-                              onDragEnd={() => setDraggedEcomPromptIndex(null)}
-                              className="cursor-grab active:cursor-grabbing shrink-0 p-1 rounded hover:bg-black/5"
-                              style={{ color: 'var(--color-text-tertiary)' }}
-                              title="Kéo để sắp xếp lại"
-                              aria-label="Kéo để sắp xếp"
-                            >
-                              <GripVertical size={14} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <PromptRow
-                                name={p.name}
-                                active={selectedEcomPromptId === p.id}
-                                synced={p.isDefault}
+                        {/* TOP 4 prompts as compact tile grid (2x2) */}
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {ecomSavedPrompts.slice(0, 4).map((p) => {
+                            const active = selectedEcomPromptId === p.id;
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
                                 onClick={() => { setSelectedEcomPromptId(p.id); setEcomPromptText(p.prompt); }}
-                                showSync={isAdmin}
-                                onSync={(e) => toggleSyncEcomPrompt(p, e)}
-                                showEdit={isAdmin || !p.isDefault}
-                                showDelete={isAdmin || !p.isDefault}
-                                onEdit={(e) => startEditEcomPrompt(p, e)}
-                                onDelete={(e) => deleteEcomPrompt(p.id, e)}
-                              />
-                            </div>
-                          </motion.div>
-                        ))}
-                        {ecomSavedPrompts.length > 3 && (
-                          <button
-                            onClick={() => setShowEcomPromptModal((v) => !v)}
-                            className="w-full flex items-center justify-center gap-1.5 transition-colors mt-1"
-                            style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--color-accent)', background: 'var(--color-fill)', borderRadius: 10, letterSpacing: '-0.01em' }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-soft)')}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-fill)')}
-                          >
-                            {showEcomPromptModal ? 'Thu gọn' : `Xem tất cả (${ecomSavedPrompts.length})`}
-                            <ChevronRight size={14} style={{ transform: showEcomPromptModal ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }} />
-                          </button>
+                                title={p.name}
+                                className="text-left transition-all"
+                                style={{
+                                  padding: '9px 11px',
+                                  borderRadius: 10,
+                                  background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                                  border: active ? '1px solid var(--color-accent)' : '1px solid var(--color-border-soft)',
+                                  color: active ? 'var(--color-accent)' : 'var(--color-text)',
+                                  boxShadow: active ? 'none' : 'var(--sh-up-sm)',
+                                  fontSize: 11.5,
+                                  fontWeight: 600,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  cursor: 'pointer',
+                                  minHeight: 36,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                }}
+                              >
+                                {p.isDefault && <span style={{ width: 5, height: 5, borderRadius: 999, background: 'var(--color-success)', flexShrink: 0 }} />}
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Show "Xem tất cả" only when there are >4 prompts (rest exists) */}
+                        {ecomSavedPrompts.length > 4 && (
+                          <>
+                            <button
+                              onClick={() => setShowEcomPromptModal((v) => !v)}
+                              className="w-full flex items-center justify-center gap-1.5 transition-colors mt-2"
+                              style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--color-accent)', background: 'var(--color-fill)', borderRadius: 10, letterSpacing: '-0.01em' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-soft)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-fill)')}
+                            >
+                              {showEcomPromptModal ? 'Thu gọn' : `Xem tất cả (${ecomSavedPrompts.length})`}
+                              <ChevronRight size={14} style={{ transform: showEcomPromptModal ? 'rotate(90deg)' : 'none', transition: 'transform 150ms' }} />
+                            </button>
+                            {showEcomPromptModal && (
+                              <div className="space-y-1 mt-2" style={{ maxHeight: 320, overflowY: 'auto' }}>
+                                {ecomSavedPrompts.map((p, idx) => (
+                                  <motion.div
+                                    key={p.id}
+                                    layout={draggedEcomPromptIndex === idx ? false : 'position'}
+                                    transition={{ type: 'tween', duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+                                    onDragOver={(e) => {
+                                      e.preventDefault();
+                                      e.dataTransfer.dropEffect = 'move';
+                                      if (draggedEcomPromptIndex === null || draggedEcomPromptIndex === idx) return;
+                                      const rect = e.currentTarget.getBoundingClientRect();
+                                      const midY = rect.top + rect.height / 2;
+                                      const movingDown = draggedEcomPromptIndex < idx;
+                                      const crossed = movingDown ? e.clientY > midY : e.clientY < midY;
+                                      if (!crossed) return;
+                                      const from = draggedEcomPromptIndex;
+                                      setEcomSavedPrompts((prev) => {
+                                        if (from >= prev.length || idx >= prev.length) return prev;
+                                        const next = [...prev];
+                                        const [moved] = next.splice(from, 1);
+                                        next.splice(idx, 0, moved);
+                                        return next;
+                                      });
+                                      setDraggedEcomPromptIndex(idx);
+                                    }}
+                                    onDrop={(e) => { e.preventDefault(); setDraggedEcomPromptIndex(null); }}
+                                    className="flex items-center gap-1"
+                                    style={{ opacity: draggedEcomPromptIndex === idx ? 0.4 : 1 }}
+                                  >
+                                    <div
+                                      draggable
+                                      onDragStart={(e) => {
+                                        setDraggedEcomPromptIndex(idx);
+                                        e.dataTransfer.effectAllowed = 'move';
+                                        try { e.dataTransfer.setData('text/plain', String(idx)); } catch {}
+                                      }}
+                                      onDragEnd={() => setDraggedEcomPromptIndex(null)}
+                                      className="cursor-grab active:cursor-grabbing shrink-0 p-1 rounded hover:bg-black/5"
+                                      style={{ color: 'var(--color-text-tertiary)' }}
+                                      title="Kéo để sắp xếp lại"
+                                      aria-label="Kéo để sắp xếp"
+                                    >
+                                      <GripVertical size={14} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <PromptRow
+                                        name={p.name}
+                                        active={selectedEcomPromptId === p.id}
+                                        synced={p.isDefault}
+                                        onClick={() => { setSelectedEcomPromptId(p.id); setEcomPromptText(p.prompt); }}
+                                        showSync={isAdmin}
+                                        onSync={(e) => toggleSyncEcomPrompt(p, e)}
+                                        showEdit={isAdmin || !p.isDefault}
+                                        showDelete={isAdmin || !p.isDefault}
+                                        onEdit={(e) => startEditEcomPrompt(p, e)}
+                                        onDelete={(e) => deleteEcomPrompt(p.id, e)}
+                                      />
+                                    </div>
+                                  </motion.div>
+                                ))}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
