@@ -164,19 +164,21 @@ function AvatarPill({ user, onLogin, onLogout }: { user: FirebaseUser | null; on
 }
 
 function ThemeToggle({ theme, resolvedTheme, onThemeChange }: { theme: Theme; resolvedTheme: 'light' | 'dark'; onThemeChange: (t: Theme) => void }) {
-  const Icon = theme === 'system' ? Monitor : resolvedTheme === 'dark' ? Moon : Sun;
-  const label = theme === 'system' ? 'Auto' : theme === 'dark' ? 'Tối' : 'Sáng';
-  const next: Theme = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
+  // Per design handoff: compact Light/Dark segmented switcher.
+  // When the underlying state is 'system', the segment that matches the
+  // resolved appearance is highlighted; clicking either segment sets an
+  // explicit preference. (System option remains available via Settings sheet.)
+  const active = theme === 'system' ? resolvedTheme : theme;
   return (
-    <Button
-      variant="secondary"
+    <Segmented<'light' | 'dark'>
+      value={active}
+      onChange={(v) => onThemeChange(v)}
       size="sm"
-      icon={Icon}
-      onClick={() => onThemeChange(next)}
-      title={`Theme: ${theme}`}
-    >
-      {label}
-    </Button>
+      options={[
+        { value: 'light', label: 'Light', icon: Sun },
+        { value: 'dark', label: 'Dark', icon: Moon },
+      ]}
+    />
   );
 }
 
