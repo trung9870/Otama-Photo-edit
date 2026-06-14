@@ -377,7 +377,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'generate' | 'analyze' | 'tryon'>('generate');
   
   // App Mode
-  const [appMode, setAppMode] = useState<'clothing' | 'ecom' | 'ofa' | 'picset' | 'admin'>('clothing');
+  const [appMode, setAppMode] = useState<'clothing' | 'ecom' | 'ofa' | 'picset' | 'admin'>('ecom');
 
   // API Keys and Settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
