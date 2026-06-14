@@ -15,3 +15,6 @@ export type { SwitchProps } from './Switch';
 
 export { SectionHeader } from './SectionHeader';
 export type { SectionHeaderProps } from './SectionHeader';
+
+export { SettingsDropdown } from './SettingsDropdown';
+export type { SettingsDropdownProps, SettingsDropdownOption } from './SettingsDropdown';

@@ -83,7 +83,8 @@ import { useTheme } from './hooks/useTheme';
 import { Button } from './components/ui';
 import { Header } from './components/Header';
 import { Login } from './components/Login';
-import { Segmented } from './components/ui';
+import { Segmented, SettingsDropdown } from './components/ui';
+import type { SettingsDropdownOption } from './components/ui';
 import { ARSelector, ModelCardPicker, PromptRow, PromptListModal } from './components/clothing';
 import { OFA_PROMPT_LIBRARY, buildOfaPrompt, type OfaPromptCategory } from './utils/ofaPromptLibrary';
 import PicsetTab from './components/picset/PicsetTab';
@@ -4445,91 +4446,67 @@ function App() {
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                {/* Settings card — moved on top, with dividers */}
+                {/* Settings — compact one-row dropdowns (per design handoff) */}
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
                   <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Cài đặt</p>
                 </div>
-                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
-                  <div className="flex items-center gap-2">
-                    <p className="shrink-0 uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', minWidth: 48 }}>Model</p>
-                    <div className="flex-1 min-w-0">
-                      <ModelCardPicker<ModelType>
-                        value={ecomModel}
-                        onChange={(m) => setEcomModel(m)}
-                        size="sm"
-                        options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
-                          value: m,
-                          name: MODEL_CONFIG[m].name,
-                          best: m === 'banana-pro',
-                        }))}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="shrink-0 uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', minWidth: 48 }}>Tỉ lệ</p>
-                    <div className="flex-1 min-w-0">
-                      <ARSelector value={ecomAspectRatio as any} onChange={(v) => setEcomAspectRatio(v)} size="xs" />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="shrink-0 uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', minWidth: 48 }}>Chất lượng</p>
-                    <div className="flex-1 min-w-0 flex gap-1">
-                      {(() => {
-                        const availableSizes: string[] = ecomModel === 'gpt2'
-                          ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
-                            : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
-                            : ['1k'])
-                          : ['1k', '2k', '4k'];
-                        return ['1k', '2k', '4k'].map((size) => {
-                          const isAvailable = availableSizes.includes(size);
-                          const active = ecomImageSize === size;
-                          return (
-                            <button
-                              key={size}
-                              onClick={() => isAvailable && setEcomImageSize(size)}
-                              disabled={!isAvailable}
-                              title={isAvailable ? `Chất lượng ${size.toUpperCase()}` : `GPT2 không hỗ trợ ${size.toUpperCase()} với tỉ lệ ${ecomAspectRatio}`}
-                              className="flex-1 py-1.5 text-center transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                              style={{
-                                borderRadius: 8,
-                                background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
-                                border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
-                                color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                                fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
-                              }}
-                            >
-                              {size.toUpperCase()}
-                            </button>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="shrink-0 uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em', minWidth: 48 }}>Số ảnh</p>
-                    <div className="flex-1 min-w-0 flex gap-1">
-                      {[1, 2, 3].map((count) => {
-                        const active = ecomImageCount === count;
-                        return (
-                          <button
-                            key={count}
-                            onClick={() => setEcomImageCount(count)}
-                            className="flex-1 py-1.5 text-center transition-all"
-                            style={{
-                              borderRadius: 8,
-                              background: active ? 'var(--color-accent-soft)' : 'var(--color-card)',
-                              border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
-                              color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                              fontSize: 11, fontWeight: 600, letterSpacing: '0.04em',
-                            }}
-                          >
-                            {count}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)' }}>
+                  {(() => {
+                    const modelBadgeMap: Record<string, { text: string; tone: 'accent' | 'neutral' }> = {
+                      'banana-pro': { text: 'BEST', tone: 'accent' },
+                      'gpt2': { text: 'FAST', tone: 'neutral' },
+                      'banana-2': { text: 'STD', tone: 'neutral' },
+                    };
+                    const modelOptions: SettingsDropdownOption<ModelType>[] = (Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                      value: m,
+                      label: MODEL_CONFIG[m].name,
+                      badge: modelBadgeMap[m],
+                    }));
+                    const availableSizes: string[] = ecomModel === 'gpt2'
+                      ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
+                        : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
+                        : ['1k'])
+                      : ['1k', '2k', '4k'];
+                    const sizeOptions: SettingsDropdownOption<string>[] = ['1k', '2k', '4k'].map((s) => ({
+                      value: s,
+                      label: s.toUpperCase(),
+                      disabled: !availableSizes.includes(s),
+                    }));
+                    const arOptions: SettingsDropdownOption<string>[] = ['1:1', '3:4', '4:3', '9:16', '16:9'].map((a) => ({
+                      value: a,
+                      label: a,
+                    }));
+                    const countOptions: SettingsDropdownOption<number>[] = [1, 2, 3].map((c) => ({
+                      value: c,
+                      label: String(c),
+                    }));
+                    return (
+                      <>
+                        <SettingsDropdown<ModelType>
+                          value={ecomModel}
+                          onChange={(v) => setEcomModel(v)}
+                          options={modelOptions}
+                          width="fill"
+                        />
+                        <SettingsDropdown<string>
+                          value={ecomAspectRatio}
+                          onChange={(v) => setEcomAspectRatio(v)}
+                          options={arOptions}
+                        />
+                        <SettingsDropdown<string>
+                          value={ecomImageSize}
+                          onChange={(v) => setEcomImageSize(v)}
+                          options={sizeOptions}
+                        />
+                        <SettingsDropdown<number>
+                          value={ecomImageCount}
+                          onChange={(v) => setEcomImageCount(v)}
+                          options={countOptions}
+                        />
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
