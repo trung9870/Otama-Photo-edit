@@ -383,22 +383,58 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
             </button>
           </div>
 
-          {/* Top stats */}
+          {/* Top stats — handoff order: label top / value mid / sub bottom */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { label: 'Tổng ảnh đã gen', value: analytics.totalImages.toLocaleString(), sub: '', icon: ImageIcon, color: 'var(--color-accent)' },
-              { label: 'Chi phí ước tính', value: `$${analytics.totalCost.toFixed(2)}`, sub: `${analytics.totalCredits.toLocaleString()} credits`, icon: DollarSign, color: 'var(--color-success)' },
-              { label: 'Lượt truy cập tab', value: analytics.totalViews.toLocaleString(), sub: '', icon: MousePointerClick, color: 'var(--color-warning)' },
+              {
+                label: 'Tổng ảnh đã gen',
+                value: analytics.totalImages.toLocaleString(),
+                sub: null,
+                mono: false,
+                color: 'var(--color-accent)',
+              },
+              {
+                label: 'Chi phí ước tính',
+                value: `$${analytics.totalCost.toFixed(2)}`,
+                sub: { text: `${analytics.totalCredits.toLocaleString()} credits`, color: 'var(--color-text-tertiary)' },
+                mono: true,
+                color: 'var(--color-success)',
+              },
+              {
+                label: 'Lượt truy cập tab',
+                value: analytics.totalViews.toLocaleString(),
+                sub: null,
+                mono: false,
+                color: 'var(--color-warning)',
+              },
             ].map((s) => (
-              <div key={s.label} className="p-4 flex flex-col gap-2" style={{ background: 'var(--color-card)', borderRadius: 16, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
-                <div className="flex items-center justify-center rounded-full" style={{ width: 32, height: 32, background: `color-mix(in srgb, ${s.color} 14%, transparent)`, color: s.color }}>
-                  <s.icon size={16} />
+              <div
+                key={s.label}
+                className="p-5 flex flex-col gap-2"
+                style={{
+                  background: 'var(--color-card)',
+                  borderRadius: 16,
+                  border: '0.5px solid var(--color-border-soft)',
+                  boxShadow: 'var(--shadow-card)',
+                }}
+              >
+                <div className="uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                  {s.label}
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <div className="font-bold" style={{ fontSize: 26, letterSpacing: '-0.02em' }}>{s.value}</div>
-                  {s.sub && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>{s.sub}</span>}
+                <div
+                  className="font-bold"
+                  style={{
+                    fontSize: 24,
+                    letterSpacing: '-0.02em',
+                    color: 'var(--color-text)',
+                    fontFamily: s.mono ? 'var(--font-mono)' : undefined,
+                  }}
+                >
+                  {s.value}
                 </div>
-                <div className="uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>{s.label}</div>
+                <div style={{ fontSize: 10.5, fontWeight: 600, color: s.sub?.color ?? 'var(--color-text-tertiary)', minHeight: 14 }}>
+                  {s.sub?.text ?? ''}
+                </div>
               </div>
             ))}
           </div>
@@ -661,19 +697,19 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                     <div className="flex items-center gap-5">
                       <div className="flex flex-col items-center gap-1">
                         <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Quần áo</span>
-                        <Switch checked={!!u.canUseClothing} onChange={() => togglePermission(u.uid, 'canUseClothing', !!u.canUseClothing)} ariaLabel="Quyền Quần áo" />
+                        <Switch size="sm" checked={!!u.canUseClothing} onChange={() => togglePermission(u.uid, 'canUseClothing', !!u.canUseClothing)} ariaLabel="Quyền Quần áo" />
                       </div>
                       <div className="flex flex-col items-center gap-1">
                         <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Ecom</span>
-                        <Switch checked={!!u.canUseEcom} onChange={() => togglePermission(u.uid, 'canUseEcom', !!u.canUseEcom)} ariaLabel="Quyền Ecom" />
+                        <Switch size="sm" checked={!!u.canUseEcom} onChange={() => togglePermission(u.uid, 'canUseEcom', !!u.canUseEcom)} ariaLabel="Quyền Ecom" />
                       </div>
                       <div className="flex flex-col items-center gap-1">
                         <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>OFA</span>
-                        <Switch checked={!!u.canUseOfa} onChange={() => togglePermission(u.uid, 'canUseOfa', !!u.canUseOfa)} ariaLabel="Quyền OFA" />
+                        <Switch size="sm" checked={!!u.canUseOfa} onChange={() => togglePermission(u.uid, 'canUseOfa', !!u.canUseOfa)} ariaLabel="Quyền OFA" />
                       </div>
                       <div className="flex flex-col items-center gap-1">
                         <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Picset</span>
-                        <Switch checked={!!u.canUsePicset} onChange={() => togglePermission(u.uid, 'canUsePicset', !!u.canUsePicset)} ariaLabel="Quyền Picset" />
+                        <Switch size="sm" checked={!!u.canUsePicset} onChange={() => togglePermission(u.uid, 'canUsePicset', !!u.canUsePicset)} ariaLabel="Quyền Picset" />
                       </div>
                     </div>
                   )}

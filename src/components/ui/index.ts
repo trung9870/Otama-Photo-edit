@@ -11,7 +11,7 @@ export { Pill } from './Pill';
 export type { PillProps, PillTone } from './Pill';
 
 export { Switch } from './Switch';
-export type { SwitchProps } from './Switch';
+export type { SwitchProps, SwitchSize } from './Switch';
 
 export { SectionHeader } from './SectionHeader';
 export type { SectionHeaderProps } from './SectionHeader';
