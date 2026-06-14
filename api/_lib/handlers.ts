@@ -84,8 +84,10 @@ export async function createKieImageTask(model: string, inputUrls: string[], pro
 
   let input: any;
   if (isGpt2) {
-    // GPT Image 2: chỉ hỗ trợ 1:1 / 9:16 / auto; 1:1 không có 4K
-    const finalAspectRatio = aspectRatio === '1:1' ? '1:1' : (aspectRatio === '9:16' ? '9:16' : 'auto');
+    // GPT Image 2 supports: 1:1, 3:4, 4:3, 9:16, 16:9, auto.
+    // Only constraint: 1:1 can't go up to 4K — clamp to 2K.
+    const SUPPORTED = ['1:1', '3:4', '4:3', '9:16', '16:9', 'auto'];
+    const finalAspectRatio = SUPPORTED.includes(aspectRatio) ? aspectRatio : 'auto';
     const requestedSize = (imageSize || '1K').toUpperCase();
     const finalResolution = finalAspectRatio === 'auto'
       ? '1K'
