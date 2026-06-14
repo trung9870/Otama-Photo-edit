@@ -48,8 +48,8 @@ export interface Blueprint {
 
 export type PicsetStep = 1 | 2 | 3;
 
-// Stepper labels (Section 4 — Step 2 spec)
-const STEP_LABELS = ['Input', 'Analyzing', 'Plan Preview', 'Generating', 'Complete'];
+// Stepper labels — Vietnamese per design handoff
+const STEP_LABELS = ['Input', 'Phân tích', 'Blueprint', 'Tạo ảnh', 'Hoàn tất'];
 
 interface StepperProps {
   step: PicsetStep;
@@ -66,26 +66,38 @@ function Stepper({ step, isAnalyzing, isGenerating, allDone }: StepperProps) {
   else if (step === 3) activeIdx = allDone ? 4 : 3;
 
   return (
-    <div className="flex items-center gap-1 flex-wrap mb-4">
+    <div className="flex items-center flex-wrap mb-4" style={{ gap: 6 }}>
       {STEP_LABELS.map((label, i) => {
         const done = i < activeIdx;
         const active = i === activeIdx;
         const inProgress = active && (isAnalyzing || isGenerating);
         return (
-          <div key={label} className="flex items-center gap-1">
-            <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
+          <div key={label} className="flex items-center" style={{ gap: 6 }}>
+            <span
+              className="inline-flex items-center"
               style={{
-                background: done ? 'rgba(52,199,89,0.15)' : active ? 'rgba(0,122,255,0.15)' : 'var(--color-fill)',
-                color: done ? 'var(--color-success)' : active ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                gap: 5,
+                padding: '5px 11px',
+                borderRadius: 999,
+                background: done
+                  ? 'var(--color-success-soft, rgba(52,199,89,0.15))'
+                  : active
+                    ? 'var(--color-accent-soft)'
+                    : 'var(--color-fill)',
+                color: done
+                  ? 'var(--color-success)'
+                  : active
+                    ? 'var(--color-accent)'
+                    : 'var(--color-text-tertiary)',
+                font: '600 11.5px/1 inherit',
               }}
             >
-              {done && <Check size={11} strokeWidth={2.5} />}
+              {done && <Check size={11} strokeWidth={2.6} />}
               {inProgress && <Loader2 size={11} className="animate-spin" />}
-              <span className="text-xs font-semibold">{label}</span>
-            </div>
+              {label}
+            </span>
             {i < STEP_LABELS.length - 1 && (
-              <span style={{ color: 'var(--color-text-tertiary)', fontSize: 10 }}>›</span>
+              <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11 }}>›</span>
             )}
           </div>
         );
