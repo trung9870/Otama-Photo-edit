@@ -5836,17 +5836,19 @@ function App() {
                                   className="relative overflow-hidden aspect-[3/4] flex flex-col items-center justify-center gap-3"
                                   style={{
                                     borderRadius: 14,
-                                    background: 'var(--color-card-secondary)',
+                                    background:
+                                      'linear-gradient(155deg, var(--color-card) 0%, var(--color-card-secondary) 60%, var(--color-fill) 100%)',
                                     border: '1px solid var(--color-border-soft)',
-                                    boxShadow: 'var(--sh-in)',
-                                    backdropFilter: 'blur(12px)',
+                                    boxShadow:
+                                      'inset 0 2px 6px rgba(60,70,100,0.13), inset 0 -1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(60,70,100,0.08)',
                                   }}
                                 >
                                   {/* shimmer sweep */}
                                   <div
                                     className="absolute inset-0 pointer-events-none"
                                     style={{
-                                      background: 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%)',
+                                      background:
+                                        'linear-gradient(110deg, transparent 25%, rgba(255,255,255,0.32) 50%, transparent 75%)',
                                       backgroundSize: '200% 100%',
                                       animation: 'ofa-shimmer 1.6s linear infinite',
                                     }}
@@ -5861,14 +5863,14 @@ function App() {
                               {batch.errorMessage || 'Lỗi không rõ'}
                             </div>
                           ) : (
-                            <div className={`grid ${batchGridCols} gap-3`}>
+                            <div className={`grid ${batchGridCols} gap-3 items-start`}>
                               {batch.results.map((res, i) => (
                                 <div
                                   key={i}
-                                  className="relative group overflow-hidden aspect-[3/4] flex items-center justify-center"
+                                  className="relative group overflow-hidden"
                                   style={{ borderRadius: 14, background: 'var(--color-card-secondary)' }}
                                 >
-                                  <img src={res} alt={`Batch ${batch.id} #${i+1}`} className="w-full h-full object-cover" />
+                                  <img src={res} alt={`Batch ${batch.id} #${i+1}`} className="block w-full h-auto" />
                                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
                                     <button
                                       onClick={() => setZoomImage(res)}
@@ -5922,16 +5924,18 @@ function App() {
                       className="relative overflow-hidden aspect-[3/4] flex flex-col items-center justify-center gap-4"
                       style={{
                         borderRadius: 14,
-                        background: 'var(--color-card-secondary)',
+                        background:
+                          'linear-gradient(155deg, var(--color-card) 0%, var(--color-card-secondary) 60%, var(--color-fill) 100%)',
                         border: '1px solid var(--color-border-soft)',
-                        boxShadow: 'var(--sh-in)',
-                        backdropFilter: 'blur(12px)',
+                        boxShadow:
+                          'inset 0 2px 6px rgba(60,70,100,0.13), inset 0 -1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(60,70,100,0.08)',
                       }}
                     >
                       <div
                         className="absolute inset-0 pointer-events-none"
                         style={{
-                          background: 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%)',
+                          background:
+                            'linear-gradient(110deg, transparent 25%, rgba(255,255,255,0.32) 50%, transparent 75%)',
                           backgroundSize: '200% 100%',
                           animation: 'ofa-shimmer 1.6s linear infinite',
                         }}
@@ -5942,14 +5946,14 @@ function App() {
                   ))}
                 </div>
               ) : ecomResults.length > 0 ? (
-                <div className={`grid gap-4 ${ecomSubTab === 'gen-new' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
+                <div className={`grid gap-4 items-start ${ecomSubTab === 'gen-new' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
                   {ecomResults.map((res, i) => (
                     <div
                       key={i}
-                      className="relative group overflow-hidden aspect-[3/4] flex items-center justify-center"
+                      className="relative group overflow-hidden"
                       style={{ borderRadius: 14, background: 'var(--color-card-secondary)' }}
                     >
-                      <img src={res} alt={`Result ${i+1}`} className="w-full h-full object-cover" />
+                      <img src={res} alt={`Result ${i+1}`} className="block w-full h-auto" />
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
                         <div className="flex gap-2">
                           <button 
