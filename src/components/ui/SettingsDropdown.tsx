@@ -71,7 +71,7 @@ export function SettingsDropdown<T extends string | number = string>({
           color: 'var(--color-text)',
           font: '600 11px/1 inherit',
           letterSpacing: '-0.01em',
-          boxShadow: 'var(--shadow-card)',
+          boxShadow: 'var(--sh-up-sm)',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',

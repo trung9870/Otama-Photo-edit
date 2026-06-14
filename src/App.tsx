@@ -3604,7 +3604,7 @@ function App() {
                   </div>
 
                   {/* Settings card — Tỉ lệ / Chất lượng / Số ảnh (Clone luôn dùng GPT2) */}
-                  <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                  <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-5 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     <div className="md:col-span-6">
                       <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
                         Tỉ lệ khung hình
@@ -3676,7 +3676,7 @@ function App() {
                   {/* 3-column grid: Template / Product / Type+Prompt */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Col 1 — Template mẫu */}
-                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                       <div className="mb-3 flex items-center gap-2">
                         <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
                         <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
@@ -3721,7 +3721,7 @@ function App() {
                     </div>
 
                     {/* Col 2 — Sản phẩm gốc */}
-                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                       <div className="mb-3 flex items-center gap-2">
                         <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>2</span>
                         <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
@@ -3758,7 +3758,7 @@ function App() {
                     </div>
 
                     {/* Col 3 — Loại template + Prompt */}
-                    <div className="p-4 flex flex-col gap-4" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    <div className="p-4 flex flex-col gap-4" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                       <div>
                         <div className="mb-3 flex items-center gap-2">
                           <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
@@ -3889,7 +3889,7 @@ function App() {
                   </div>
 
                   {/* Settings card — Model / AR / Quality / Count */}
-                  <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-5" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                  <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-5" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     {/* Model */}
                     <div className="md:col-span-4">
                       <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
@@ -3990,7 +3990,7 @@ function App() {
                   {/* 3-column grid: Source / Generated / Mockup */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Col 1 — Source pattern */}
-                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                       <div className="mb-3 flex items-center gap-2">
                         <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
                         <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
@@ -4031,7 +4031,7 @@ function App() {
                     </div>
 
                     {/* Col 2 — Generated pattern */}
-                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    <div className="p-4 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                       <div className="mb-3 flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>2</span>
@@ -4079,7 +4079,7 @@ function App() {
                     </div>
 
                     {/* Col 3 — Mockup */}
-                    <div className={`p-4 flex flex-col transition-opacity duration-300 ${!generatedPattern ? 'opacity-50 pointer-events-none' : ''}`} style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                    <div className={`p-4 flex flex-col transition-opacity duration-300 ${!generatedPattern ? 'opacity-50 pointer-events-none' : ''}`} style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                       <div className="mb-3 flex items-center gap-2">
                         <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 22, height: 22, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
                         <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
@@ -4451,7 +4451,7 @@ function App() {
                   <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
                   <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Cài đặt</p>
                 </div>
-                <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)' }}>
+                <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                   {(() => {
                     const modelBadgeMap: Record<string, { text: string; tone: 'accent' | 'neutral' }> = {
                       'banana-pro': { text: 'BEST', tone: 'accent' },
@@ -4511,7 +4511,7 @@ function App() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {/* Col 1 — Ảnh sản phẩm */}
-                  <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                  <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     <div className="mb-2 flex items-center gap-2">
                       <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
                       <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
@@ -4548,7 +4548,7 @@ function App() {
                   </div>
 
                   {/* Col 2 — Prompt */}
-                  <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14 }}>
+                  <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     <div className="mb-2 flex items-center gap-2">
                       <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>2</span>
                       <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
