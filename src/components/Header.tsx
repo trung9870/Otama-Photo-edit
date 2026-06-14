@@ -164,21 +164,37 @@ function AvatarPill({ user, onLogin, onLogout }: { user: FirebaseUser | null; on
 }
 
 function ThemeToggle({ theme, resolvedTheme, onThemeChange }: { theme: Theme; resolvedTheme: 'light' | 'dark'; onThemeChange: (t: Theme) => void }) {
-  // Per design handoff: compact Light/Dark segmented switcher.
-  // When the underlying state is 'system', the segment that matches the
-  // resolved appearance is highlighted; clicking either segment sets an
-  // explicit preference. (System option remains available via Settings sheet.)
+  // Compact Sun/Moon icon toggle per handoff. Icon-only keeps the button
+  // tight in the header cluster and dodges the "invisible label" trap when
+  // text-on-thumb contrast is weak in light mode.
   const active = theme === 'system' ? resolvedTheme : theme;
+  const cellStyle = (isOn: boolean): React.CSSProperties => ({
+    width: 32,
+    height: 28,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: isOn ? 'var(--color-card)' : 'transparent',
+    color: isOn ? 'var(--color-text)' : 'var(--color-text-tertiary)',
+    border: 'none',
+    borderRadius: 8,
+    cursor: 'pointer',
+    boxShadow: isOn ? '0 1px 2px rgba(0,0,0,0.08), 0 3px 8px rgba(0,0,0,0.06)' : 'none',
+    transition: 'background-color 150ms, color 150ms',
+  });
   return (
-    <Segmented<'light' | 'dark'>
-      value={active}
-      onChange={(v) => onThemeChange(v)}
-      size="sm"
-      options={[
-        { value: 'light', label: 'Light', icon: Sun },
-        { value: 'dark', label: 'Dark', icon: Moon },
-      ]}
-    />
+    <div
+      role="group"
+      aria-label="Theme"
+      style={{ display: 'inline-flex', padding: 2, background: 'var(--color-fill)', borderRadius: 10, gap: 2 }}
+    >
+      <button type="button" onClick={() => onThemeChange('light')} title="Light mode" style={cellStyle(active === 'light')}>
+        <Sun size={14} strokeWidth={2} />
+      </button>
+      <button type="button" onClick={() => onThemeChange('dark')} title="Dark mode" style={cellStyle(active === 'dark')}>
+        <Moon size={14} strokeWidth={2} />
+      </button>
+    </div>
   );
 }
 
