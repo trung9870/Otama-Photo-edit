@@ -5831,10 +5831,28 @@ function App() {
                             return batch.status === 'running' ? (
                             <div className={`grid ${batchGridCols} gap-3`}>
                               {Array.from({ length: batch.imageCount }).map((_, i) => (
-                                <div key={i} className="relative rounded-xl overflow-hidden border border-editor-border bg-[#0f0f13] aspect-[3/4] flex flex-col items-center justify-center gap-3">
-                                  <div className="animate-pulse absolute inset-0 bg-gray-800/20" />
+                                <div
+                                  key={i}
+                                  className="relative overflow-hidden aspect-[3/4] flex flex-col items-center justify-center gap-3"
+                                  style={{
+                                    borderRadius: 14,
+                                    background: 'var(--color-card-secondary)',
+                                    border: '1px solid var(--color-border-soft)',
+                                    boxShadow: 'var(--sh-in)',
+                                    backdropFilter: 'blur(12px)',
+                                  }}
+                                >
+                                  {/* shimmer sweep */}
+                                  <div
+                                    className="absolute inset-0 pointer-events-none"
+                                    style={{
+                                      background: 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%)',
+                                      backgroundSize: '200% 100%',
+                                      animation: 'ofa-shimmer 1.6s linear infinite',
+                                    }}
+                                  />
                                   <Loader2 className="animate-spin relative z-10" size={26} style={{ color: 'var(--color-accent)' }} />
-                                  <p className="text-gray-400 text-[11px] font-medium relative z-10 animate-pulse">Đang tạo ảnh {i + 1}...</p>
+                                  <p className="relative z-10 animate-pulse" style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Đang tạo ảnh {i + 1}...</p>
                                 </div>
                               ))}
                             </div>
@@ -5845,8 +5863,12 @@ function App() {
                           ) : (
                             <div className={`grid ${batchGridCols} gap-3`}>
                               {batch.results.map((res, i) => (
-                                <div key={i} className="relative group rounded-xl overflow-hidden border border-editor-border bg-black aspect-[3/4] flex items-center justify-center">
-                                  <img src={res} alt={`Batch ${batch.id} #${i+1}`} className="w-full h-full object-contain" />
+                                <div
+                                  key={i}
+                                  className="relative group overflow-hidden aspect-[3/4] flex items-center justify-center"
+                                  style={{ borderRadius: 14, background: 'var(--color-card-secondary)' }}
+                                >
+                                  <img src={res} alt={`Batch ${batch.id} #${i+1}`} className="w-full h-full object-cover" />
                                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
                                     <button
                                       onClick={() => setZoomImage(res)}
@@ -5895,18 +5917,39 @@ function App() {
               ) : isEcomGenerating ? (
                 <div className={`grid gap-4 ${ecomSubTab === 'gen-new' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
                   {Array.from({ length: ecomImageCount }).map((_, i) => (
-                    <div key={i} className="relative rounded-xl overflow-hidden border border-editor-border bg-[#0f0f13] aspect-[3/4] flex flex-col items-center justify-center gap-4">
-                      <div className="animate-pulse absolute inset-0 bg-gray-800/20" />
-                      <Loader2 className="animate-spin text-editor-accent relative z-10" size={32} />
-                      <p className="text-gray-400 text-xs font-medium relative z-10 animate-pulse">Đang tạo ảnh {i + 1}...</p>
+                    <div
+                      key={i}
+                      className="relative overflow-hidden aspect-[3/4] flex flex-col items-center justify-center gap-4"
+                      style={{
+                        borderRadius: 14,
+                        background: 'var(--color-card-secondary)',
+                        border: '1px solid var(--color-border-soft)',
+                        boxShadow: 'var(--sh-in)',
+                        backdropFilter: 'blur(12px)',
+                      }}
+                    >
+                      <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                          background: 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.18) 50%, transparent 70%)',
+                          backgroundSize: '200% 100%',
+                          animation: 'ofa-shimmer 1.6s linear infinite',
+                        }}
+                      />
+                      <Loader2 className="animate-spin relative z-10" size={32} style={{ color: 'var(--color-accent)' }} />
+                      <p className="relative z-10 animate-pulse" style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Đang tạo ảnh {i + 1}...</p>
                     </div>
                   ))}
                 </div>
               ) : ecomResults.length > 0 ? (
                 <div className={`grid gap-4 ${ecomSubTab === 'gen-new' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
                   {ecomResults.map((res, i) => (
-                    <div key={i} className="relative group rounded-xl overflow-hidden border border-editor-border bg-black aspect-[3/4] flex items-center justify-center">
-                      <img src={res} alt={`Result ${i+1}`} className="w-full h-full object-contain" />
+                    <div
+                      key={i}
+                      className="relative group overflow-hidden aspect-[3/4] flex items-center justify-center"
+                      style={{ borderRadius: 14, background: 'var(--color-card-secondary)' }}
+                    >
+                      <img src={res} alt={`Result ${i+1}`} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
                         <div className="flex gap-2">
                           <button 
