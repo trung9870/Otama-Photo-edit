@@ -3563,7 +3563,7 @@ function App() {
           {/* Left panel: Upload and Settings — full width on gen-new, pattern-replace + clone */}
           <div className={`flex flex-col gap-6 ${
             ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-4'
-            : ecomSubTab === 'gen-new' ? 'lg:col-span-7 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1'
+            : ecomSubTab === 'gen-new' ? 'lg:col-span-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1'
             : 'lg:col-span-12'
           }`}>
             <div
@@ -4389,7 +4389,7 @@ function App() {
                   })()}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   {/* Col 1 — Ảnh sản phẩm */}
                   <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     <div className="mb-2 flex items-center gap-2">
@@ -4819,8 +4819,7 @@ function App() {
           {/* Right panel: Results — hidden on pattern-replace; side-by-side 5-col on gen-new; full-width below on clone */}
           <div className={`flex-col gap-4 ${
             ecomSubTab === 'pattern-replace' ? 'hidden'
-            : ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-8 flex'
-            : ecomSubTab === 'gen-new' ? 'lg:col-span-5 flex'
+            : ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' || ecomSubTab === 'gen-new' ? 'lg:col-span-8 flex'
             : 'lg:col-span-12 flex'
           }`}>
             <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
