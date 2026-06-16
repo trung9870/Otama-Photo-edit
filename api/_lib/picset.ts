@@ -8,8 +8,7 @@
 //
 // KHÔNG sửa code các tab khác.
 
-import { GoogleGenAI } from "@google/genai";
-import { uploadBase64WithFallback, createKieImageTask } from "./handlers.js";
+import { uploadBase64WithFallback, createKieImageTask, formatGeminiError } from "./handlers.js";
 import {
   PICSET_LANGUAGE_VI,
   PICSET_CATEGORIES,
@@ -468,10 +467,60 @@ ${specialLine}`.trim();
 }
 
 // =================================================================
+// Kie.ai OpenAI-compatible chat completions for Gemini 3.5 Flash.
+// Endpoint: https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions
+// Image input must be a URL (Kie spec) — we upload base64 to a temp host first.
+// =================================================================
+async function analyzeViaKie(opts: {
+  imageBase64: string;
+  prompt: string;
+  kieApiKey: string;
+}): Promise<{ text: string | null; modelUsed: string }> {
+  // Upload base64 → URL (kie.ai > catbox > tmpfiles > 0x0 fallback chain)
+  const imageUrl = await uploadBase64WithFallback(opts.imageBase64, opts.kieApiKey);
+
+  const endpoint = 'https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions';
+  const body = {
+    model: 'gemini-3-5-flash',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: opts.prompt },
+          { type: 'image_url', image_url: { url: imageUrl } },
+        ],
+      },
+    ],
+    response_format: { type: 'json_object' },
+    stream: false,
+  };
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${opts.kieApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Kie chat completions HTTP ${res.status}: ${errText.slice(0, 300)}`);
+  }
+  const data: any = await res.json();
+  const text: string | null = data?.choices?.[0]?.message?.content || null;
+  const modelUsed: string = data?.model || 'gemini-3-5-flash';
+  return { text, modelUsed };
+}
+
+// =================================================================
 // /api/picset/analyze
 // =================================================================
-// Body: { imageBase64, brief?, targetCount?, targetPlatform?, language?, keys: { gemini } }
+// Body: { imageBase64, brief?, targetCount?, targetPlatform?, language?, clientKieApiKey }
 // Returns: { blueprint: Blueprint }
+// Provider: Kie.ai → Gemini 3.5 Flash (OpenAI-compatible endpoint).
+// Tận dụng credit Kie sẵn có thay vì Gemini direct (hay hết credit).
 export async function handlePicsetAnalyze(req: Req, res: Res) {
   try {
     const body = req.body || {};
@@ -480,42 +529,35 @@ export async function handlePicsetAnalyze(req: Req, res: Res) {
     const targetCount: number = Number(body.targetCount ?? 8);
     const targetPlatform: string = (body.targetPlatform || 'Shopee').toString();
     const language: string = (body.language || 'Vietnamese').toString();
-    const apiKey: string | undefined = body.keys?.gemini || body.clientGoogleApiKey || process.env.GEMINI_API_KEY;
+    // BYOK: Kie key — analyze giờ chạy qua Kie.ai (Gemini 3.5 Flash OpenAI-compatible)
+    const kieApiKey: string | undefined = body.clientKieApiKey || body.keys?.kie || process.env.KIE_API_KEY;
 
     if (!imageBase64) return res.status(400).json({ error: 'Thiếu ảnh sản phẩm (imageBase64).' });
     if (!Number.isFinite(targetCount) || targetCount < 1 || targetCount > 15) {
       return res.status(400).json({ error: 'Số lượng ảnh phải từ 1-15.' });
     }
-    if (!apiKey) return res.status(401).json({ error: 'Thiếu API key Gemini. Vui lòng nhập trong cài đặt Picset.' });
+    if (!kieApiKey) return res.status(401).json({ error: 'Thiếu API key Kie. Vui lòng nhập trong cài đặt.' });
 
     const basePrompt = buildAnalyzePrompt(targetCount, brief, targetPlatform, language);
-    const ai = new GoogleGenAI({ apiKey });
 
     const callOnce = async (strictMode: boolean, prevError?: string): Promise<string | null> => {
       const finalText = strictMode
         ? `${basePrompt}\n\n⚠️ LẦN TRƯỚC OUTPUT BỊ REJECT vì: ${prevError || 'không hợp lệ'}.\nLần này PHẢI có ĐỦ field theo FIELD CHECKLIST ở trên. STRICT JSON ONLY. Không markdown, không code fence \`\`\`, không text giải thích. Chỉ JSON thuần.`
         : basePrompt;
-      const modelsToTry = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-2.0-flash'];
-      for (const modelName of modelsToTry) {
-        try {
-          const response = await ai.models.generateContent({
-            model: modelName,
-            contents: { parts: [
-              { inlineData: { data: imageBase64, mimeType: 'image/jpeg' } },
-              { text: finalText },
-            ]},
-            config: { responseMimeType: 'application/json' } as any,
-          });
-          if (response.text) {
-            console.log(`[picset] analyze succeeded with ${modelName} (strict=${strictMode})`);
-            return response.text;
-          }
-        } catch (e: any) {
-          const msg = (e?.message || '').slice(0, 160);
-          const isOverload = msg.includes('high demand') || msg.includes('UNAVAILABLE') || msg.includes('overloaded') || msg.includes('503');
-          console.warn(`[picset] analyze ${modelName} failed: ${msg}`);
-          if (!isOverload) throw e;
+      try {
+        const { text, modelUsed } = await analyzeViaKie({
+          imageBase64,
+          prompt: finalText,
+          kieApiKey,
+        });
+        if (text) {
+          console.log(`[picset] analyze succeeded via Kie/${modelUsed} (strict=${strictMode})`);
+          return text;
         }
+      } catch (e: any) {
+        const msg = (e?.message || '').slice(0, 200);
+        console.warn(`[picset] analyze Kie call failed: ${msg}`);
+        throw e;
       }
       return null;
     };
@@ -567,7 +609,18 @@ export async function handlePicsetAnalyze(req: Req, res: Res) {
     return res.json({ blueprint });
   } catch (error: any) {
     console.error('[api] Picset analyze error:', error);
-    return res.status(500).json({ error: error?.message || 'Internal Server Error' });
+    const msg: string = error?.message || 'Internal Server Error';
+    // Kie chat completions có thể trả lỗi 401/402 nếu key sai/hết credit
+    if (msg.includes('HTTP 401') || msg.includes('Unauthorized')) {
+      return res.status(401).json({ error: 'API key Kie không hợp lệ. Vui lòng kiểm tra lại trong Settings.' });
+    }
+    if (msg.includes('HTTP 402') || msg.includes('insufficient') || msg.includes('credit')) {
+      return res.status(402).json({ error: 'Tài khoản Kie không đủ credit. Vui lòng nạp thêm tại kie.ai/billing.' });
+    }
+    if (msg.includes('HTTP 429') || msg.includes('rate limit')) {
+      return res.status(429).json({ error: 'Kie đang quá tải hoặc đụng rate limit. Đợi 1 phút rồi thử lại.' });
+    }
+    return res.status(500).json({ error: msg });
   }
 }
 
@@ -634,6 +687,6 @@ export async function handlePicsetGenerate(req: Req, res: Res) {
     return res.json({ tasks, isAsync: true });
   } catch (error: any) {
     console.error('[api] Picset generate error:', error);
-    return res.status(500).json({ error: error?.message || 'Internal Server Error' });
+    return res.status(500).json({ error: formatGeminiError(error?.message || 'Internal Server Error') });
   }
 }

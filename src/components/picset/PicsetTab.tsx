@@ -120,7 +120,8 @@ export default function PicsetTab() {
           targetCount: form.quantity,
           targetPlatform: form.platform,
           language: form.language,
-          clientGoogleApiKey: localStorage.getItem('googleApiKey') || undefined,
+          // Analyze giờ chạy qua Kie.ai (Gemini 3.5 Flash) thay vì Gemini direct
+          clientKieApiKey: localStorage.getItem('kieApiKey') || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));

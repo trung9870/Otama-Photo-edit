@@ -44,17 +44,18 @@ const KIE_PRICES: Record<PicsetModel, Record<PicsetQuality, number>> = {
   'gpt2':       { '1K': 0.02, '2K': 0.07, '4K': 0.19 },
   'banana-pro': { '1K': 0.09, '2K': 0.12, '4K': 0.15 },
 };
-const GEMINI_ANALYZE_COST_USD = 0.03;
+// Analyze giờ chạy qua Kie.ai (Gemini 3.5 Flash) — ~tương đương Gemini direct, hơi rẻ hơn
+const ANALYZE_COST_USD = 0.025;
 const USD_TO_VND = 25000;
 
 export function estimatePicsetCost(model: PicsetModel, quality: PicsetQuality, quantity: number) {
   const perImage = KIE_PRICES[model][quality];
   const genTotal = perImage * quantity;
-  const total = genTotal + GEMINI_ANALYZE_COST_USD;
+  const total = genTotal + ANALYZE_COST_USD;
   return {
     perImageUsd: perImage,
     genTotalUsd: genTotal,
-    analyzeUsd: GEMINI_ANALYZE_COST_USD,
+    analyzeUsd: ANALYZE_COST_USD,
     totalUsd: total,
     totalVnd: Math.round(total * USD_TO_VND),
   };
