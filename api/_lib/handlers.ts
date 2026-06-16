@@ -13,7 +13,7 @@ type Res = {
   setHeader: (name: string, value: string) => any;
 };
 
-const formatGeminiError = (errorMessage: string): string => {
+export const formatGeminiError = (errorMessage: string): string => {
   if (errorMessage.includes("API key not valid") || errorMessage.includes("API_KEY_INVALID")) {
     return "API key Google không hợp lệ. Vui lòng kiểm tra lại.";
   }
