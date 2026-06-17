@@ -32,9 +32,9 @@ export function emptyForm(): PicsetStep1Form {
     refImagesDataUrls: [],
     platform: 'Smart Match',
     language: 'Vietnamese',
-    model: 'banana-pro',
+    model: 'gpt2',
     aspectRatio: '4:5',
-    quality: '2K',
+    quality: '1K',
     quantity: 8,
   };
 }
@@ -92,6 +92,8 @@ export default function Step1Input({
   onAnalyze,
 }: Step1Props) {
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [mainDragOver, setMainDragOver] = useState(false);
+  const [refDragOver, setRefDragOver] = useState(false);
   const mainInputRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
 
@@ -184,45 +186,84 @@ export default function Step1Input({
         </Field>
 
         <Field label="Ảnh sản phẩm chính" required>
-          {!form.mainImageDataUrl ? (
-            <button
-              type="button"
-              onClick={() => mainInputRef.current?.click()}
-              className="w-full flex flex-col items-center justify-center gap-2 py-6 rounded-lg"
-              style={{
-                background: 'var(--color-fill)',
-                border: '1px dashed var(--color-border)',
-                color: 'var(--color-text-secondary)',
-              }}
-            >
-              <Upload size={20} />
-              <span className="text-xs">Bấm để upload ảnh chính (1 ảnh, max 8MB)</span>
-            </button>
-          ) : (
-            <div className="relative inline-block">
-              <img
-                src={form.mainImageDataUrl}
-                alt="Sản phẩm"
-                className="rounded-lg object-cover"
-                style={{ width: 140, height: 140, border: '0.5px solid var(--color-border-soft)' }}
-              />
+          <div
+            tabIndex={0}
+            onDragOver={(e) => { e.preventDefault(); setMainDragOver(true); }}
+            onDragLeave={() => setMainDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setMainDragOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleMainUpload(f);
+            }}
+            onPaste={(e) => {
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              for (const it of items) {
+                if (it.type.startsWith('image/')) {
+                  const f = it.getAsFile();
+                  if (f) { handleMainUpload(f); break; }
+                }
+              }
+            }}
+            style={{ outline: 'none' }}
+            className="rounded-lg"
+          >
+            {!form.mainImageDataUrl ? (
               <button
                 type="button"
-                onClick={removeMain}
-                className="absolute -top-2 -right-2 p-1 rounded-full"
-                style={{ background: 'var(--color-danger)', color: '#fff' }}
-                aria-label="Xóa ảnh chính"
+                onClick={() => mainInputRef.current?.click()}
+                className="w-full flex flex-col items-center justify-center gap-2 py-6 rounded-lg transition-colors"
+                style={{
+                  background: mainDragOver ? 'var(--color-accent-soft)' : 'var(--color-fill)',
+                  border: `1px dashed ${mainDragOver ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                  color: mainDragOver ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                }}
               >
-                <X size={12} />
+                <Upload size={20} />
+                <span className="text-xs">Bấm, kéo thả, hoặc Ctrl+V ảnh vào đây (max 8MB)</span>
               </button>
-            </div>
-          )}
+            ) : (
+              <div className="relative inline-block">
+                <img
+                  src={form.mainImageDataUrl}
+                  alt="Sản phẩm"
+                  className="rounded-lg object-cover"
+                  style={{
+                    width: 140,
+                    height: 140,
+                    border: `${mainDragOver ? '2px' : '0.5px'} solid ${mainDragOver ? 'var(--color-accent)' : 'var(--color-border-soft)'}`,
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={removeMain}
+                  className="absolute -top-2 -right-2 p-1 rounded-full"
+                  style={{ background: 'var(--color-danger)', color: '#fff' }}
+                  aria-label="Xóa ảnh chính"
+                >
+                  <X size={12} />
+                </button>
+                {mainDragOver && (
+                  <div
+                    className="absolute inset-0 flex items-center justify-center rounded-lg pointer-events-none"
+                    style={{ background: 'rgba(0,122,255,0.18)', color: 'var(--color-accent)' }}
+                  >
+                    <span className="text-xs font-semibold">Thả để thay ảnh</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <input
             ref={mainInputRef}
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={(e) => handleMainUpload(e.target.files?.[0])}
+            onChange={(e) => {
+              handleMainUpload(e.target.files?.[0]);
+              e.target.value = '';
+            }}
           />
           {uploadErr && (
             <p className="text-xs mt-1" style={{ color: 'var(--color-danger)' }}>
@@ -231,8 +272,45 @@ export default function Step1Input({
           )}
         </Field>
 
-        <Field label={`Ảnh tham khảo (optional, ${form.refImagesDataUrls.length}/3)`}>
-          <div className="flex flex-wrap gap-2">
+        <Field label={`Ảnh tham khảo (optional, ${form.refImagesDataUrls.length}/3) — Gemini đọc cùng ảnh chính để hiểu sản phẩm tốt hơn`}>
+          <div
+            tabIndex={0}
+            onDragOver={(e) => {
+              if (form.refImagesDataUrls.length >= 3) return;
+              e.preventDefault();
+              setRefDragOver(true);
+            }}
+            onDragLeave={() => setRefDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setRefDragOver(false);
+              if (form.refImagesDataUrls.length >= 3) return;
+              if (e.dataTransfer.files?.length) handleRefUpload(e.dataTransfer.files);
+            }}
+            onPaste={(e) => {
+              if (form.refImagesDataUrls.length >= 3) return;
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              const files: File[] = [];
+              for (const it of items) {
+                if (it.type.startsWith('image/')) {
+                  const f = it.getAsFile();
+                  if (f) files.push(f);
+                }
+              }
+              if (files.length > 0) {
+                const dt = new DataTransfer();
+                files.forEach((f) => dt.items.add(f));
+                handleRefUpload(dt.files);
+              }
+            }}
+            className="flex flex-wrap gap-2 p-2 rounded-lg transition-colors"
+            style={{
+              outline: 'none',
+              background: refDragOver ? 'var(--color-accent-soft)' : 'transparent',
+              border: `1px dashed ${refDragOver ? 'var(--color-accent)' : 'transparent'}`,
+            }}
+          >
             {form.refImagesDataUrls.map((url, i) => (
               <div key={i} className="relative">
                 <img
@@ -256,7 +334,7 @@ export default function Step1Input({
               <button
                 type="button"
                 onClick={() => refInputRef.current?.click()}
-                className="flex items-center justify-center rounded-lg"
+                className="flex flex-col items-center justify-center rounded-lg gap-0.5"
                 style={{
                   width: 64,
                   height: 64,
@@ -264,8 +342,10 @@ export default function Step1Input({
                   border: '1px dashed var(--color-border)',
                   color: 'var(--color-text-tertiary)',
                 }}
+                title="Bấm, kéo thả hoặc Ctrl+V"
               >
                 <ImageIcon size={16} />
+                <span style={{ fontSize: 9 }}>{form.refImagesDataUrls.length}/3</span>
               </button>
             )}
           </div>
