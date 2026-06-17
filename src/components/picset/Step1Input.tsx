@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Upload, Image as ImageIcon, X, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
-import { Button } from '../ui';
+import { Button, SettingsDropdown } from '../ui';
 
 // ============== Public types ==============
 export type PicsetPlatform = 'Shopee' | 'TikTok Shop' | 'Lazada' | 'Smart Match';
@@ -284,9 +284,10 @@ export default function Step1Input({
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Target Platform">
-            <Select
+            <SettingsDropdown<PicsetPlatform>
               value={form.platform}
-              onChange={(v) => onChange({ ...form, platform: v as PicsetPlatform })}
+              onChange={(v) => onChange({ ...form, platform: v })}
+              width="fill"
               options={[
                 { value: 'Smart Match', label: 'Smart Match (auto)' },
                 { value: 'Shopee', label: 'Shopee' },
@@ -297,9 +298,10 @@ export default function Step1Input({
           </Field>
 
           <Field label="Output Language">
-            <Select
+            <SettingsDropdown<PicsetLanguage>
               value={form.language}
-              onChange={(v) => onChange({ ...form, language: v as PicsetLanguage })}
+              onChange={(v) => onChange({ ...form, language: v })}
+              width="fill"
               options={[
                 { value: 'Vietnamese', label: 'Tiếng Việt' },
                 { value: 'English', label: 'English' },
@@ -309,20 +311,22 @@ export default function Step1Input({
           </Field>
 
           <Field label="Model">
-            <Select
+            <SettingsDropdown<PicsetModel>
               value={form.model}
-              onChange={(v) => onChange({ ...form, model: v as PicsetModel })}
+              onChange={(v) => onChange({ ...form, model: v })}
+              width="fill"
               options={[
-                { value: 'banana-pro', label: 'Banana Pro (Kie.ai)' },
-                { value: 'gpt2', label: 'GPT2 (Kie.ai)' },
+                { value: 'banana-pro', label: 'Banana Pro', badge: { text: 'BEST', tone: 'accent' } },
+                { value: 'gpt2', label: 'GPT2' },
               ]}
             />
           </Field>
 
           <Field label="Aspect Ratio">
-            <Select
+            <SettingsDropdown<PicsetAspect>
               value={form.aspectRatio}
-              onChange={(v) => onChange({ ...form, aspectRatio: v as PicsetAspect })}
+              onChange={(v) => onChange({ ...form, aspectRatio: v })}
+              width="fill"
               options={[
                 { value: '4:5', label: '4:5 (TMĐT chuẩn)' },
                 { value: '1:1', label: '1:1' },
@@ -335,9 +339,10 @@ export default function Step1Input({
           </Field>
 
           <Field label="Quality">
-            <Select
+            <SettingsDropdown<PicsetQuality>
               value={form.quality}
-              onChange={(v) => onChange({ ...form, quality: v as PicsetQuality })}
+              onChange={(v) => onChange({ ...form, quality: v })}
+              width="fill"
               options={[
                 { value: '1K', label: '1K (rẻ nhất)' },
                 { value: '2K', label: '2K' },
@@ -347,15 +352,27 @@ export default function Step1Input({
           </Field>
 
           <Field label={`Quantity: ${form.quantity} ảnh`}>
-            <input
-              type="range"
-              min={1}
-              max={15}
-              value={form.quantity}
-              onChange={(e) => onChange({ ...form, quantity: Number(e.target.value) })}
-              className="w-full"
-              style={{ accentColor: 'var(--color-accent)' }}
-            />
+            <div
+              style={{
+                padding: '7px 10px',
+                borderRadius: 9,
+                border: '1px solid var(--color-border-soft)',
+                background: 'var(--color-card)',
+                boxShadow: 'var(--sh-up-sm)',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <input
+                type="range"
+                min={1}
+                max={15}
+                value={form.quantity}
+                onChange={(e) => onChange({ ...form, quantity: Number(e.target.value) })}
+                className="w-full"
+                style={{ accentColor: 'var(--color-accent)' }}
+              />
+            </div>
           </Field>
         </div>
 
@@ -481,27 +498,3 @@ function Field({
   );
 }
 
-function Select<T extends string>({
-  value,
-  onChange,
-  options,
-}: {
-  value: T;
-  onChange: (v: T) => void;
-  options: { value: T; label: string }[];
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value as T)}
-      className="w-full px-3 py-2 rounded-lg text-sm"
-      style={inputStyle}
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}

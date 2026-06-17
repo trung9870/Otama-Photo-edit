@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef, type Key } from 'react';
-import { Loader2, Download, AlertCircle, ArrowLeft, RefreshCcw, RotateCcw, X } from 'lucide-react';
+import { Loader2, Download, AlertCircle, ArrowLeft, RefreshCcw, RotateCcw, X, Check } from 'lucide-react';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 import { Button } from '../ui';
 
 // Per-slot task state used by Step3
@@ -137,11 +139,12 @@ export default function Step3Results({
   const pendingCount = liveSlots.filter((s) => s.status === 'pending').length;
   const allDone = pendingCount === 0;
 
+  const safeName = (productName || 'picset').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'picset';
+
   const handleDownload = (url: string, slot: number) => {
-    const safeName = (productName || 'picset').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').toLowerCase();
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${safeName}-${slot}-${Date.now()}.png`;
+    link.download = `${safeName}-${slot}.png`;
     link.target = '_blank';
     link.rel = 'noopener';
     document.body.appendChild(link);
@@ -149,11 +152,53 @@ export default function Step3Results({
     document.body.removeChild(link);
   };
 
-  const handleDownloadAll = () => {
-    liveSlots.forEach((s, i) => {
-      if (s.url) setTimeout(() => handleDownload(s.url as string, s.slot), i * 250);
+  // Selection state for bulk ZIP download
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [isZipping, setIsZipping] = useState(false);
+
+  const toggleSelect = (slot: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(slot)) next.delete(slot);
+      else next.add(slot);
+      return next;
     });
   };
+
+  const successfulSlots = liveSlots.filter((s) => s.status === 'success' && s.url);
+  const selectAll = () => setSelected(new Set(successfulSlots.map((s) => s.slot)));
+  const clearSelection = () => setSelected(new Set());
+
+  // Download list of slots as a single ZIP (via /api/proxy-image to bypass CORS on the URLs)
+  const downloadAsZip = async (slotsToZip: PicsetSlotState[]) => {
+    if (slotsToZip.length === 0) return;
+    setIsZipping(true);
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder(safeName) || zip;
+      await Promise.all(
+        slotsToZip.map(async (s) => {
+          if (!s.url) return;
+          // Proxy fetch to bypass cross-origin issues on Kie's CDN
+          const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(s.url)}`;
+          const res = await fetch(proxyUrl).catch(() => null);
+          if (!res || !res.ok) return;
+          const blob = await res.blob();
+          folder.file(`${safeName}-${String(s.slot).padStart(2, '0')}.png`, blob);
+        })
+      );
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      saveAs(zipBlob, `${safeName}-${slotsToZip.length}-anh.zip`);
+    } catch (e: any) {
+      console.error('ZIP download failed:', e);
+      alert(`Không tải được ZIP: ${e?.message || 'lỗi không rõ'}`);
+    } finally {
+      setIsZipping(false);
+    }
+  };
+
+  const handleDownloadAll = () => downloadAsZip(successfulSlots);
+  const handleDownloadSelected = () => downloadAsZip(successfulSlots.filter((s) => selected.has(s.slot)));
 
   return (
     <div className="flex flex-col gap-4">
@@ -179,9 +224,61 @@ export default function Step3Results({
           </p>
         </div>
         {allDone && doneCount > 0 && (
-          <Button variant="secondary" size="md" icon={Download} onClick={handleDownloadAll}>
-            Tải tất cả
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {selected.size > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="text-xs font-medium px-2 py-1 rounded-md"
+                  style={{ color: 'var(--color-text-tertiary)' }}
+                >
+                  Bỏ chọn ({selected.size})
+                </button>
+                <Button
+                  variant="filled"
+                  size="md"
+                  icon={isZipping ? undefined : Download}
+                  onClick={handleDownloadSelected}
+                  disabled={isZipping}
+                >
+                  {isZipping ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 size={14} className="animate-spin" /> Đang nén...
+                    </span>
+                  ) : (
+                    `Tải ${selected.size} ảnh (ZIP)`
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={selectAll}
+                  className="text-xs font-medium px-2 py-1 rounded-md"
+                  style={{ color: 'var(--color-accent)' }}
+                >
+                  Chọn tất cả
+                </button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  icon={isZipping ? undefined : Download}
+                  onClick={handleDownloadAll}
+                  disabled={isZipping}
+                >
+                  {isZipping ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 size={14} className="animate-spin" /> Đang nén...
+                    </span>
+                  ) : (
+                    `Tải tất cả (${doneCount} ảnh, ZIP)`
+                  )}
+                </Button>
+              </>
+            )}
+          </div>
         )}
       </div>
 
@@ -191,6 +288,8 @@ export default function Step3Results({
           <SlotCard
             key={`${s.slot}-${idx}`}
             slot={s}
+            isSelected={selected.has(s.slot)}
+            onToggleSelect={() => toggleSelect(s.slot)}
             onZoom={setZoomUrl}
             onDownload={() => s.url && handleDownload(s.url, s.slot)}
           />
@@ -267,11 +366,13 @@ export default function Step3Results({
 interface SlotCardProps {
   key?: Key;
   slot: PicsetSlotState;
+  isSelected: boolean;
+  onToggleSelect: () => void;
   onZoom: (url: string) => void;
   onDownload: () => void;
 }
 
-function SlotCard({ slot, onZoom, onDownload }: SlotCardProps) {
+function SlotCard({ slot, isSelected, onToggleSelect, onZoom, onDownload }: SlotCardProps) {
   const isLoading = slot.status === 'pending';
   const isError = slot.status === 'failed';
   const isDone = slot.status === 'success' && slot.url;
@@ -281,8 +382,9 @@ function SlotCard({ slot, onZoom, onDownload }: SlotCardProps) {
       className="relative rounded-2xl overflow-hidden aspect-[4/5]"
       style={{
         background: 'var(--color-fill)',
-        border: '0.5px solid var(--color-border-soft)',
-        boxShadow: 'var(--shadow-card)',
+        border: isSelected ? '2px solid var(--color-accent)' : '0.5px solid var(--color-border-soft)',
+        boxShadow: isSelected ? '0 0 0 3px var(--color-accent-soft), var(--shadow-card)' : 'var(--shadow-card)',
+        transition: 'border-color 120ms, box-shadow 120ms',
       }}
     >
       {/* Slot badge */}
@@ -296,6 +398,26 @@ function SlotCard({ slot, onZoom, onDownload }: SlotCardProps) {
       >
         #{slot.slot}
       </div>
+
+      {/* Selection checkbox — only for completed slots */}
+      {isDone && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
+          className="absolute top-2 right-2 z-10 flex items-center justify-center rounded-md"
+          style={{
+            width: 24,
+            height: 24,
+            background: isSelected ? 'var(--color-accent)' : 'rgba(0,0,0,0.5)',
+            border: isSelected ? '0' : '1.5px solid rgba(255,255,255,0.7)',
+            backdropFilter: 'blur(8px)',
+            transition: 'all 120ms',
+          }}
+          aria-label={isSelected ? 'Bỏ chọn ảnh' : 'Chọn ảnh'}
+        >
+          {isSelected && <Check size={14} strokeWidth={3} color="#fff" />}
+        </button>
+      )}
 
       {isLoading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">

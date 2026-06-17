@@ -473,24 +473,35 @@ ${specialLine}`.trim();
 // =================================================================
 async function analyzeViaKie(opts: {
   imageBase64: string;
+  refImagesBase64?: string[];
   prompt: string;
   kieApiKey: string;
 }): Promise<{ text: string | null; modelUsed: string }> {
-  // Upload base64 → URL (kie.ai > catbox > tmpfiles > 0x0 fallback chain)
-  const imageUrl = await uploadBase64WithFallback(opts.imageBase64, opts.kieApiKey);
+  // Upload main + optional refs in parallel → URLs (kie.ai > catbox > tmpfiles > 0x0)
+  const refs = (opts.refImagesBase64 || []).filter(b => typeof b === 'string' && b.length > 0);
+  const allUploads = await Promise.all(
+    [opts.imageBase64, ...refs].map(b => uploadBase64WithFallback(b, opts.kieApiKey))
+  );
+  const mainUrl = allUploads[0];
+  const refUrls = allUploads.slice(1);
+
+  // Compose content parts: text first, then main image, then ref images (with index tags so AI knows main vs ref)
+  const content: any[] = [{ type: 'text', text: opts.prompt }];
+  content.push(
+    { type: 'text', text: '[Ảnh chính sản phẩm — dùng làm nguồn gốc khi gen]:' },
+    { type: 'image_url', image_url: { url: mainUrl } },
+  );
+  refUrls.forEach((url, i) => {
+    content.push(
+      { type: 'text', text: `[Ảnh tham khảo ${i + 1} — góc/detail/packaging khác của cùng sản phẩm, dùng để hiểu thêm ngữ cảnh]:` },
+      { type: 'image_url', image_url: { url } },
+    );
+  });
 
   const endpoint = 'https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions';
   const body = {
     model: 'gemini-3-5-flash',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: opts.prompt },
-          { type: 'image_url', image_url: { url: imageUrl } },
-        ],
-      },
-    ],
+    messages: [{ role: 'user', content }],
     response_format: { type: 'json_object' },
     stream: false,
   };
@@ -517,14 +528,18 @@ async function analyzeViaKie(opts: {
 // =================================================================
 // /api/picset/analyze
 // =================================================================
-// Body: { imageBase64, brief?, targetCount?, targetPlatform?, language?, clientKieApiKey }
+// Body: { imageBase64, refImagesBase64?, brief?, targetCount?, targetPlatform?, language?, clientKieApiKey }
 // Returns: { blueprint: Blueprint }
 // Provider: Kie.ai → Gemini 3.5 Flash (OpenAI-compatible endpoint).
 // Tận dụng credit Kie sẵn có thay vì Gemini direct (hay hết credit).
+// Ref images: optional 0-3 ảnh phụ — Gemini đọc cùng ảnh chính để tăng độ chính xác blueprint.
 export async function handlePicsetAnalyze(req: Req, res: Res) {
   try {
     const body = req.body || {};
     const imageBase64: string | undefined = body.imageBase64;
+    const refImagesBase64: string[] = Array.isArray(body.refImagesBase64)
+      ? body.refImagesBase64.filter((b: any) => typeof b === 'string' && b.length > 0).slice(0, 3)
+      : [];
     const brief: string = (body.brief || '').toString();
     const targetCount: number = Number(body.targetCount ?? 8);
     const targetPlatform: string = (body.targetPlatform || 'Shopee').toString();
@@ -547,11 +562,12 @@ export async function handlePicsetAnalyze(req: Req, res: Res) {
       try {
         const { text, modelUsed } = await analyzeViaKie({
           imageBase64,
+          refImagesBase64,
           prompt: finalText,
           kieApiKey,
         });
         if (text) {
-          console.log(`[picset] analyze succeeded via Kie/${modelUsed} (strict=${strictMode})`);
+          console.log(`[picset] analyze succeeded via Kie/${modelUsed} (strict=${strictMode}, refs=${refImagesBase64.length})`);
           return text;
         }
       } catch (e: any) {

@@ -123,11 +123,19 @@ export default function PicsetTab() {
     setAnalyzeError(null);
     setIsAnalyzing(true);
     try {
+      // Strip data URL prefix to get raw base64 for ref images
+      const refImagesBase64 = form.refImagesDataUrls
+        .map((u) => {
+          const idx = u.indexOf(',');
+          return idx >= 0 ? u.slice(idx + 1) : u;
+        })
+        .filter((b) => b.length > 0);
       const res = await fetch('/api/picset/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageBase64: form.mainImageBase64,
+          refImagesBase64,
           brief: form.brief,
           targetCount: form.quantity,
           targetPlatform: form.platform,
