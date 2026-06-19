@@ -136,13 +136,25 @@ export default function RunninghubTab() {
     });
   };
   const removeHistoryItem = (id: string) => {
-    if (!confirm('Xoá ảnh này khỏi lịch sử?')) return;
-    setHistory((prev) => {
-      const next = prev.filter((h) => h.id !== id);
-      try { localStorage.setItem('runninghub-history', JSON.stringify(next)); } catch {}
-      return next;
+    setConfirmDelete({
+      title: 'Xoá ảnh này?',
+      message: 'Ảnh sẽ bị gỡ khỏi lịch sử và không thể khôi phục.',
+      onConfirm: () => {
+        setHistory((prev) => {
+          const next = prev.filter((h) => h.id !== id);
+          try { localStorage.setItem('runninghub-history', JSON.stringify(next)); } catch {}
+          return next;
+        });
+      },
     });
   };
+
+  // Confirm dialog state — used by per-item X and Clear-all
+  const [confirmDelete, setConfirmDelete] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
   // Vertical rail shows up to 10 of the current mode's recent runs
   const visibleHistory = history
     .filter((h) => h.type === (mode === 'upimg' ? 'image' : 'video'))
@@ -1042,10 +1054,14 @@ export default function RunninghubTab() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm('Xoá toàn bộ lịch sử Recent?')) {
-                        setHistory([]);
-                        localStorage.removeItem('runninghub-history');
-                      }
+                      setConfirmDelete({
+                        title: 'Xoá toàn bộ lịch sử?',
+                        message: `${visibleHistory.length} ảnh sẽ bị gỡ khỏi lịch sử và không thể khôi phục.`,
+                        onConfirm: () => {
+                          setHistory([]);
+                          localStorage.removeItem('runninghub-history');
+                        },
+                      });
                     }}
                     className="text-[10px] font-semibold hover:underline"
                     style={{ color: 'var(--color-text-tertiary)' }}
@@ -1143,6 +1159,89 @@ export default function RunninghubTab() {
           )}
         </aside>
       </div>
+
+      {/* Confirm delete dialog — centered, styled, used by history rail */}
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setConfirmDelete(null)}
+        >
+          <div
+            className="w-full max-w-sm"
+            style={{
+              background: 'var(--color-card)',
+              borderRadius: 20,
+              border: '0.5px solid var(--color-border-soft)',
+              boxShadow: 'var(--shadow-pop)',
+              padding: 22,
+              animation: 'ofa-shimmer-popin 180ms ease-out',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div
+                className="flex items-center justify-center shrink-0"
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  background: 'rgba(255,59,48,0.12)',
+                  color: 'var(--color-danger)',
+                }}
+              >
+                <Trash2 size={20} strokeWidth={2} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold mb-1" style={{ fontSize: 16, color: 'var(--color-text)', letterSpacing: '-0.01em' }}>
+                  {confirmDelete.title}
+                </h3>
+                <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.4 }}>
+                  {confirmDelete.message}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(null)}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 11,
+                  background: 'var(--color-fill)',
+                  color: 'var(--color-text)',
+                  border: 'none',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  confirmDelete.onConfirm();
+                  setConfirmDelete(null);
+                }}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: 11,
+                  background: 'var(--color-danger)',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(255,59,48,0.32)',
+                }}
+              >
+                Xoá
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox */}
       {zoomUrl && (
