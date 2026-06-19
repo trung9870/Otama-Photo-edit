@@ -41,53 +41,107 @@ const PIE_COLORS = [
 interface PieSlice { label: string; value: number; sub?: string; }
 
 function PieChart({ data, unit = 'ảnh' }: { data: PieSlice[]; unit?: string }) {
+  const [hovered, setHovered] = useState<number | null>(null);
   const filtered = data.filter((d) => d.value > 0);
   const total = filtered.reduce((s, d) => s + d.value, 0);
   if (total === 0) return <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>;
-  let cumulative = 0;
   // Hard-cap at 8 slices, group the rest as "Khác"
   const top = filtered.slice(0, 8);
   const rest = filtered.slice(8);
   const slices = rest.length > 0
     ? [...top, { label: `Khác (${rest.length})`, value: rest.reduce((s, d) => s + d.value, 0) }]
     : top;
+  let cumulative = 0;
+  const hoveredSlice = hovered !== null ? slices[hovered] : null;
   return (
     <div className="flex items-center gap-4 flex-wrap">
-      <svg width="140" height="140" viewBox="0 0 100 100" style={{ flexShrink: 0 }}>
+      <div style={{ position: 'relative', width: 140, height: 140, flexShrink: 0 }}>
+        <svg width="140" height="140" viewBox="0 0 100 100" onMouseLeave={() => setHovered(null)}>
+          {slices.map((d, i) => {
+            const portion = d.value / total;
+            const start = cumulative * 2 * Math.PI;
+            cumulative += portion;
+            const end = cumulative * 2 * Math.PI;
+            const isHover = hovered === i;
+            const fill = PIE_COLORS[i % PIE_COLORS.length];
+            const commonProps = {
+              fill,
+              stroke: 'var(--color-card)',
+              strokeWidth: 0.7,
+              onMouseEnter: () => setHovered(i),
+              style: {
+                cursor: 'pointer',
+                opacity: hovered !== null && !isHover ? 0.55 : 1,
+                transition: 'opacity 120ms',
+              } as React.CSSProperties,
+            };
+            // Single-slice (100%) special case — draw a full circle
+            if (slices.length === 1) {
+              return <circle key={i} cx="50" cy="50" r="45" {...commonProps} />;
+            }
+            const x1 = 50 + 45 * Math.sin(start);
+            const y1 = 50 - 45 * Math.cos(start);
+            const x2 = 50 + 45 * Math.sin(end);
+            const y2 = 50 - 45 * Math.cos(end);
+            const large = portion > 0.5 ? 1 : 0;
+            return (
+              <path
+                key={i}
+                d={`M50,50 L${x1.toFixed(3)},${y1.toFixed(3)} A45,45 0 ${large},1 ${x2.toFixed(3)},${y2.toFixed(3)} Z`}
+                {...commonProps}
+              />
+            );
+          })}
+        </svg>
+        {hoveredSlice && (
+          <div
+            className="pointer-events-none"
+            style={{
+              position: 'absolute',
+              left: '50%',
+              bottom: -8,
+              transform: 'translate(-50%, 100%)',
+              background: 'var(--color-text)',
+              color: 'var(--color-bg-elevated)',
+              padding: '6px 10px',
+              borderRadius: 8,
+              fontSize: 11,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+              zIndex: 10,
+            }}
+          >
+            {hoveredSlice.label} · {hoveredSlice.value} {unit} · {Math.round((hoveredSlice.value / total) * 100)}%
+          </div>
+        )}
+      </div>
+      <div className="flex-1 min-w-[160px] flex flex-col gap-1.5">
         {slices.map((d, i) => {
-          const portion = d.value / total;
-          const start = cumulative * 2 * Math.PI;
-          cumulative += portion;
-          const end = cumulative * 2 * Math.PI;
-          // Single-slice (100%) special case — draw a full circle
-          if (slices.length === 1) {
-            return <circle key={i} cx="50" cy="50" r="45" fill={PIE_COLORS[i % PIE_COLORS.length]} />;
-          }
-          const x1 = 50 + 45 * Math.sin(start);
-          const y1 = 50 - 45 * Math.cos(start);
-          const x2 = 50 + 45 * Math.sin(end);
-          const y2 = 50 - 45 * Math.cos(end);
-          const large = portion > 0.5 ? 1 : 0;
+          const isHover = hovered === i;
           return (
-            <path
-              key={i}
-              d={`M50,50 L${x1.toFixed(3)},${y1.toFixed(3)} A45,45 0 ${large},1 ${x2.toFixed(3)},${y2.toFixed(3)} Z`}
-              fill={PIE_COLORS[i % PIE_COLORS.length]}
-              stroke="var(--color-card)"
-              strokeWidth="0.7"
-            />
+            <div
+              key={d.label}
+              className="flex items-center gap-2 cursor-pointer"
+              style={{
+                fontSize: 12,
+                padding: '3px 6px',
+                marginLeft: -6,
+                marginRight: -6,
+                borderRadius: 6,
+                background: isHover ? 'var(--color-fill)' : 'transparent',
+                transition: 'background 120ms',
+              }}
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+            >
+              <span className="shrink-0 rounded" style={{ width: 10, height: 10, background: PIE_COLORS[i % PIE_COLORS.length] }} />
+              <span className="flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>{d.label}</span>
+              <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{d.value} {unit}</span>
+              <span style={{ color: 'var(--color-text-tertiary)', minWidth: 32, textAlign: 'right' }}>{Math.round((d.value / total) * 100)}%</span>
+            </div>
           );
         })}
-      </svg>
-      <div className="flex-1 min-w-[160px] flex flex-col gap-1.5">
-        {slices.map((d, i) => (
-          <div key={d.label} className="flex items-center gap-2" style={{ fontSize: 12 }}>
-            <span className="shrink-0 rounded" style={{ width: 10, height: 10, background: PIE_COLORS[i % PIE_COLORS.length] }} />
-            <span className="flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>{d.label}</span>
-            <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{d.value} {unit}</span>
-            <span style={{ color: 'var(--color-text-tertiary)', minWidth: 32, textAlign: 'right' }}>{Math.round((d.value / total) * 100)}%</span>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -559,6 +613,39 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
               </p>
             </div>
           )}
+
+          {/* Master toggle — flips all 4 breakdown panels at once */}
+          {(() => {
+            const PANEL_KEYS = ['model', 'feature', 'user', 'view'] as const;
+            const allPie = PANEL_KEYS.every((k) => chartView[k] === 'pie');
+            return (
+              <div className="flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextMode = allPie ? 'list' : 'pie';
+                    const next: Record<string, 'list' | 'pie'> = {};
+                    PANEL_KEYS.forEach((k) => { next[k] = nextMode; });
+                    setChartView(next);
+                  }}
+                  className="inline-flex items-center gap-1.5 transition-colors hover:opacity-80"
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 9,
+                    background: 'var(--color-fill)',
+                    color: 'var(--color-text)',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    border: '0.5px solid var(--color-border-soft)',
+                  }}
+                  title="Chuyển dạng hiển thị cho cả 4 ô"
+                >
+                  {allPie ? <ListIcon size={13} /> : <PieChartIcon size={13} />}
+                  {allPie ? 'Hiện tất cả dạng list' : 'Hiện tất cả dạng biểu đồ'}
+                </button>
+              </div>
+            );
+          })()}
 
           {/* By model + By feature */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
