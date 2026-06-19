@@ -368,10 +368,6 @@ export default function RunninghubTab() {
 
   // ============== Run pipeline ==============
   const handleRun = async () => {
-    if (!apiKey) {
-      alert('Cần nhập RunningHub API key trong Settings ở trên.');
-      return;
-    }
     if (workflow.type === 'image' && !imageBase64) {
       alert('Cần upload ảnh trước.');
       return;
@@ -518,8 +514,9 @@ export default function RunninghubTab() {
         Chạy ComfyUI workflows trên RunningHub.ai. Yêu cầu account RunningHub có membership trả phí.
       </p>
 
-      {/* Settings */}
-      <RunninghubSettings apiKey={apiKey} onChange={setApiKey} />
+      {/* BYOK Settings hidden — server uses RUNNINGHUB_API_KEY env var.
+          Admin can still override by writing into localStorage 'runninghub-api-key'
+          via DevTools if needed (legacy escape hatch). */}
 
       {/* Mode sub-tab */}
       <div className="mb-3">
@@ -896,16 +893,11 @@ export default function RunninghubTab() {
               size="lg"
               fullWidth
               icon={Sparkles}
-              disabled={!apiKey || (mode === 'upimg' ? !imageBase64 : !videoFile)}
+              disabled={mode === 'upimg' ? !imageBase64 : !videoFile}
               onClick={handleRun}
             >
               Chạy workflow
             </Button>
-          )}
-          {!apiKey && (
-            <p className="text-xs text-center" style={{ color: 'var(--color-text-tertiary)' }}>
-              Cần nhập API key ở Settings trên
-            </p>
           )}
         </div>
 
