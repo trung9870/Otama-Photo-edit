@@ -30,7 +30,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [adminTab, setAdminTab] = useState<'users' | 'stats' | 'history'>('users');
   const [history, setHistory] = useState<any[]>([]);
   const [zoomUrl, setZoomUrl] = useState<string | null>(null);
-  const [timeFilter, setTimeFilter] = useState<'today' | '7d' | '30d' | 'all' | 'custom'>('30d');
+  const [timeFilter, setTimeFilter] = useState<'7d' | '15d' | '30d' | 'custom'>('15d');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [kieCredits, setKieCredits] = useState<number | null>(null);
@@ -120,8 +120,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     };
     let lo = 0;
     let hi = Infinity;
-    if (timeFilter === 'today') lo = now - 24 * 3600 * 1000;
-    else if (timeFilter === '7d') lo = now - 7 * 24 * 3600 * 1000;
+    if (timeFilter === '7d') lo = now - 7 * 24 * 3600 * 1000;
+    else if (timeFilter === '15d') lo = now - 15 * 24 * 3600 * 1000;
     else if (timeFilter === '30d') lo = now - 30 * 24 * 3600 * 1000;
     else if (timeFilter === 'custom') {
       if (customFrom) lo = new Date(customFrom + 'T00:00:00').getTime();
@@ -324,15 +324,14 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         <div className="space-y-6">
           {/* Time filter */}
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <Segmented<'today' | '7d' | '30d' | 'all' | 'custom'>
+            <Segmented<'7d' | '15d' | '30d' | 'custom'>
               value={timeFilter}
               onChange={(v) => setTimeFilter(v)}
               size="sm"
               options={[
-                { value: 'today', label: 'Hôm nay' },
                 { value: '7d', label: '7 ngày' },
+                { value: '15d', label: '15 ngày' },
                 { value: '30d', label: '30 ngày' },
-                { value: 'all', label: 'Tất cả' },
                 { value: 'custom', label: 'Tùy chọn' },
               ]}
             />
@@ -356,7 +355,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
               </div>
             ) : (
               <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-                {timeFilter === 'today' ? '24 giờ qua' : timeFilter === '7d' ? '7 ngày qua' : timeFilter === '30d' ? '30 ngày qua' : 'Toàn bộ thời gian'}
+                {timeFilter === '7d' ? '7 ngày qua' : timeFilter === '15d' ? '15 ngày qua' : '30 ngày qua'}
               </span>
             )}
           </div>
@@ -452,7 +451,9 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
               <p className="uppercase font-semibold mb-4" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Ảnh gen theo ngày</p>
               {(() => {
-                const data = analytics.dailySeries;
+                // Chart caps at the latest 15 days regardless of filter span — keeps
+                // bars readable on wide ranges (30d / custom).
+                const data = analytics.dailySeries.slice(-15);
                 const maxCount = Math.max(...data.map(d => d.count), 1);
                 const barW = 28;
                 const gap = 8;
