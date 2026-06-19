@@ -30,7 +30,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [adminTab, setAdminTab] = useState<'users' | 'stats' | 'history'>('users');
   const [history, setHistory] = useState<any[]>([]);
   const [zoomUrl, setZoomUrl] = useState<string | null>(null);
-  const [timeFilter, setTimeFilter] = useState<'7d' | '15d' | '30d' | 'custom'>('15d');
+  const [timeFilter, setTimeFilter] = useState<'7d' | '15d' | '30d' | 'custom'>('30d');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [kieCredits, setKieCredits] = useState<number | null>(null);
@@ -322,44 +322,6 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         </div>
       ) : adminTab === 'stats' ? (
         <div className="space-y-6">
-          {/* Time filter */}
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <Segmented<'7d' | '15d' | '30d' | 'custom'>
-              value={timeFilter}
-              onChange={(v) => setTimeFilter(v)}
-              size="sm"
-              options={[
-                { value: '7d', label: '7 ngày' },
-                { value: '15d', label: '15 ngày' },
-                { value: '30d', label: '30 ngày' },
-                { value: 'custom', label: 'Tùy chọn' },
-              ]}
-            />
-            {timeFilter === 'custom' ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="outline-none"
-                  style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 8, padding: '4px 8px', fontSize: 12, border: '0.5px solid var(--color-border-soft)' }}
-                />
-                <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>→</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="outline-none"
-                  style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 8, padding: '4px 8px', fontSize: 12, border: '0.5px solid var(--color-border-soft)' }}
-                />
-              </div>
-            ) : (
-              <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-                {timeFilter === '7d' ? '7 ngày qua' : timeFilter === '15d' ? '15 ngày qua' : '30 ngày qua'}
-              </span>
-            )}
-          </div>
-
           {/* Số dư Kie.ai */}
           <div className="p-5 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, var(--color-accent-soft), transparent)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
             <div className="flex items-center gap-3">
@@ -440,6 +402,44 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
             ))}
           </div>
 
+          {/* Time filter — moved below the headline stats */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <Segmented<'7d' | '15d' | '30d' | 'custom'>
+              value={timeFilter}
+              onChange={(v) => setTimeFilter(v)}
+              size="sm"
+              options={[
+                { value: '7d', label: '7 ngày' },
+                { value: '15d', label: '15 ngày' },
+                { value: '30d', label: '30 ngày' },
+                { value: 'custom', label: 'Tùy chọn' },
+              ]}
+            />
+            {timeFilter === 'custom' ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="outline-none"
+                  style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 8, padding: '4px 8px', fontSize: 12, border: '0.5px solid var(--color-border-soft)' }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>→</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="outline-none"
+                  style={{ background: 'var(--color-fill)', color: 'var(--color-text)', borderRadius: 8, padding: '4px 8px', fontSize: 12, border: '0.5px solid var(--color-border-soft)' }}
+                />
+              </div>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+                {timeFilter === '7d' ? '7 ngày qua' : timeFilter === '15d' ? '15 ngày qua' : '30 ngày qua'}
+              </span>
+            )}
+          </div>
+
           {usage.length === 0 && (
             <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', textAlign: 'center', padding: '24px 0' }}>
               Chưa có dữ liệu. Số liệu sẽ xuất hiện khi nhân viên bắt đầu gen ảnh.
@@ -451,9 +451,9 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
               <p className="uppercase font-semibold mb-4" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Ảnh gen theo ngày</p>
               {(() => {
-                // Chart caps at the latest 15 days regardless of filter span — keeps
-                // bars readable on wide ranges (30d / custom).
-                const data = analytics.dailySeries.slice(-15);
+                // Chart caps at the latest 30 days — matches the widest preset filter.
+                // Custom ranges longer than 30 days still cap here for readability.
+                const data = analytics.dailySeries.slice(-30);
                 const maxCount = Math.max(...data.map(d => d.count), 1);
                 const barW = 28;
                 const gap = 8;
