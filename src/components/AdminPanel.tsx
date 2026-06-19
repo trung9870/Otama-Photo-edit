@@ -4,7 +4,7 @@ import { db, handleFirestoreError, OperationType, storage, storageRef, deleteObj
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '../firebase';
-import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3, ImageIcon, DollarSign, MousePointerClick, Sparkles, Wand2, Wallet, RotateCw, Clock, Download, Trash2, ZoomIn } from 'lucide-react';
+import { UserPlus, Shield, Eye, EyeOff, Users, Shirt, Grid3x3, ImageIcon, DollarSign, MousePointerClick, Sparkles, Wand2, Wallet, RotateCw, Clock, Download, Trash2, ZoomIn, PieChart as PieChartIcon, List as ListIcon } from 'lucide-react';
 import { Button, Pill, Switch, Segmented } from './ui';
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -26,6 +26,73 @@ const MODEL_LABELS: Record<string, string> = {
   'gemini-3-flash-preview': 'Phân tích (text)',
 };
 
+// Color palette for pie slices — Apple system colors, cycled in order
+const PIE_COLORS = [
+  'var(--color-accent)',     // blue
+  'var(--color-success)',    // green
+  'var(--color-warning)',    // orange
+  'var(--color-pink)',       // pink
+  'var(--color-purple)',     // purple
+  'var(--color-indigo)',     // indigo
+  'var(--color-teal)',       // teal
+  'var(--color-danger)',     // red
+];
+
+interface PieSlice { label: string; value: number; sub?: string; }
+
+function PieChart({ data, unit = 'ảnh' }: { data: PieSlice[]; unit?: string }) {
+  const filtered = data.filter((d) => d.value > 0);
+  const total = filtered.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>;
+  let cumulative = 0;
+  // Hard-cap at 8 slices, group the rest as "Khác"
+  const top = filtered.slice(0, 8);
+  const rest = filtered.slice(8);
+  const slices = rest.length > 0
+    ? [...top, { label: `Khác (${rest.length})`, value: rest.reduce((s, d) => s + d.value, 0) }]
+    : top;
+  return (
+    <div className="flex items-center gap-4 flex-wrap">
+      <svg width="140" height="140" viewBox="0 0 100 100" style={{ flexShrink: 0 }}>
+        {slices.map((d, i) => {
+          const portion = d.value / total;
+          const start = cumulative * 2 * Math.PI;
+          cumulative += portion;
+          const end = cumulative * 2 * Math.PI;
+          // Single-slice (100%) special case — draw a full circle
+          if (slices.length === 1) {
+            return <circle key={i} cx="50" cy="50" r="45" fill={PIE_COLORS[i % PIE_COLORS.length]} />;
+          }
+          const x1 = 50 + 45 * Math.sin(start);
+          const y1 = 50 - 45 * Math.cos(start);
+          const x2 = 50 + 45 * Math.sin(end);
+          const y2 = 50 - 45 * Math.cos(end);
+          const large = portion > 0.5 ? 1 : 0;
+          return (
+            <path
+              key={i}
+              d={`M50,50 L${x1.toFixed(3)},${y1.toFixed(3)} A45,45 0 ${large},1 ${x2.toFixed(3)},${y2.toFixed(3)} Z`}
+              fill={PIE_COLORS[i % PIE_COLORS.length]}
+              stroke="var(--color-card)"
+              strokeWidth="0.7"
+            />
+          );
+        })}
+      </svg>
+      <div className="flex-1 min-w-[160px] flex flex-col gap-1.5">
+        {slices.map((d, i) => (
+          <div key={d.label} className="flex items-center gap-2" style={{ fontSize: 12 }}>
+            <span className="shrink-0 rounded" style={{ width: 10, height: 10, background: PIE_COLORS[i % PIE_COLORS.length] }} />
+            <span className="flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>{d.label}</span>
+            <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{d.value} {unit}</span>
+            <span style={{ color: 'var(--color-text-tertiary)', minWidth: 32, textAlign: 'right' }}>{Math.round((d.value / total) * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [adminTab, setAdminTab] = useState<'users' | 'stats' | 'history'>('users');
   const [history, setHistory] = useState<any[]>([]);
@@ -33,6 +100,10 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [timeFilter, setTimeFilter] = useState<'7d' | '15d' | '30d' | 'custom'>('30d');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  // Per-panel chart view mode: 'list' (default) | 'pie'
+  const [chartView, setChartView] = useState<Record<string, 'list' | 'pie'>>({});
+  const isPie = (key: string) => chartView[key] === 'pie';
+  const toggleChartView = (key: string) => setChartView((p) => ({ ...p, [key]: p[key] === 'pie' ? 'list' : 'pie' }));
   const [kieCredits, setKieCredits] = useState<number | null>(null);
   const [kieCreditsLoading, setKieCreditsLoading] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
@@ -492,73 +563,153 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           {/* By model + By feature */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
-              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo model · chất lượng</p>
-              <div className="space-y-3">
-                {Object.entries(analytics.byModelSize).sort((a, b) => {
-                  const ca = Object.values(a[1]).reduce((s, x) => s + x.count, 0);
-                  const cb = Object.values(b[1]).reduce((s, x) => s + x.count, 0);
-                  return cb - ca;
-                }).map(([m, sizes]) => {
-                  const modelTotal = Object.values(sizes).reduce((acc, x) => ({ count: acc.count + x.count, cost: acc.cost + x.cost }), { count: 0, cost: 0 });
-                  return (
-                    <div key={m}>
-                      <div className="flex items-center justify-between mb-1.5" style={{ fontSize: 13 }}>
-                        <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{MODEL_LABELS[m] || m}</span>
-                        <span className="font-semibold" style={{ color: 'var(--color-text-secondary)' }}>{modelTotal.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${modelTotal.cost.toFixed(2)}</span></span>
-                      </div>
-                      <div className="space-y-1 pl-3" style={{ borderLeft: '2px solid var(--color-border-soft)' }}>
-                        {Object.entries(sizes).sort((a, b) => a[0].localeCompare(b[0])).map(([size, v]) => (
-                          <div key={size} className="flex items-center justify-between" style={{ fontSize: 12 }}>
-                            <span style={{ color: 'var(--color-text-tertiary)' }}>{size}</span>
-                            <span style={{ color: 'var(--color-text-secondary)' }}>{v.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${v.cost.toFixed(2)}</span></span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-                {Object.keys(analytics.byModelSize).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+              <div className="flex items-center justify-between mb-3">
+                <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo model · chất lượng</p>
+                <button
+                  type="button"
+                  onClick={() => toggleChartView('model')}
+                  className="p-1.5 rounded transition-colors"
+                  style={{ color: 'var(--color-text-tertiary)', background: 'var(--color-fill)' }}
+                  title={isPie('model') ? 'Xem dạng list' : 'Xem dạng biểu đồ tròn'}
+                >
+                  {isPie('model') ? <ListIcon size={14} /> : <PieChartIcon size={14} />}
+                </button>
               </div>
+              {isPie('model') ? (
+                <PieChart
+                  data={Object.entries(analytics.byModelSize)
+                    .map(([m, sizes]) => ({
+                      label: MODEL_LABELS[m] || m,
+                      value: Object.values(sizes).reduce((s, x) => s + x.count, 0),
+                    }))
+                    .sort((a, b) => b.value - a.value)}
+                />
+              ) : (
+                <div className="space-y-3">
+                  {Object.entries(analytics.byModelSize).sort((a, b) => {
+                    const ca = Object.values(a[1]).reduce((s, x) => s + x.count, 0);
+                    const cb = Object.values(b[1]).reduce((s, x) => s + x.count, 0);
+                    return cb - ca;
+                  }).map(([m, sizes]) => {
+                    const modelTotal = Object.values(sizes).reduce((acc, x) => ({ count: acc.count + x.count, cost: acc.cost + x.cost }), { count: 0, cost: 0 });
+                    return (
+                      <div key={m}>
+                        <div className="flex items-center justify-between mb-1.5" style={{ fontSize: 13 }}>
+                          <span className="font-semibold" style={{ color: 'var(--color-text)' }}>{MODEL_LABELS[m] || m}</span>
+                          <span className="font-semibold" style={{ color: 'var(--color-text-secondary)' }}>{modelTotal.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${modelTotal.cost.toFixed(2)}</span></span>
+                        </div>
+                        <div className="space-y-1 pl-3" style={{ borderLeft: '2px solid var(--color-border-soft)' }}>
+                          {Object.entries(sizes).sort((a, b) => a[0].localeCompare(b[0])).map(([size, v]) => (
+                            <div key={size} className="flex items-center justify-between" style={{ fontSize: 12 }}>
+                              <span style={{ color: 'var(--color-text-tertiary)' }}>{size}</span>
+                              <span style={{ color: 'var(--color-text-secondary)' }}>{v.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${v.cost.toFixed(2)}</span></span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Object.keys(analytics.byModelSize).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+                </div>
+              )}
             </div>
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
-              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo tính năng</p>
-              <div className="space-y-2">
-                {Object.entries(analytics.byFeature).sort((a, b) => b[1] - a[1]).map(([f, c]) => (
-                  <div key={f} className="flex items-center justify-between" style={{ fontSize: 13 }}>
-                    <span style={{ color: 'var(--color-text)' }}>{FEATURE_LABELS[f] || f}</span>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>{c} ảnh</span>
-                  </div>
-                ))}
-                {Object.keys(analytics.byFeature).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+              <div className="flex items-center justify-between mb-3">
+                <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo tính năng</p>
+                <button
+                  type="button"
+                  onClick={() => toggleChartView('feature')}
+                  className="p-1.5 rounded transition-colors"
+                  style={{ color: 'var(--color-text-tertiary)', background: 'var(--color-fill)' }}
+                  title={isPie('feature') ? 'Xem dạng list' : 'Xem dạng biểu đồ tròn'}
+                >
+                  {isPie('feature') ? <ListIcon size={14} /> : <PieChartIcon size={14} />}
+                </button>
               </div>
+              {isPie('feature') ? (
+                <PieChart
+                  data={Object.entries(analytics.byFeature)
+                    .map(([f, c]) => ({ label: FEATURE_LABELS[f] || f, value: c }))
+                    .sort((a, b) => b.value - a.value)}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {Object.entries(analytics.byFeature).sort((a, b) => b[1] - a[1]).map(([f, c]) => (
+                    <div key={f} className="flex items-center justify-between" style={{ fontSize: 13 }}>
+                      <span style={{ color: 'var(--color-text)' }}>{FEATURE_LABELS[f] || f}</span>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>{c} ảnh</span>
+                    </div>
+                  ))}
+                  {Object.keys(analytics.byFeature).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+                </div>
+              )}
             </div>
           </div>
 
           {/* By user + tab views */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
-              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo nhân viên</p>
-              <div className="space-y-2">
-                {Object.entries(analytics.byUser).sort((a, b) => b[1].count - a[1].count).map(([u, v]) => (
-                  <div key={u} className="flex items-center justify-between" style={{ fontSize: 13 }}>
-                    <span className="truncate" style={{ color: 'var(--color-text)', maxWidth: 200 }}>{u}</span>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>{v.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${v.cost.toFixed(2)}</span></span>
-                  </div>
-                ))}
-                {Object.keys(analytics.byUser).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+              <div className="flex items-center justify-between mb-3">
+                <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo nhân viên</p>
+                <button
+                  type="button"
+                  onClick={() => toggleChartView('user')}
+                  className="p-1.5 rounded transition-colors"
+                  style={{ color: 'var(--color-text-tertiary)', background: 'var(--color-fill)' }}
+                  title={isPie('user') ? 'Xem dạng list' : 'Xem dạng biểu đồ tròn'}
+                >
+                  {isPie('user') ? <ListIcon size={14} /> : <PieChartIcon size={14} />}
+                </button>
               </div>
+              {isPie('user') ? (
+                <PieChart
+                  data={Object.entries(analytics.byUser)
+                    .map(([u, v]) => ({ label: u, value: v.count }))
+                    .sort((a, b) => b.value - a.value)}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {Object.entries(analytics.byUser).sort((a, b) => b[1].count - a[1].count).map(([u, v]) => (
+                    <div key={u} className="flex items-center justify-between" style={{ fontSize: 13 }}>
+                      <span className="truncate" style={{ color: 'var(--color-text)', maxWidth: 200 }}>{u}</span>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>{v.count} ảnh · <span style={{ color: 'var(--color-success)' }}>${v.cost.toFixed(2)}</span></span>
+                    </div>
+                  ))}
+                  {Object.keys(analytics.byUser).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+                </div>
+              )}
             </div>
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
-              <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Lượt truy cập tab</p>
-              <div className="space-y-2">
-                {Object.entries(analytics.byView).sort((a, b) => b[1] - a[1]).map(([v, c]) => (
-                  <div key={v} className="flex items-center justify-between" style={{ fontSize: 13 }}>
-                    <span style={{ color: 'var(--color-text)' }}>{FEATURE_LABELS[v] || v}</span>
-                    <span style={{ color: 'var(--color-text-secondary)' }}>{c} lượt</span>
-                  </div>
-                ))}
-                {Object.keys(analytics.byView).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+              <div className="flex items-center justify-between mb-3">
+                <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Lượt truy cập tab</p>
+                <button
+                  type="button"
+                  onClick={() => toggleChartView('view')}
+                  className="p-1.5 rounded transition-colors"
+                  style={{ color: 'var(--color-text-tertiary)', background: 'var(--color-fill)' }}
+                  title={isPie('view') ? 'Xem dạng list' : 'Xem dạng biểu đồ tròn'}
+                >
+                  {isPie('view') ? <ListIcon size={14} /> : <PieChartIcon size={14} />}
+                </button>
               </div>
+              {isPie('view') ? (
+                <PieChart
+                  unit="lượt"
+                  data={Object.entries(analytics.byView)
+                    .map(([v, c]) => ({ label: FEATURE_LABELS[v] || v, value: c }))
+                    .sort((a, b) => b.value - a.value)}
+                />
+              ) : (
+                <div className="space-y-2">
+                  {Object.entries(analytics.byView).sort((a, b) => b[1] - a[1]).map(([v, c]) => (
+                    <div key={v} className="flex items-center justify-between" style={{ fontSize: 13 }}>
+                      <span style={{ color: 'var(--color-text)' }}>{FEATURE_LABELS[v] || v}</span>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>{c} lượt</span>
+                    </div>
+                  ))}
+                  {Object.keys(analytics.byView).length === 0 && <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>—</p>}
+                </div>
+              )}
             </div>
           </div>
 
