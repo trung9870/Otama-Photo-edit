@@ -136,6 +136,7 @@ export default function RunninghubTab() {
     });
   };
   const removeHistoryItem = (id: string) => {
+    if (!confirm('Xoá ảnh này khỏi lịch sử?')) return;
     setHistory((prev) => {
       const next = prev.filter((h) => h.id !== id);
       try { localStorage.setItem('runninghub-history', JSON.stringify(next)); } catch {}
