@@ -88,6 +88,7 @@ import type { SettingsDropdownOption } from './components/ui';
 import { ARSelector, ModelCardPicker, PromptRow, PromptListModal } from './components/clothing';
 import { OFA_PROMPT_LIBRARY, buildOfaPrompt, type OfaPromptCategory } from './utils/ofaPromptLibrary';
 import PicsetTab from './components/picset/PicsetTab';
+import RunninghubTab from './components/runninghub/RunninghubTab';
 
 type OfaBatchStatus = 'queued' | 'running' | 'done' | 'cancelled' | 'error';
 interface OfaBatch {
@@ -377,7 +378,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'generate' | 'analyze' | 'tryon'>('generate');
   
   // App Mode
-  const [appMode, setAppMode] = useState<'clothing' | 'ecom' | 'ofa' | 'picset' | 'admin'>('ecom');
+  const [appMode, setAppMode] = useState<'clothing' | 'ecom' | 'ofa' | 'picset' | 'runninghub' | 'admin'>('ecom');
 
   // API Keys and Settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -858,16 +859,19 @@ function App() {
     const canEcom = !!userPermissions.canUseEcom;
     const canOfa = !!userPermissions.canUseOfa;
     const canPicset = !!userPermissions.canUsePicset;
+    const canRunninghub = !!(userPermissions.canUseRunninghub ?? userPermissions.canUsePicset);
     const currentNotAllowed =
       appMode === 'admin' ||
       (appMode === 'clothing' && !canClothing) ||
       (appMode === 'ecom' && !canEcom) ||
       (appMode === 'ofa' && !canOfa) ||
-      (appMode === 'picset' && !canPicset);
+      (appMode === 'picset' && !canPicset) ||
+      (appMode === 'runninghub' && !canRunninghub);
     if (!currentNotAllowed) return;
     if (canEcom) setAppMode('ecom');
     else if (canOfa) setAppMode('ofa');
     else if (canPicset) setAppMode('picset');
+    else if (canRunninghub) setAppMode('runninghub');
     else if (canClothing) setAppMode('clothing');
   }, [user, isAdmin, userPermissions, appMode]);
 
@@ -3509,6 +3513,7 @@ function App() {
         canUseEcom={!!userPermissions?.canUseEcom}
         canUseOfa={!!userPermissions?.canUseOfa}
         canUsePicset={!!userPermissions?.canUsePicset}
+        canUseRunninghub={!!(userPermissions?.canUseRunninghub ?? userPermissions?.canUsePicset)}
         theme={theme}
         resolvedTheme={resolvedTheme}
         onThemeChange={setTheme}
@@ -6411,6 +6416,11 @@ function App() {
       {/* Picset stays mounted across tab switches so in-flight analyze/generate doesn't lose state */}
       <div style={{ display: appMode === 'picset' ? 'block' : 'none' }}>
         <PicsetTab />
+      </div>
+
+      {/* Runninghub: stays mounted so polling continues if user tabs away mid-run */}
+      <div style={{ display: appMode === 'runninghub' ? 'block' : 'none' }}>
+        <RunninghubTab />
       </div>
 
       {appMode === 'clothing' && (

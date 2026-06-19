@@ -6,6 +6,7 @@ import {
   Grid3x3,
   Sparkles,
   Wand2,
+  Boxes,
   Shield,
   Sun,
   Moon,
@@ -18,7 +19,7 @@ import {
 import { Button, Segmented, type SegmentedOption } from './ui';
 import type { Theme } from '../hooks/useTheme';
 
-export type AppMode = 'clothing' | 'ecom' | 'ofa' | 'picset' | 'admin';
+export type AppMode = 'clothing' | 'ecom' | 'ofa' | 'picset' | 'runninghub' | 'admin';
 
 export interface HeaderProps {
   // App mode
@@ -31,6 +32,7 @@ export interface HeaderProps {
   canUseEcom: boolean;
   canUseOfa: boolean;
   canUsePicset: boolean;
+  canUseRunninghub: boolean;
 
   // Theme
   theme: Theme;
@@ -201,7 +203,7 @@ function ThemeToggle({ theme, resolvedTheme, onThemeChange }: { theme: Theme; re
 export function Header(props: HeaderProps) {
   const {
     appMode, onModeChange,
-    isAdmin, canUseClothing, canUseEcom, canUseOfa, canUsePicset,
+    isAdmin, canUseClothing, canUseEcom, canUseOfa, canUsePicset, canUseRunninghub,
     theme, resolvedTheme, onThemeChange,
     hasApiKey, onOpenSettings,
     isAuthReady, user, onLogin, onLogout,
@@ -213,6 +215,7 @@ export function Header(props: HeaderProps) {
     ...(isAdmin || canUseEcom ? [{ value: 'ecom' as const, label: 'Ecom', icon: Grid3x3 }] : []),
     ...(isAdmin || canUseOfa ? [{ value: 'ofa' as const, label: 'OFA', icon: Sparkles }] : []),
     ...(isAdmin || canUsePicset ? [{ value: 'picset' as const, label: 'Picset', icon: Wand2 }] : []),
+    ...(isAdmin || canUseRunninghub ? [{ value: 'runninghub' as const, label: 'Runninghub', icon: Boxes }] : []),
     ...(isAdmin ? [{ value: 'admin' as const, label: 'Admin', icon: Shield }] : []),
   ];
 

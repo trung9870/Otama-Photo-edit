@@ -10,6 +10,9 @@
     "api/detect-grid.ts": { "maxDuration": 60 },
     "api/kie-credits.ts": { "maxDuration": 10 },
     "api/picset/analyze.ts": { "maxDuration": 60 },
-    "api/picset/generate.ts": { "maxDuration": 60 }
+    "api/picset/generate.ts": { "maxDuration": 60 },
+    "api/runninghub/upload.ts": { "maxDuration": 60 },
+    "api/runninghub/run.ts": { "maxDuration": 30 },
+    "api/runninghub/status.ts": { "maxDuration": 10 }
   }
 }

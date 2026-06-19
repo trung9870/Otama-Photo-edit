@@ -13,6 +13,7 @@ import {
   handleKieCredits
 } from "./api/_lib/handlers";
 import { handlePicsetAnalyze, handlePicsetGenerate } from "./api/_lib/picset";
+import { handleRunninghubUpload, handleRunninghubRun, handleRunninghubStatus } from "./api/_lib/runninghub";
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -34,6 +35,9 @@ async function startServer() {
   app.get("/api/kie-credits", (req, res) => handleKieCredits(req as any, res as any));
   app.post("/api/picset/analyze", (req, res) => handlePicsetAnalyze(req as any, res as any));
   app.post("/api/picset/generate", (req, res) => handlePicsetGenerate(req as any, res as any));
+  app.post("/api/runninghub/upload", (req, res) => handleRunninghubUpload(req as any, res as any));
+  app.post("/api/runninghub/run", (req, res) => handleRunninghubRun(req as any, res as any));
+  app.post("/api/runninghub/status", (req, res) => handleRunninghubStatus(req as any, res as any));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
