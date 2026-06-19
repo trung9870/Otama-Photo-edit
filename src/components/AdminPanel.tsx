@@ -176,6 +176,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     ecom: users.filter(u => u.canUseEcom).length,
     ofa: users.filter(u => u.canUseOfa).length,
     picset: users.filter(u => u.canUsePicset).length,
+    runninghub: users.filter(u => u.canUseRunninghub).length,
   }), [users]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -196,6 +197,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         canUseEcom: true,
         canUseOfa: true,
         canUsePicset: true,
+        canUseRunninghub: true,
         createdAt: new Date(),
       });
       await secondaryAuth.signOut();
@@ -710,6 +712,10 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                       <div className="flex flex-col items-center gap-1">
                         <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Picset</span>
                         <Switch size="sm" checked={!!u.canUsePicset} onChange={() => togglePermission(u.uid, 'canUsePicset', !!u.canUsePicset)} ariaLabel="Quyền Picset" />
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>RH</span>
+                        <Switch size="sm" checked={!!u.canUseRunninghub} onChange={() => togglePermission(u.uid, 'canUseRunninghub', !!u.canUseRunninghub)} ariaLabel="Quyền Runninghub" />
                       </div>
                     </div>
                   )}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Boxes, Upload, Loader2, AlertCircle, Download, ZoomIn, X, ImageIcon, Sparkles, ChevronsLeftRight, Video, Maximize2, Minimize2, Copy, Check, Settings } from 'lucide-react';
+import { Boxes, Upload, Loader2, AlertCircle, Download, ZoomIn, X, ImageIcon, Sparkles, ChevronsLeftRight, Video, Maximize2, Minimize2, Copy, Check, Settings, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { Button, Segmented } from '../ui';
 import { RunninghubSettings, loadRunninghubKey } from './RunninghubSettings';
 
@@ -125,6 +125,23 @@ export default function RunninghubTab() {
       return [];
     }
   });
+  const [historyCollapsed, setHistoryCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('runninghub-history-collapsed') === '1';
+  });
+  const toggleHistoryCollapsed = () => {
+    setHistoryCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem('runninghub-history-collapsed', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  };
+  const removeHistoryItem = (id: string) => {
+    setHistory((prev) => {
+      const next = prev.filter((h) => h.id !== id);
+      try { localStorage.setItem('runninghub-history', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   // Vertical rail shows up to 10 of the current mode's recent runs
   const visibleHistory = history
     .filter((h) => h.type === (mode === 'upimg' ? 'image' : 'video'))
@@ -543,26 +560,6 @@ export default function RunninghubTab() {
           ]}
           size="md"
         />
-      </div>
-
-      {/* Workflow info card for current mode */}
-      <div
-        className="mb-4 p-4 flex items-start gap-3"
-        style={{
-          background: 'var(--color-card)',
-          border: '0.5px solid var(--color-border-soft)',
-          borderRadius: 14,
-          boxShadow: 'var(--shadow-card)',
-        }}
-      >
-        <Sparkles size={18} style={{ color: 'var(--color-accent)', marginTop: 2 }} />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>{workflow.name}</p>
-          <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>{workflow.description}</p>
-          <p className="text-xs mt-1.5" style={{ color: 'var(--color-text-tertiary)' }}>
-            {workflow.category} · Workflow ID: <code>{workflow.id}</code>
-          </p>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_220px] gap-4">
@@ -1021,85 +1018,127 @@ export default function RunninghubTab() {
             boxShadow: 'var(--shadow-card)',
             maxHeight: 'calc(100vh - 2rem)',
             overflowY: 'auto',
+            width: historyCollapsed ? 44 : undefined,
+            transition: 'width 200ms ease',
           }}
         >
-          <div className="flex items-center justify-between">
-            <p className="uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-              Gần đây ({visibleHistory.length})
-            </p>
-            {visibleHistory.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm('Xoá toàn bộ lịch sử Recent?')) {
-                    setHistory([]);
-                    localStorage.removeItem('runninghub-history');
-                  }
+          <div className={`flex items-center ${historyCollapsed ? 'flex-col gap-2' : 'justify-between'}`}>
+            <button
+              type="button"
+              onClick={toggleHistoryCollapsed}
+              className="p-1 rounded hover:opacity-70 transition-opacity"
+              style={{ color: 'var(--color-text-tertiary)' }}
+              title={historyCollapsed ? 'Mở rộng' : 'Thu gọn'}
+            >
+              {historyCollapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+            </button>
+            {!historyCollapsed && (
+              <>
+                <p className="uppercase font-semibold flex-1 ml-1" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                  Gần đây ({visibleHistory.length})
+                </p>
+                {visibleHistory.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('Xoá toàn bộ lịch sử Recent?')) {
+                        setHistory([]);
+                        localStorage.removeItem('runninghub-history');
+                      }
+                    }}
+                    className="text-[10px] font-semibold hover:underline"
+                    style={{ color: 'var(--color-text-tertiary)' }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </>
+            )}
+            {historyCollapsed && visibleHistory.length > 0 && (
+              <span
+                className="font-bold"
+                style={{
+                  fontSize: 10,
+                  padding: '2px 6px',
+                  borderRadius: 999,
+                  background: 'var(--color-accent-soft)',
+                  color: 'var(--color-accent)',
                 }}
-                className="text-[10px] font-semibold hover:underline"
-                style={{ color: 'var(--color-text-tertiary)' }}
               >
-                XOÁ
-              </button>
+                {visibleHistory.length}
+              </span>
             )}
           </div>
-          {visibleHistory.length === 0 ? (
-            <p className="text-xs py-4 text-center" style={{ color: 'var(--color-text-tertiary)' }}>
-              Chưa có lịch sử.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {visibleHistory.map((h) => (
-                <button
-                  key={h.id}
-                  type="button"
-                  onClick={() => setZoomUrl(h.outputUrl)}
-                  className="relative group overflow-hidden flex flex-col"
-                  style={{
-                    borderRadius: 10,
-                    background: 'var(--color-fill)',
-                    border: '0.5px solid var(--color-border-soft)',
-                  }}
-                  title={`${h.workflowName} · ${new Date(h.finishedAt).toLocaleString('vi-VN')}`}
-                >
-                  <div className="relative aspect-square overflow-hidden">
-                    {h.type === 'image' ? (
-                      <img src={h.outputUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                    ) : (
-                      <video
-                        src={h.outputUrl}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}>
-                      <ZoomIn size={18} color="#fff" />
+          {!historyCollapsed && (
+            visibleHistory.length === 0 ? (
+              <p className="text-xs py-4 text-center" style={{ color: 'var(--color-text-tertiary)' }}>
+                Chưa có lịch sử.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {visibleHistory.map((h) => (
+                  <div
+                    key={h.id}
+                    onClick={() => setZoomUrl(h.outputUrl)}
+                    className="relative group overflow-hidden flex flex-col cursor-pointer"
+                    style={{
+                      borderRadius: 10,
+                      background: 'var(--color-fill)',
+                      border: '0.5px solid var(--color-border-soft)',
+                    }}
+                    title={`${h.workflowName} · ${new Date(h.finishedAt).toLocaleString('vi-VN')}`}
+                  >
+                    <div className="relative aspect-square overflow-hidden">
+                      {h.type === 'image' ? (
+                        <img src={h.outputUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      ) : (
+                        <video
+                          src={h.outputUrl}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}>
+                        <ZoomIn size={18} color="#fff" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeHistoryItem(h.id);
+                        }}
+                        className="absolute top-1 right-1 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        style={{ background: 'rgba(0,0,0,0.7)', color: '#fff' }}
+                        title="Xoá khỏi lịch sử"
+                      >
+                        <X size={11} strokeWidth={2.5} />
+                      </button>
+                    </div>
+                    <div className="px-2 py-1.5 flex items-center justify-between gap-1">
+                      <span className="text-[10px] font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                        {new Date(h.finishedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {h.durationMs ? (
+                        <span
+                          className="text-[10px] font-semibold"
+                          style={{
+                            padding: '1px 6px',
+                            borderRadius: 999,
+                            background: 'var(--color-accent-soft)',
+                            color: 'var(--color-accent)',
+                            fontFamily: 'var(--font-mono)',
+                          }}
+                        >
+                          {formatDuration(h.durationMs)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
-                  <div className="px-2 py-1.5 flex items-center justify-between gap-1">
-                    <span className="text-[10px] font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
-                      {new Date(h.finishedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    {h.durationMs ? (
-                      <span
-                        className="text-[10px] font-semibold"
-                        style={{
-                          padding: '1px 6px',
-                          borderRadius: 999,
-                          background: 'var(--color-accent-soft)',
-                          color: 'var(--color-accent)',
-                          fontFamily: 'var(--font-mono)',
-                        }}
-                      >
-                        {formatDuration(h.durationMs)}
-                      </span>
-                    ) : null}
-                  </div>
-                </button>
-              ))}
-            </div>
+                ))}
+              </div>
+            )
           )}
         </aside>
       </div>
