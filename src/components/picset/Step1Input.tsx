@@ -152,17 +152,15 @@ export default function Step1Input({
     : null;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* ============== Left column: form ============== */}
-      <div
-        className="p-5 flex flex-col gap-4"
-        style={{
-          background: 'var(--color-card)',
-          border: '0.5px solid var(--color-border-soft)',
-          borderRadius: 18,
-          boxShadow: 'var(--shadow-card)',
-        }}
-      >
+    <div
+      className="p-4 flex flex-col gap-3"
+      style={{
+        background: 'var(--color-card)',
+        border: '0.5px solid var(--color-border-soft)',
+        borderRadius: 18,
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
         <Field label="Tên sản phẩm" required>
           <input
             type="text"
@@ -509,40 +507,6 @@ export default function Step1Input({
             </div>
           )}
         </div>
-      </div>
-
-      {/* ============== Right column: empty state ============== */}
-      <div
-        className="p-5 flex flex-col items-center justify-center text-center min-h-[400px]"
-        style={{
-          background: 'var(--color-card)',
-          border: '0.5px solid var(--color-border-soft)',
-          borderRadius: 18,
-          boxShadow: 'var(--shadow-card)',
-        }}
-      >
-        {isAnalyzing ? (
-          <>
-            <Loader2 size={32} className="animate-spin mb-3" style={{ color: 'var(--color-accent)' }} />
-            <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-              AI đang phân tích sản phẩm...
-            </p>
-            <p className="text-xs mt-2" style={{ color: 'var(--color-text-tertiary)' }}>
-              Mất 5–15 giây. Đang tạo blueprint {form.quantity} ảnh dựa trên ảnh + brief.
-            </p>
-          </>
-        ) : (
-          <>
-            <Sparkles size={32} className="mb-3" style={{ color: 'var(--color-text-tertiary)' }} />
-            <p className="text-sm font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
-              Bấm "Analyze & Blueprint" để bắt đầu
-            </p>
-            <p className="text-xs mt-2 max-w-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-              AI sẽ phân tích sản phẩm và đề xuất blueprint {form.quantity} ảnh customize cho bộ detail page.
-            </p>
-          </>
-        )}
-      </div>
     </div>
   );
 }

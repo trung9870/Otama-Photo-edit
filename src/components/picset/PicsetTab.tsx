@@ -259,59 +259,99 @@ export default function PicsetTab() {
 
   return (
     <main className="flex-1 max-w-7xl mx-auto w-full p-4">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <Wand2 size={20} style={{ color: 'var(--color-accent)' }} />
-        <h1 className="text-xl font-bold" style={{ color: 'var(--color-text)' }}>Picset Studio</h1>
-        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--color-fill)', color: 'var(--color-text-tertiary)' }}>
-          Workflow 3-step
-        </span>
+      {/* Compact header */}
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Wand2 size={18} style={{ color: 'var(--color-accent)' }} />
+          <h1 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>Picset Studio</h1>
+        </div>
+        {/* Mini stepper inline */}
+        <Stepper step={step} isAnalyzing={isAnalyzing} isGenerating={isGenerating} allDone={allGenDone} />
       </div>
-      <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-        AI phân tích sản phẩm → tạo blueprint customize → user review/edit → gen N ảnh detail page TMĐT chất lượng cao.
-      </p>
 
-      {/* Stepper */}
-      <Stepper step={step} isAnalyzing={isAnalyzing} isGenerating={isGenerating} allDone={allGenDone} />
+      {/* 2-col layout: settings always left, Live Preview right */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Left: compact settings */}
+        <div className="lg:col-span-5">
+          <Step1Input
+            form={form}
+            onChange={setForm}
+            isAnalyzing={isAnalyzing}
+            analyzeError={analyzeError}
+            onAnalyze={handleAnalyze}
+          />
+        </div>
 
-      {/* Step content */}
-      {step === 1 && (
-        <Step1Input
-          form={form}
-          onChange={setForm}
-          isAnalyzing={isAnalyzing}
-          analyzeError={analyzeError}
-          onAnalyze={handleAnalyze}
-        />
-      )}
+        {/* Right: Live Preview (empty / blueprint / results) */}
+        <div className="lg:col-span-7">
+          {step === 1 && (
+            <div
+              className="p-6 flex flex-col items-center justify-center text-center min-h-[600px]"
+              style={{
+                background: 'var(--color-card)',
+                border: '0.5px solid var(--color-border-soft)',
+                borderRadius: 18,
+                boxShadow: 'var(--shadow-card)',
+              }}
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 size={36} className="animate-spin mb-3" style={{ color: 'var(--color-accent)' }} />
+                  <p className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                    AI đang phân tích sản phẩm...
+                  </p>
+                  <p className="text-xs mt-2 max-w-sm" style={{ color: 'var(--color-text-tertiary)' }}>
+                    Mất 5–15 giây. Đang tạo blueprint {form.quantity} ảnh dựa trên ảnh + brief.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div
+                    className="flex items-center justify-center mb-3"
+                    style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--color-fill)' }}
+                  >
+                    <Wand2 size={26} style={{ color: 'var(--color-text-tertiary)' }} />
+                  </div>
+                  <p className="text-base font-bold" style={{ color: 'var(--color-text)' }}>
+                    Live Preview
+                  </p>
+                  <p className="text-xs mt-1 max-w-md" style={{ color: 'var(--color-text-secondary)' }}>
+                    Upload ảnh sản phẩm, điền brief bên trái, rồi bấm <strong>Analyze & Blueprint</strong>. Kết quả sẽ hiện ở đây.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
 
-      {step === 2 && blueprint && (
-        <Step2Blueprint
-          blueprint={blueprint}
-          productImageDataUrl={form.mainImageDataUrl}
-          isGenerating={isGenerating}
-          isReanalyzing={isAnalyzing}
-          onChange={setBlueprint}
-          onBack={handleBackToInput}
-          onReanalyze={handleReanalyze}
-          onGenerate={handleGenerate}
-        />
-      )}
+          {step === 2 && blueprint && (
+            <Step2Blueprint
+              blueprint={blueprint}
+              productImageDataUrl={form.mainImageDataUrl}
+              isGenerating={isGenerating}
+              isReanalyzing={isAnalyzing}
+              onChange={setBlueprint}
+              onBack={handleBackToInput}
+              onReanalyze={handleReanalyze}
+              onGenerate={handleGenerate}
+            />
+          )}
 
-      {step === 3 && (
-        <Step3Results
-          slots={slots}
-          productName={form.productName}
-          onAllDone={(final) => {
-            setSlots(final);
-            setAllGenDone(true);
-          }}
-          onBackToBlueprint={handleBackToBlueprint}
-          onRestart={handleRestart}
-          onRegenerateFailed={handleRegenerateFailed}
-          isRegenerating={isGenerating}
-        />
-      )}
+          {step === 3 && (
+            <Step3Results
+              slots={slots}
+              productName={form.productName}
+              onAllDone={(final) => {
+                setSlots(final);
+                setAllGenDone(true);
+              }}
+              onBackToBlueprint={handleBackToBlueprint}
+              onRestart={handleRestart}
+              onRegenerateFailed={handleRegenerateFailed}
+              isRegenerating={isGenerating}
+            />
+          )}
+        </div>
+      </div>
     </main>
   );
 }
