@@ -115,6 +115,8 @@ export default function RunninghubTab() {
     type: 'image' | 'video';
     outputUrl: string;
     finishedAt: number;
+    /** Generation duration in ms (added 2026-06; older entries may not have this) */
+    durationMs?: number;
   }
   const [history, setHistory] = useState<HistoryEntry[]>(() => {
     try {
@@ -123,9 +125,19 @@ export default function RunninghubTab() {
       return [];
     }
   });
+  // Vertical rail shows up to 10 of the current mode's recent runs
   const visibleHistory = history
     .filter((h) => h.type === (mode === 'upimg' ? 'image' : 'video'))
-    .slice(0, 5);
+    .slice(0, 10);
+
+  const formatDuration = (ms?: number): string => {
+    if (!ms || ms < 0) return '';
+    const sec = Math.round(ms / 1000);
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return s === 0 ? `${m}m` : `${m}m ${s}s`;
+  };
 
   // Custom workflow params (per workflow, persisted to localStorage)
   const [paramValues, setParamValues] = useState<Record<string, Record<string, number>>>(() => {
@@ -252,13 +264,15 @@ export default function RunninghubTab() {
   // Push successful task to history
   useEffect(() => {
     if (task?.status === 'success' && task.outputUrls.length > 0 && task.taskId) {
+      const finishedAt = Date.now();
       const entry: HistoryEntry = {
         id: task.taskId,
         workflowId: task.workflowId,
         workflowName: task.workflowName,
         type: task.workflowType,
         outputUrl: task.outputUrls[0],
-        finishedAt: Date.now(),
+        finishedAt,
+        durationMs: task.startedAt ? finishedAt - task.startedAt : undefined,
       };
       setHistory((prev) => {
         const filtered = prev.filter((h) => h.id !== entry.id);
@@ -551,61 +565,7 @@ export default function RunninghubTab() {
         </div>
       </div>
 
-      {/* Recent history (5 last runs for current mode) */}
-      {visibleHistory.length > 0 && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <label className="block uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-              Gần đây ({visibleHistory.length})
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm('Xoá toàn bộ lịch sử Recent?')) {
-                  setHistory([]);
-                  localStorage.removeItem('runninghub-history');
-                }
-              }}
-              className="text-xs font-medium"
-              style={{ color: 'var(--color-text-tertiary)' }}
-            >
-              Xoá tất cả
-            </button>
-          </div>
-          <div className="grid grid-cols-5 gap-2">
-            {visibleHistory.map((h) => (
-              <button
-                key={h.id}
-                type="button"
-                onClick={() => setZoomUrl(h.outputUrl)}
-                className="relative aspect-square rounded-lg overflow-hidden group"
-                style={{ background: 'var(--color-fill)', border: '0.5px solid var(--color-border-soft)' }}
-                title={`${h.workflowName} · ${new Date(h.finishedAt).toLocaleString('vi-VN')}`}
-              >
-                {h.type === 'image' ? (
-                  <img src={h.outputUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
-                ) : (
-                  <video
-                    src={h.outputUrl}
-                    muted
-                    playsInline
-                    preload="metadata"
-                    className="w-full h-full object-cover"
-                  />
-                )}
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}>
-                  <ZoomIn size={18} color="#fff" />
-                </div>
-                <div className="absolute bottom-0 left-0 right-0 px-1.5 py-0.5 text-[10px] font-semibold pointer-events-none" style={{ background: 'rgba(0,0,0,0.6)', color: '#fff' }}>
-                  {new Date(h.finishedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_220px] gap-4">
         {/* ============== Left: input ============== */}
         <div
           className="p-5 flex flex-col gap-4"
@@ -1050,6 +1010,98 @@ export default function RunninghubTab() {
             </>
           )}
         </div>
+
+        {/* ============== History rail (right column) ============== */}
+        <aside
+          className="p-3 flex flex-col gap-2 self-start lg:sticky lg:top-4"
+          style={{
+            background: 'var(--color-card)',
+            border: '0.5px solid var(--color-border-soft)',
+            borderRadius: 14,
+            boxShadow: 'var(--shadow-card)',
+            maxHeight: 'calc(100vh - 2rem)',
+            overflowY: 'auto',
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <p className="uppercase font-semibold" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+              Gần đây ({visibleHistory.length})
+            </p>
+            {visibleHistory.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Xoá toàn bộ lịch sử Recent?')) {
+                    setHistory([]);
+                    localStorage.removeItem('runninghub-history');
+                  }
+                }}
+                className="text-[10px] font-semibold hover:underline"
+                style={{ color: 'var(--color-text-tertiary)' }}
+              >
+                XOÁ
+              </button>
+            )}
+          </div>
+          {visibleHistory.length === 0 ? (
+            <p className="text-xs py-4 text-center" style={{ color: 'var(--color-text-tertiary)' }}>
+              Chưa có lịch sử.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {visibleHistory.map((h) => (
+                <button
+                  key={h.id}
+                  type="button"
+                  onClick={() => setZoomUrl(h.outputUrl)}
+                  className="relative group overflow-hidden flex flex-col"
+                  style={{
+                    borderRadius: 10,
+                    background: 'var(--color-fill)',
+                    border: '0.5px solid var(--color-border-soft)',
+                  }}
+                  title={`${h.workflowName} · ${new Date(h.finishedAt).toLocaleString('vi-VN')}`}
+                >
+                  <div className="relative aspect-square overflow-hidden">
+                    {h.type === 'image' ? (
+                      <img src={h.outputUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <video
+                        src={h.outputUrl}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)' }}>
+                      <ZoomIn size={18} color="#fff" />
+                    </div>
+                  </div>
+                  <div className="px-2 py-1.5 flex items-center justify-between gap-1">
+                    <span className="text-[10px] font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                      {new Date(h.finishedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {h.durationMs ? (
+                      <span
+                        className="text-[10px] font-semibold"
+                        style={{
+                          padding: '1px 6px',
+                          borderRadius: 999,
+                          background: 'var(--color-accent-soft)',
+                          color: 'var(--color-accent)',
+                          fontFamily: 'var(--font-mono)',
+                        }}
+                      >
+                        {formatDuration(h.durationMs)}
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </aside>
       </div>
 
       {/* Lightbox */}
