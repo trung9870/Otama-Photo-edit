@@ -22,7 +22,36 @@ function getKey(body: any): string | undefined {
 
 function rhError(payload: any): string {
   if (!payload || typeof payload !== 'object') return 'Lỗi không rõ';
-  return payload.msg || payload.message || `code ${payload.code}`;
+  const raw = payload.msg || payload.message || `code ${payload.code}`;
+  return translateRhError(raw);
+}
+
+// Dịch các mã lỗi RunningHub thường gặp sang tiếng Việt
+function translateRhError(raw: string): string {
+  if (!raw) return 'Lỗi không rõ từ RunningHub';
+  const s = raw.toUpperCase();
+  if (s.includes('NOT_ENOUGH_POWER') || s.includes('INSUFFICIENT_POWER')) {
+    return 'Tài khoản RunningHub hết power/credit. Vào runninghub.ai → User Center → Top up để mua thêm hoặc upgrade plan.';
+  }
+  if (s.includes('TASK_QUEUE_FULL') || s.includes('TOO_MANY_TASKS')) {
+    return 'RunningHub đang quá tải task queue. Đợi vài phút rồi thử lại.';
+  }
+  if (s.includes('APIKEY_INVALID') || s.includes('UNAUTHORIZED') || s.includes('AUTH_FAIL')) {
+    return 'API key RunningHub không hợp lệ. Vào Settings để kiểm tra lại key.';
+  }
+  if (s.includes('WORKFLOW_NOT_FOUND') || s.includes('WORKFLOW_NOT_EXIST')) {
+    return 'Workflow ID không tồn tại trên RunningHub (có thể đã bị xoá hoặc set private).';
+  }
+  if (s.includes('NODE_INFO_MISMATCH')) {
+    return `Cấu hình node sai (${raw}). Workflow có thể đã thay đổi cấu trúc — báo admin để cập nhật mapping.`;
+  }
+  if (s.includes('FILE_TOO_LARGE') || s.includes('SIZE_LIMIT')) {
+    return 'File quá lớn so với giới hạn của RunningHub. Thử video/ảnh nhỏ hơn.';
+  }
+  if (s.includes('RATE_LIMIT') || s.includes('TOO_MANY_REQUESTS')) {
+    return 'Đang gọi RunningHub quá nhanh. Đợi 30 giây rồi thử lại.';
+  }
+  return raw;
 }
 
 // =================================================================
