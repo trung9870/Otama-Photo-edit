@@ -3,6 +3,7 @@ import { Check, Loader2, Wand2 } from 'lucide-react';
 import Step1Input, { emptyForm, type PicsetStep1Form } from './Step1Input';
 import Step2Blueprint from './Step2Blueprint';
 import Step3Results, { type PicsetSlotState } from './Step3Results';
+import { dispatchGenDoneEvent } from '../../hooks/useNotify';
 
 // ============== Types (mirror api/_lib/picset.ts blueprint schema) ==============
 export type ImageCategory =
@@ -343,6 +344,14 @@ export default function PicsetTab() {
               onAllDone={(final) => {
                 setSlots(final);
                 setAllGenDone(true);
+                const done = final.filter((s) => s.status === 'success').length;
+                const failed = final.filter((s) => s.status === 'failed').length;
+                const productName = form.productName || 'Picset';
+                dispatchGenDoneEvent(
+                  'picset',
+                  `Picset: ${productName} xong`,
+                  failed > 0 ? `${done} ảnh hoàn tất • ${failed} fail` : `${done} ảnh hoàn tất`
+                );
               }}
               onBackToBlueprint={handleBackToBlueprint}
               onRestart={handleRestart}

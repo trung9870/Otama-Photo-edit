@@ -80,6 +80,7 @@ import {
 } from './firebase';
 import AdminPanel from './components/AdminPanel';
 import { useTheme } from './hooks/useTheme';
+import { useNotify } from './hooks/useNotify';
 import { Button } from './components/ui';
 import { Header } from './components/Header';
 import { Login } from './components/Login';
@@ -370,6 +371,10 @@ export default function AppWrapper() {
 function App() {
   // Apple-style theme — Milestone 0 foundation
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const notify = useNotify();
+  // One-time ask modal: after the first gen completes, if user hasn't been asked yet
+  // and notifications are still off, offer to enable them.
+  const [showNotifyAsk, setShowNotifyAsk] = useState(false);
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -877,6 +882,28 @@ function App() {
     else if (canRunninghub) setAppMode('runninghub');
     else if (canClothing) setAppMode('clothing');
   }, [user, isAdmin, userPermissions, appMode]);
+
+  // Listen for child-component gen-done events (Picset etc dispatch via window CustomEvent)
+  // and forward to the notify() handler. Also triggers the one-time ask modal.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ source: string; title: string; body: string }>).detail;
+      if (!detail) return;
+      notify.notify(detail.title, detail.body);
+      if (!notify.asked && !notify.enabled) {
+        setShowNotifyAsk(true);
+      }
+    };
+    window.addEventListener('otama:gen-done', handler);
+    return () => window.removeEventListener('otama:gen-done', handler);
+  }, [notify]);
+
+  // Inline helper used by all in-App.tsx completion sites (Ecom batches, OFA, Clothing).
+  // Trips the one-time ask modal the first time something finishes.
+  const onGenComplete = (title: string, body: string) => {
+    notify.notify(title, body);
+    if (!notify.asked && !notify.enabled) setShowNotifyAsk(true);
+  };
 
   // Sync Prompts from Firestore
   useEffect(() => {
@@ -2304,6 +2331,7 @@ function App() {
 
     try {
       await executeTryOn();
+      onGenComplete('Quần áo: Thay đồ xong', 'Ảnh sẵn sàng');
     } catch (err: any) {
       console.error("Try-on error:", err);
       let errorMessage = "Lỗi xử lý thay đồ.";
@@ -2316,6 +2344,7 @@ function App() {
         errorMessage = err.message || errorMessage;
       }
       setGlobalError(errorMessage);
+      onGenComplete('Quần áo: Thay đồ FAIL', errorMessage);
     } finally {
       setIsTryOnProcessing(false);
       setTryOnStep('idle');
@@ -2703,8 +2732,10 @@ function App() {
             ? { ...b, results: generatedImages, status: 'done' as const, finishedAt: Date.now() }
             : b
           ));
+          onGenComplete('Ecom: gen xong', `${generatedImages.length} ảnh hoàn tất`);
         } else {
           setEcomResults(generatedImages);
+          onGenComplete('Ecom: gen xong', `${generatedImages.length} ảnh hoàn tất`);
         }
       } else {
         throw new Error("Không có ảnh kết quả trả về.");
@@ -2717,8 +2748,10 @@ function App() {
           ? { ...b, status: 'failed' as const, errorMessage: error.message, finishedAt: Date.now() }
           : b
         ));
+        onGenComplete('Ecom: gen FAIL', error.message || 'Lỗi không rõ');
       } else {
         setGlobalError(error.message);
+        onGenComplete('Ecom: gen FAIL', error.message || 'Lỗi không rõ');
       }
     } finally {
       if (!isConcurrent) {
@@ -2983,6 +3016,13 @@ function App() {
             : b
         )
       );
+      if (!cancelRef.current) {
+        const finalUrls = batch.results.reduce((acc, r) => acc + (r.urls?.length || 0), 0);
+        onGenComplete(
+          `OFA: ${batch.productName || 'gen'} xong`,
+          `${batch.categoryIds.length} category • ${finalUrls} ảnh`
+        );
+      }
     } catch (err: any) {
       setOfaBatches((prev) =>
         prev.map((b) =>
@@ -2991,6 +3031,7 @@ function App() {
             : b
         )
       );
+      onGenComplete(`OFA: ${batch.productName || 'gen'} FAIL`, err.message || 'Lỗi không rõ');
     } finally {
       ofaCancelMapRef.current.delete(batch.id);
       ofaAbortMapRef.current.delete(batch.id);
@@ -8206,6 +8247,91 @@ function App() {
                   </div>
                 </div>
 
+                {/* SECTION: Thông báo */}
+                <div>
+                  <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Thông báo</p>
+                  <div className="space-y-2">
+                    <div className="p-4 flex items-center justify-between" style={{ background: 'var(--color-fill)', borderRadius: 14 }}>
+                      <div className="flex-1 min-w-0 pr-4">
+                        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text)' }}>Báo khi gen xong</p>
+                        <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                          Ngay cả khi đang ở tab khác. Tab title cũng hiện badge (N).
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!notify.enabled) {
+                            // Turning ON — request OS permission if needed
+                            if (notify.permission === 'default') {
+                              await notify.requestPermission();
+                            }
+                            notify.setEnabled(true);
+                            notify.markAsked();
+                          } else {
+                            notify.setEnabled(false);
+                          }
+                        }}
+                        className="shrink-0 transition-all"
+                        style={{
+                          width: 44, height: 26, borderRadius: 999,
+                          background: notify.enabled ? 'var(--color-accent)' : 'var(--color-border)',
+                          position: 'relative',
+                        }}
+                        aria-label="Bật thông báo gen xong"
+                      >
+                        <span
+                          className="block transition-all"
+                          style={{
+                            width: 20, height: 20, borderRadius: 999, background: '#fff',
+                            position: 'absolute', top: 3,
+                            left: notify.enabled ? 21 : 3,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }}
+                        />
+                      </button>
+                    </div>
+                    {notify.enabled && notify.permission === 'denied' && (
+                      <div className="p-3 flex items-start gap-2" style={{ background: 'rgba(255,149,0,0.10)', borderRadius: 12 }}>
+                        <AlertCircle size={14} style={{ color: 'var(--color-warning)', marginTop: 2, flexShrink: 0 }} />
+                        <p style={{ fontSize: 11, color: 'var(--color-warning)', lineHeight: 1.5 }}>
+                          Browser đã chặn thông báo. Title bar (N) vẫn hoạt động. Để bật lại OS notification, vào Settings của browser cho site này.
+                        </p>
+                      </div>
+                    )}
+                    <div className="p-4 flex items-center justify-between" style={{ background: 'var(--color-fill)', borderRadius: 14, opacity: notify.enabled ? 1 : 0.5 }}>
+                      <div className="flex-1 min-w-0 pr-4">
+                        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text)' }}>Âm thanh "ding"</p>
+                        <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                          Phát 1 tiếng ngắn khi gen xong.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!notify.enabled}
+                        onClick={() => notify.setSoundEnabled(!notify.soundEnabled)}
+                        className="shrink-0 transition-all disabled:cursor-not-allowed"
+                        style={{
+                          width: 44, height: 26, borderRadius: 999,
+                          background: notify.soundEnabled && notify.enabled ? 'var(--color-accent)' : 'var(--color-border)',
+                          position: 'relative',
+                        }}
+                        aria-label="Bật âm thanh thông báo"
+                      >
+                        <span
+                          className="block transition-all"
+                          style={{
+                            width: 20, height: 20, borderRadius: 999, background: '#fff',
+                            position: 'absolute', top: 3,
+                            left: notify.soundEnabled && notify.enabled ? 21 : 3,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          }}
+                        />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {/* SECTION: Tài khoản */}
                 {user && (
                   <div>
@@ -8451,6 +8577,71 @@ function App() {
         onEdit={(p, e) => startEditPrompt(p as any, e)}
         onDelete={(id, e) => deletePrompt(id, e)}
       />
+
+      {/* Notification ask modal — shown once after the first gen completes */}
+      <AnimatePresence>
+        {showNotifyAsk && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}
+            onClick={() => {
+              notify.markAsked();
+              setShowNotifyAsk(false);
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 360, damping: 30 }}
+              className="w-full max-w-sm p-6"
+              style={{ background: 'var(--color-card)', borderRadius: 18, boxShadow: 'var(--shadow-card)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-center mb-3" style={{ width: 56, height: 56, borderRadius: 999, background: 'var(--color-accent-soft)', margin: '0 auto' }}>
+                <Sparkles size={26} style={{ color: 'var(--color-accent)' }} />
+              </div>
+              <h3 className="text-center font-bold mb-1" style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
+                Báo khi gen xong?
+              </h3>
+              <p className="text-center mb-5" style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
+                Khi bạn chuyển sang tab khác, Otama sẽ nhảy thông báo lúc batch hoàn tất. Có thể tắt bất kỳ lúc nào trong Cài đặt.
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="filled"
+                  size="md"
+                  fullWidth
+                  onClick={async () => {
+                    if (notify.permission === 'default') {
+                      await notify.requestPermission();
+                    }
+                    notify.setEnabled(true);
+                    notify.markAsked();
+                    setShowNotifyAsk(false);
+                  }}
+                >
+                  Bật thông báo
+                </Button>
+                <Button
+                  variant="plain"
+                  size="md"
+                  fullWidth
+                  onClick={() => {
+                    notify.markAsked();
+                    setShowNotifyAsk(false);
+                  }}
+                >
+                  Để sau
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Zoom Lightbox */}
       <AnimatePresence>
