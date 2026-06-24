@@ -121,6 +121,7 @@ interface EcomBatch {
   model: 'banana-pro' | 'banana-2' | 'gpt2';
   aspectRatio: string;
   imageSize: string;
+  t2iMode?: boolean;               // true when batch was submitted as text-to-image (no product image)
   results: string[];               // URLs / data URIs
   status: EcomBatchStatus;
   errorMessage?: string;
@@ -465,6 +466,8 @@ function App() {
   const [enhanceModel, setEnhanceModel] = useState<'banana-pro' | 'banana-2'>('banana-2');
   const [isDetectingBoxes, setIsDetectingBoxes] = useState(false);
   const [ecomProductImage, setEcomProductImage] = useState<string | null>(null);
+  // Text-to-image mode (Gen new only) — skip product image upload, just use prompt
+  const [ecomT2IMode, setEcomT2IMode] = useState<boolean>(false);
   const [ecomModel, setEcomModel] = useState<ModelType>('gpt2');
   const [ecomAspectRatio, setEcomAspectRatio] = useState<string>('9:16');
   const [ecomImageSize, setEcomImageSize] = useState<string>('1k');
@@ -2503,7 +2506,13 @@ function App() {
   }, [appMode, activeTab, ecomSubTab, user, isAuthReady]);
 
   const handleEcomGenerate = async () => {
-    if (!ecomProductImage) return;
+    // Text-to-image mode is gen-new only; otherwise the regular i2i product-image requirement applies.
+    const t2iActive = ecomSubTab === 'gen-new' && ecomT2IMode;
+    if (!t2iActive && !ecomProductImage) return;
+    if (t2iActive && !ecomPromptText.trim() && !ecomSupplementaryPrompt.trim()) {
+      setGlobalError("Chế độ Text-to-Image cần ít nhất 1 prompt mô tả ảnh muốn tạo.");
+      return;
+    }
     if (ecomSubTab === 'clone-template' && !ecomTemplateImage) {
       setGlobalError("Vui lòng tải lên cả Ảnh Template mẫu và Ảnh Sản phẩm");
       return;
@@ -2514,7 +2523,8 @@ function App() {
 
     // Snapshot all inputs at submit time so async run uses values current when user clicked.
     const snapshot = {
-      productImage: ecomProductImage,
+      productImage: t2iActive ? null : ecomProductImage,
+      t2iMode: t2iActive,
       promptText: ecomPromptText,
       supplementaryPrompt: ecomSupplementaryPrompt,
       model: ecomModel,
@@ -2564,6 +2574,7 @@ function App() {
         model: snapshot.model,
         aspectRatio: snapshot.aspectRatio,
         imageSize: snapshot.imageSize,
+        t2iMode: snapshot.t2iMode,
         results: [],
         status: 'running',
       };
@@ -2579,8 +2590,11 @@ function App() {
     }
 
     try {
-      // Compress images to stay under Vercel's 4.5 MB request body limit
-      const mainBase64 = (await compressImageDataUrl(snapshot.productImage, 1600, 0.85)).split(',')[1];
+      // Compress images to stay under Vercel's 4.5 MB request body limit.
+      // T2I mode skips this — no product image to send.
+      const mainBase64: string | null = snapshot.productImage
+        ? (await compressImageDataUrl(snapshot.productImage, 1600, 0.85)).split(',')[1]
+        : null;
       if (templateSource) {
         templateB64 = (await compressImageDataUrl(templateSource, 1600, 0.85)).split(',')[1];
       }
@@ -2602,6 +2616,7 @@ function App() {
             aspectRatio: snapshot.aspectRatio,
             imageSize: snapshot.imageSize,
             numberOfImages: snapshot.imageCount,
+            t2iMode: snapshot.t2iMode,
             clientKieApiKey: kieApiKey,
             clientGoogleApiKey: googleApiKey
           })
@@ -2654,19 +2669,15 @@ function App() {
         }
 
         const ai = apiKey ? new GoogleGenAI({ apiKey }) : new GoogleGenAI({});
+            // Skip image inline data in T2I mode (mainBase64 is null)
+            const aiParts: any[] = [];
+            if (mainBase64) {
+              aiParts.push({ inlineData: { data: mainBase64, mimeType: 'image/jpeg' } });
+            }
+            aiParts.push({ text: `${currentPrompt} (Quality: ${snapshot.imageSize.toUpperCase()})` });
             const aiResponse = await ai.models.generateContent({
               model: config.id,
-              contents: {
-                parts: [
-                  {
-                    inlineData: {
-                      data: mainBase64,
-                      mimeType: 'image/jpeg',
-                    },
-                  },
-                  { text: `${currentPrompt} (Quality: ${snapshot.imageSize.toUpperCase()})` }
-                ]
-              },
+              contents: { parts: aiParts },
               config: {
                 imageConfig: {
                   aspectRatio: snapshot.aspectRatio as any,
@@ -4332,9 +4343,37 @@ function App() {
               ) : (
                 <div className="flex flex-col gap-3">
                 {/* Settings — compact one-row dropdowns (per design handoff) */}
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
-                  <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Cài đặt</p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
+                    <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Cài đặt</p>
+                  </div>
+                  {ecomSubTab === 'gen-new' && (
+                    <button
+                      type="button"
+                      onClick={() => setEcomT2IMode((v) => !v)}
+                      className="flex items-center gap-2 px-2.5 py-1 rounded-full transition-all"
+                      style={{
+                        background: ecomT2IMode ? 'var(--color-accent-soft)' : 'var(--color-fill)',
+                        border: ecomT2IMode ? '1px solid var(--color-accent)' : '1px solid transparent',
+                        color: ecomT2IMode ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        letterSpacing: '0.04em',
+                      }}
+                      title={ecomT2IMode ? 'Tắt chế độ Text-to-Image (cần ảnh sản phẩm)' : 'Bật chế độ Text-to-Image (chỉ cần prompt, không cần ảnh)'}
+                    >
+                      <span
+                        className="inline-block rounded-full transition-all"
+                        style={{
+                          width: 7,
+                          height: 7,
+                          background: ecomT2IMode ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                        }}
+                      />
+                      TEXT‑TO‑IMAGE
+                    </button>
+                  )}
                 </div>
                 <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                   {(() => {
@@ -4395,42 +4434,44 @@ function App() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-3">
-                  {/* Col 1 — Ảnh sản phẩm */}
-                  <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
-                      <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                        Ảnh sản phẩm
-                      </p>
-                    </div>
-                    <div
-                      {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
-                      className="w-full aspect-[4/3] flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
-                      style={{
-                        background: dragOverId === 'ecom-product' ? 'var(--color-accent-soft)' : 'var(--color-card)',
-                        border: `2px dashed ${dragOverId === 'ecom-product' || ecomProductImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                        borderRadius: 12,
-                      }}
-                      onClick={() => {
-                        setPasteTargetId('ecom-product');
-                        if (ecomFileInputRef.current) ecomFileInputRef.current.click();
-                      }}
-                    >
-                      {ecomProductImage ? (
-                        <>
-                          <img src={ecomProductImage} alt="Product" className="w-full h-full object-contain" />
-                          <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}>
-                            <span className="text-white font-bold text-xs">Thay đổi ảnh sản phẩm</span>
+                  {/* Col 1 — Ảnh sản phẩm (hidden in T2I mode) */}
+                  {!ecomT2IMode && (
+                    <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
+                        <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                          Ảnh sản phẩm
+                        </p>
+                      </div>
+                      <div
+                        {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
+                        className="w-full aspect-[4/3] flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                        style={{
+                          background: dragOverId === 'ecom-product' ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                          border: `2px dashed ${dragOverId === 'ecom-product' || ecomProductImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                          borderRadius: 12,
+                        }}
+                        onClick={() => {
+                          setPasteTargetId('ecom-product');
+                          if (ecomFileInputRef.current) ecomFileInputRef.current.click();
+                        }}
+                      >
+                        {ecomProductImage ? (
+                          <>
+                            <img src={ecomProductImage} alt="Product" className="w-full h-full object-contain" />
+                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}>
+                              <span className="text-white font-bold text-xs">Thay đổi ảnh sản phẩm</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
+                            <Upload size={32} />
+                            <span style={{ fontSize: 13, fontWeight: 500 }}>Click, kéo thả hoặc Ctrl+V ảnh sản phẩm</span>
                           </div>
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
-                          <Upload size={32} />
-                          <span style={{ fontSize: 13, fontWeight: 500 }}>Click, kéo thả hoặc Ctrl+V ảnh sản phẩm</span>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Col 2 — Prompt */}
                   <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
@@ -4813,6 +4854,9 @@ function App() {
                   {(() => {
                     const runningBatches = ecomBatches.filter(b => b.status === 'running').length;
                     if (ecomSubTab === 'gen-new') {
+                      // In T2I mode: enabled if prompt non-empty. In i2i: enabled if image uploaded.
+                      const t2iReady = ecomT2IMode && (ecomPromptText.trim() || ecomSupplementaryPrompt.trim());
+                      const i2iReady = !ecomT2IMode && !!ecomProductImage;
                       return (
                         <Button
                           variant="filled"
@@ -4820,11 +4864,11 @@ function App() {
                           fullWidth
                           icon={Sparkles}
                           onClick={handleEcomGenerate}
-                          disabled={!ecomProductImage}
+                          disabled={!(t2iReady || i2iReady)}
                         >
                           {runningBatches > 0
                             ? `Gen thêm batch (đang chạy ${runningBatches})`
-                            : 'Gen ảnh TMĐT'}
+                            : ecomT2IMode ? 'Gen ảnh từ Prompt' : 'Gen ảnh TMĐT'}
                         </Button>
                       );
                     }
@@ -5799,6 +5843,11 @@ function App() {
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase" style={{ background: 'rgba(255,59,48,0.15)', color: 'var(--color-danger)' }}>
                                     <AlertCircle size={10} />
                                     Fail
+                                  </span>
+                                )}
+                                {batch.t2iMode && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase" style={{ background: 'rgba(175,82,222,0.15)', color: '#af52de' }}>
+                                    T2I
                                   </span>
                                 )}
                                 <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--color-text-tertiary)', letterSpacing: '0.04em' }}>

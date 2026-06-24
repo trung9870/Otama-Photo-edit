@@ -79,11 +79,18 @@ export const KIE_MODELS = ['gpt-image-2-image-to-image', 'kie-ai-gpt2', 'nano-ba
 // Supports both GPT Image 2 (input_urls + constrained aspect/resolution) and
 // Google Nano Banana Pro / 2 (image_input + full aspect/resolution support).
 export async function createKieImageTask(model: string, inputUrls: string[], prompt: string, apiKey: string, aspectRatio: string, imageSize: string): Promise<string> {
-  const kieModel = model === 'kie-ai-gpt2' ? 'gpt-image-2-image-to-image' : model;
-  const isGpt2 = kieModel === 'gpt-image-2-image-to-image';
+  // gpt-image-2-image-to-image requires input_urls; if caller wants T2I (empty inputUrls),
+  // swap to the sibling alias gpt-image-2-text-to-image which accepts prompt only.
+  let kieModel = model === 'kie-ai-gpt2' ? 'gpt-image-2-image-to-image' : model;
+  const isT2I = !inputUrls || inputUrls.length === 0;
+  if (isT2I && kieModel === 'gpt-image-2-image-to-image') {
+    kieModel = 'gpt-image-2-text-to-image';
+  }
+  const isGpt2I2I = kieModel === 'gpt-image-2-image-to-image';
+  const isGpt2T2I = kieModel === 'gpt-image-2-text-to-image';
 
   let input: any;
-  if (isGpt2) {
+  if (isGpt2I2I || isGpt2T2I) {
     // GPT Image 2 supports: 1:1, 3:4, 4:3, 9:16, 16:9, auto.
     // Only constraint: 1:1 can't go up to 4K — clamp to 2K.
     const SUPPORTED = ['1:1', '3:4', '4:3', '9:16', '16:9', 'auto'];
@@ -92,16 +99,24 @@ export async function createKieImageTask(model: string, inputUrls: string[], pro
     const finalResolution = finalAspectRatio === 'auto'
       ? '1K'
       : (finalAspectRatio === '1:1' && requestedSize === '4K' ? '2K' : requestedSize);
-    input = { prompt, input_urls: inputUrls, aspect_ratio: finalAspectRatio, resolution: finalResolution };
+    // T2I alias has no input_urls field
+    input = isGpt2T2I
+      ? { prompt, aspect_ratio: finalAspectRatio, resolution: finalResolution }
+      : { prompt, input_urls: inputUrls, aspect_ratio: finalAspectRatio, resolution: finalResolution };
   } else {
-    // Nano Banana Pro / 2: dùng image_input, hỗ trợ trực tiếp các tỉ lệ + 1K/2K/4K
-    input = {
+    // Nano Banana Pro / 2: dùng image_input. T2I = omit image_input field entirely.
+    // Be conservative on T2I — only send the documented fields. output_format is documented
+    // for i2i; if Kie ever tightens validation on the T2I path, dropping it here keeps us safe.
+    const base: any = {
       prompt,
-      image_input: inputUrls,
       aspect_ratio: aspectRatio || 'auto',
       resolution: (imageSize || '1K').toUpperCase(),
-      output_format: 'png',
     };
+    if (!isT2I) {
+      base.image_input = inputUrls;
+      base.output_format = 'png';
+    }
+    input = base;
   }
 
   const createRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
@@ -208,9 +223,19 @@ export async function uploadBase64WithFallback(b64: string, apiKey: string): Pro
 // ============== /api/generate ==============
 export async function handleGenerate(req: Req, res: Res) {
   try {
-    const { modelId, prompt, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, clientKieApiKey, clientGoogleApiKey } = req.body;
+    const { modelId, prompt, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, t2iMode, clientKieApiKey, clientGoogleApiKey } = req.body;
     const composeList: string[] = Array.isArray(composeImages) ? composeImages.filter((b: any) => typeof b === 'string' && b.length > 0) : [];
-    console.log(`[api] /generate modelId=${modelId} numberOfImages=${numberOfImages} imageSize=${imageSize} hasTemplate=${!!templateBase64} composeCount=${composeList.length}`);
+    // T2I = client explicitly opted in via flag. Don't fall back when imageBase64 happens to be missing —
+    // that masks real upload failures behind a silently-T2I path. Old clients without the flag stay i2i.
+    const isT2I = !!t2iMode;
+    console.log(`[api] /generate modelId=${modelId} numberOfImages=${numberOfImages} imageSize=${imageSize} hasTemplate=${!!templateBase64} composeCount=${composeList.length} t2i=${isT2I}`);
+
+    if (isT2I && (!prompt || !String(prompt).trim())) {
+      return res.status(400).json({ error: "Chế độ Text-to-Image cần prompt mô tả ảnh muốn tạo." });
+    }
+    if (!isT2I && !imageBase64 && composeList.length === 0 && !templateBase64) {
+      return res.status(400).json({ error: "Thiếu ảnh sản phẩm. Bật chế độ Text-to-Image nếu muốn gen từ prompt thuần." });
+    }
 
     const defaultGoogleKey = process.env.GEMINI_API_KEY;
     const defaultKieKey = process.env.KIE_API_KEY;
@@ -221,7 +246,10 @@ export async function handleGenerate(req: Req, res: Res) {
 
       let inputUrls: string[] = [];
       try {
-        if (composeList.length > 0) {
+        if (isT2I) {
+          // Text-to-image: no images uploaded; createKieImageTask will branch on empty inputUrls
+          inputUrls = [];
+        } else if (composeList.length > 0) {
           // Composition mode: upload all N images as input
           inputUrls = await Promise.all(composeList.map((b64) => uploadBase64WithFallback(b64, apiKey)));
         } else if (templateBase64) {
@@ -276,11 +304,13 @@ export async function handleGenerate(req: Req, res: Res) {
         for (const b64 of composeList) {
           parts.push({ inlineData: { data: b64, mimeType: "image/jpeg" } });
         }
-      } else {
+      } else if (!isT2I) {
         if (templateBase64) {
           parts.push({ inlineData: { data: templateBase64, mimeType: "image/jpeg" } });
         }
-        parts.push({ inlineData: { data: imageBase64, mimeType: "image/jpeg" } });
+        if (imageBase64) {
+          parts.push({ inlineData: { data: imageBase64, mimeType: "image/jpeg" } });
+        }
       }
       parts.push({ text: variedPrompt });
       const response = await ai.models.generateContent({
