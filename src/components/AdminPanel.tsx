@@ -290,7 +290,27 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       byUser[u].cost += g.cost || 0;
     });
     views.forEach(v => { byView[v.view || 'unknown'] = (byView[v.view || 'unknown'] || 0) + 1; });
-    const dailySeries = Object.entries(byDay).sort((a, b) => a[0].localeCompare(b[0])).map(([day, v]) => ({ day, ...v }));
+    // Build the daily series WITH zero-count days so today (and any quiet day)
+    // is always present in the chart instead of silently dropping out.
+    const dayKey = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const startDay = new Date();
+    const endDay = new Date();
+    if (timeFilter === '7d') startDay.setDate(startDay.getDate() - 6);
+    else if (timeFilter === '15d') startDay.setDate(startDay.getDate() - 14);
+    else if (timeFilter === '30d') startDay.setDate(startDay.getDate() - 29);
+    else if (timeFilter === 'custom') {
+      if (customFrom) startDay.setTime(new Date(customFrom + 'T00:00:00').getTime());
+      if (customTo) endDay.setTime(new Date(customTo + 'T23:59:59').getTime());
+    }
+    startDay.setHours(0, 0, 0, 0);
+    endDay.setHours(23, 59, 59, 999);
+    const dailySeries: { day: string; count: number; cost: number }[] = [];
+    for (let d = new Date(startDay); d.getTime() <= endDay.getTime(); d.setDate(d.getDate() + 1)) {
+      const key = dayKey(d);
+      const v = byDay[key] || { count: 0, cost: 0 };
+      dailySeries.push({ day: key, ...v });
+    }
     return { totalImages, totalCost, totalCredits, totalViews: views.length, byModel, byModelSize, byFeature, byUser, byView, dailySeries };
   }, [usage, timeFilter, customFrom, customTo]);
 
@@ -571,8 +591,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
             </p>
           )}
 
-          {/* Biểu đồ cột theo ngày */}
-          {analytics.dailySeries.length > 0 && (
+          {/* Biểu đồ cột theo ngày — always render today (and any zero day) so the bar for hôm nay is never silently missing */}
+          {analytics.totalImages > 0 && (
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
               <p className="uppercase font-semibold mb-4" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Ảnh gen theo ngày</p>
               {(() => {
