@@ -760,7 +760,7 @@ function App() {
           error: null,
           aspectRatio: '3:4'
         };
-        
+
         setImages(prev => {
           if (prev.length >= 5) return prev;
           const updated = [...prev, newImage];
@@ -770,7 +770,7 @@ function App() {
       };
       reader.readAsDataURL(file);
     });
-  }, [activeTab, isReplacing, selectedIndex]);
+  }, [appMode, activeTab, isReplacing, selectedIndex, tryOnModelImage, tryOnProductImage]);
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
