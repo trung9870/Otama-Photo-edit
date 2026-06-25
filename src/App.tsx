@@ -276,6 +276,13 @@ const MODEL_CONFIG = {
     name: 'Banana 2',
     description: 'Google Nano Banana 2 qua Kie.ai (rẻ hơn ~40% so với Google trực tiếp).',
     requiredKey: 'kie'
+  },
+  'seedream-4-5': {
+    // Internal id (kebab-case) — backend swaps to "seedream/4.5-edit" or "seedream/4.5-text-to-image" alias
+    id: 'seedream-4-5-edit',
+    name: 'Seedream 4.5',
+    description: 'ByteDance Seedream 4.5 qua Kie.ai (~$0.032/ảnh, hỗ trợ 4K). Tự chuyển sang T2I khi không có ảnh.',
+    requiredKey: 'kie'
   }
 };
 
@@ -2445,6 +2452,8 @@ function App() {
     if (modelId === 'nano-banana-pro' || modelId === 'gemini-3-pro-image-preview') return s === '4k' ? 24 : 18;
     if (modelId === 'nano-banana-2' || modelId === 'gemini-3.1-flash-image-preview') return s === '4k' ? 18 : s === '2k' ? 12 : 8;
     if (modelId === 'gpt-image-2-image-to-image') return s === '4k' ? 16 : s === '2k' ? 10 : 6;
+    // Seedream 4.5 (~$0.032/ảnh; basic→2K = $0.035 @ 7 credits, high→4K = $0.040 @ 8 credits — verify in Kie dashboard)
+    if (modelId === 'seedream-4-5-edit' || modelId === 'seedream-4-5-text-to-image') return s === '4k' ? 8 : 7;
     return 0; // analyze (text) — không tính credit ảnh
   };
 

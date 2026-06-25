@@ -73,7 +73,7 @@ export async function handleProxyImage(req: Req, res: Res) {
 }
 
 // ============== Kie.ai helpers ==============
-export const KIE_MODELS = ['gpt-image-2-image-to-image', 'kie-ai-gpt2', 'nano-banana-pro', 'nano-banana-2'];
+export const KIE_MODELS = ['gpt-image-2-image-to-image', 'kie-ai-gpt2', 'nano-banana-pro', 'nano-banana-2', 'seedream-4-5-edit', 'seedream-4-5-text-to-image'];
 
 // Create a task and return the taskId immediately (no polling).
 // Supports both GPT Image 2 (input_urls + constrained aspect/resolution) and
@@ -86,11 +86,37 @@ export async function createKieImageTask(model: string, inputUrls: string[], pro
   if (isT2I && kieModel === 'gpt-image-2-image-to-image') {
     kieModel = 'gpt-image-2-text-to-image';
   }
+  // Seedream 4.5 — internal kebab-case ids map to the slash-form Kie aliases.
+  // T2I and I2I are SEPARATE aliases (unlike Banana). image_urls field name (NOT image_input).
+  const isSeedreamEditInternal = kieModel === 'seedream-4-5-edit';
+  const isSeedreamT2IInternal = kieModel === 'seedream-4-5-text-to-image';
+  if (isSeedreamEditInternal || isSeedreamT2IInternal) {
+    kieModel = isT2I || isSeedreamT2IInternal ? 'seedream/4.5-text-to-image' : 'seedream/4.5-edit';
+  }
   const isGpt2I2I = kieModel === 'gpt-image-2-image-to-image';
   const isGpt2T2I = kieModel === 'gpt-image-2-text-to-image';
+  const isSeedream = kieModel === 'seedream/4.5-edit' || kieModel === 'seedream/4.5-text-to-image';
+  const isSeedreamI2I = kieModel === 'seedream/4.5-edit';
 
   let input: any;
-  if (isGpt2I2I || isGpt2T2I) {
+  if (isSeedream) {
+    // Seedream 4.5 — required: prompt, aspect_ratio, quality. NO output_format / image_size / n.
+    // Aspect ratios supported: 1:1, 4:3, 3:4, 16:9, 9:16, 2:3, 3:2, 21:9. NO 'auto'.
+    const SUPPORTED_AR = ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'];
+    const finalAspectRatio = SUPPORTED_AR.includes(aspectRatio) ? aspectRatio : '1:1';
+    // quality enum: 'basic' (2K) | 'high' (4K). Map UI size 4K → high; everything else → basic.
+    const quality = (imageSize || '1k').toLowerCase() === '4k' ? 'high' : 'basic';
+    input = {
+      prompt,
+      aspect_ratio: finalAspectRatio,
+      quality,
+      nsfw_checker: false,
+    };
+    if (isSeedreamI2I) {
+      // image_urls — snake_case PLURAL (NOT image_input, NOT input_urls). Docs cap = 14; stay under at 10.
+      input.image_urls = (inputUrls || []).slice(0, 10);
+    }
+  } else if (isGpt2I2I || isGpt2T2I) {
     // GPT Image 2 supports: 1:1, 3:4, 4:3, 9:16, 16:9, auto.
     // Only constraint: 1:1 can't go up to 4K — clamp to 2K.
     const SUPPORTED = ['1:1', '3:4', '4:3', '9:16', '16:9', 'auto'];
