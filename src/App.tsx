@@ -11,9 +11,10 @@ import Cropper from 'react-easy-crop';
 import { getCroppedImg } from './utils/cropImage';
 import { stitchImages } from './utils/imageStitcher';
 import { 
-  Upload, 
-  Palette, 
-  RotateCcw, 
+  Upload,
+  Palette,
+  RotateCcw,
+  Wallet,
   Loader2, 
   Sparkles,
   CheckCircle2,
@@ -836,6 +837,24 @@ function App() {
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [userPermissions, setUserPermissions] = useState<any>(null);
+
+  const [kieCredits, setKieCredits] = useState<number | null>(null);
+  const [kieCreditsLoading, setKieCreditsLoading] = useState(false);
+  const fetchKieCredits = async () => {
+    setKieCreditsLoading(true);
+    try {
+      const r = await fetch('/api/kie-credits');
+      const data = await r.json();
+      setKieCredits(typeof data.credits === 'number' ? data.credits : null);
+    } catch (e) {
+      console.warn('fetch kie credits failed', e);
+    } finally {
+      setKieCreditsLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (isAdmin) fetchKieCredits();
+  }, [isAdmin]);
 
   useEffect(() => {
     let unsubUserDoc: any = null;
@@ -1726,12 +1745,6 @@ function App() {
       }
       return filtered;
     });
-  };
-
-  const resetEditor = () => {
-    setImages([]);
-    setSelectedIndex(0);
-    setGlobalError(null);
   };
 
   const handleDownload = async (img?: string) => {
@@ -3606,13 +3619,20 @@ function App() {
                 <span className="hidden sm:inline">Lưu tất cả</span>
               </button>
             )}
-            <button
-              onClick={resetEditor}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-editor-border text-xs hover:bg-editor-border/30 transition-colors"
-            >
-              <RotateCcw size={14} />
-              <span className="hidden sm:inline">Reset</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={fetchKieCredits}
+                disabled={kieCreditsLoading}
+                title="Số dư KIE.AI — bấm để làm mới"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-editor-border text-xs hover:bg-editor-border/30 transition-colors disabled:opacity-60"
+              >
+                <Wallet size={14} />
+                <span className="font-semibold tabular-nums">
+                  {kieCreditsLoading ? '…' : kieCredits !== null ? kieCredits.toLocaleString() : '—'}
+                </span>
+                <span className="hidden sm:inline">credits</span>
+              </button>
+            )}
           </>
         }
       />
