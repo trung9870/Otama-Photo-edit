@@ -6010,10 +6010,7 @@ function App() {
                                       <Crop size={12} /> Chọn Tách
                                     </button>
                                     <button
-                                      onClick={() => {
-                                        setEcomTemplateImage(res);
-                                        setEcomSubTab('clone-template');
-                                      }}
+                                      onClick={() => useEcomImageAsInput(res)}
                                       className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px] hover:bg-indigo-600 transition-colors"
                                     >
                                       <Copy size={12} /> Dùng làm Mẫu
@@ -6096,11 +6093,8 @@ function App() {
                           <Crop size={14} /> Chọn Tách
                         </button>
                         {ecomSubTab === 'gen-new' && (
-                          <button 
-                            onClick={() => {
-                              setEcomTemplateImage(res);
-                              setEcomSubTab('clone-template');
-                            }}
+                          <button
+                            onClick={() => useEcomImageAsInput(res)}
                             className="px-4 py-2 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-2 w-32 justify-center text-xs hover:bg-indigo-600 transition-colors"
                           >
                             <Copy size={14} /> Dùng làm Mẫu
