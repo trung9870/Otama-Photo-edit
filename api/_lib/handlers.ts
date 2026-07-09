@@ -391,14 +391,58 @@ export async function handleGenerateCheck(req: Req, res: Res) {
   }
 }
 
+// ============== Kie.ai chat completions helper (Gemini 3.5 Flash) ==============
+// Wraps Kie's OpenAI-compatible endpoint so analyze/detect-grid can share it.
+// Bill goes to Kie balance instead of direct Google — cheaper + single quota.
+async function geminiChatViaKie(opts: {
+  imageBase64: string;
+  prompt: string;
+  kieApiKey: string;
+  jsonMode?: boolean;
+}): Promise<{ text: string; modelUsed: string }> {
+  const imageUrl = await uploadBase64WithFallback(opts.imageBase64, opts.kieApiKey);
+  const endpoint = 'https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions';
+  const body: any = {
+    model: 'gemini-3-5-flash',
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: opts.prompt },
+        { type: 'image_url', image_url: { url: imageUrl } },
+      ],
+    }],
+    stream: false,
+  };
+  if (opts.jsonMode) body.response_format = { type: 'json_object' };
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${opts.kieApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Kie chat completions HTTP ${res.status}: ${errText.slice(0, 300)}`);
+  }
+  const data: any = await res.json();
+  const text: string = data?.choices?.[0]?.message?.content || '';
+  const modelUsed: string = data?.model || 'gemini-3-5-flash';
+  if (!text) throw new Error('Kie trả về nội dung rỗng.');
+  return { text, modelUsed };
+}
+
 // ============== /api/analyze ==============
+// Migrated: Gemini direct → Kie.ai (Gemini 3.5 Flash OpenAI-compat) để tiết kiệm cost
+// và tránh sạc GEMINI_API_KEY quota. Fashion mode = JSON; bedding = free text (Chinese format).
 export async function handleAnalyze(req: Req, res: Res) {
   try {
-    const { imageBase64, mode } = req.body;
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server." });
+    const { imageBase64, mode, clientKieApiKey } = req.body;
+    const kieApiKey = clientKieApiKey || process.env.KIE_API_KEY;
+    if (!kieApiKey) return res.status(500).json({ error: "KIE_API_KEY chưa cấu hình trên server." });
 
-    const ai = new GoogleGenAI({ apiKey });
     const analyzeMode: 'fashion' | 'bedding' = mode === 'bedding' ? 'bedding' : 'fashion';
 
     const FASHION_PROMPT = "Analyze this image and generate a detailed prompt for recreating a similar product photo. Focus on: styling, angle, lighting, background, props, and technical details. IMPORTANT: Do not describe the specific product shown in the image (e.g., don't say 'denim shorts'). Instead, use a generic placeholder like 'the product' or 'main subject' so this prompt can be reused for any item. Output ONLY the JSON object.";
@@ -457,40 +501,35 @@ YÊU CẦU MỖI CẶP:
 图 8: HEADLINE "..." / BODY "..."`;
 
     const promptText = analyzeMode === 'bedding' ? BEDDING_PROMPT : FASHION_PROMPT;
-    const modelsToTry = ["gemini-3-flash-preview", "gemini-2.5-flash", "gemini-2.0-flash"];
     const maxAttempts = 3;
-    let response: any = null;
+    let text = '';
+    let modelUsed = '';
     let lastError: any = null;
 
-    outer: for (const modelName of modelsToTry) {
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          response = await ai.models.generateContent({
-            model: modelName,
-            contents: { parts: [{ inlineData: { data: imageBase64, mimeType: "image/jpeg" } }, { text: promptText }] },
-            config: analyzeMode === 'fashion' ? { responseMimeType: "application/json" } : {}
-          });
-          console.log(`[api] analyze succeeded with ${modelName} (attempt ${attempt})`);
-          break outer;
-        } catch (e: any) {
-          lastError = e;
-          const msg = e?.message || '';
-          const isOverload = msg.includes('high demand') || msg.includes('UNAVAILABLE') || msg.includes('overloaded') || msg.includes('503');
-          console.warn(`[api] analyze ${modelName} attempt ${attempt} failed: ${msg.slice(0, 120)}`);
-          if (!isOverload) throw e;
-          if (attempt < maxAttempts) await new Promise(r => setTimeout(r, attempt * 1500));
-        }
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const out = await geminiChatViaKie({
+          imageBase64,
+          prompt: promptText,
+          kieApiKey,
+          jsonMode: analyzeMode === 'fashion',
+        });
+        text = out.text;
+        modelUsed = out.modelUsed;
+        console.log(`[api] analyze via Kie succeeded (attempt ${attempt}, model ${modelUsed})`);
+        break;
+      } catch (e: any) {
+        lastError = e;
+        const msg = e?.message || '';
+        const isOverload = msg.includes('503') || msg.includes('502') || msg.includes('overloaded') || msg.includes('UNAVAILABLE');
+        console.warn(`[api] analyze via Kie attempt ${attempt} failed: ${msg.slice(0, 160)}`);
+        if (!isOverload) throw e;
+        if (attempt < maxAttempts) await new Promise(r => setTimeout(r, attempt * 1500));
       }
     }
 
-    if (!response) throw lastError || new Error('Analyze failed after retries');
-
-    const resultText = response.text;
-    if (!resultText) {
-      console.error("[api] AI returned empty:", JSON.stringify(response));
-      return res.status(500).json({ error: "AI response was empty or blocked." });
-    }
-    return res.json({ result: resultText });
+    if (!text) throw lastError || new Error('Analyze failed after retries');
+    return res.json({ result: text });
   } catch (error: any) {
     console.error("[api] Analysis Error:", error);
     return res.status(500).json({ error: formatGeminiError(error.message || "Internal Server Error") });
@@ -498,42 +537,34 @@ YÊU CẦU MỖI CẶP:
 }
 
 // ============== /api/detect-grid ==============
+// Migrated: Gemini direct → Kie.ai (Gemini 3.5 Flash OpenAI-compat).
+// Kie response_format=json_object trả object, không phải array — prompt yêu cầu wrap trong { "boxes": [...] } rồi unwrap về array cho client.
 export async function handleDetectGrid(req: Req, res: Res) {
   try {
-    const { imageBase64, clientGoogleApiKey } = req.body;
-    const apiKey = clientGoogleApiKey || process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY is not configured on the server." });
+    const { imageBase64, clientKieApiKey } = req.body;
+    const kieApiKey = clientKieApiKey || process.env.KIE_API_KEY;
+    if (!kieApiKey) return res.status(500).json({ error: "KIE_API_KEY chưa cấu hình trên server." });
 
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
-      contents: {
-        parts: [
-          { inlineData: { data: imageBase64, mimeType: "image/jpeg" } },
-          { text: "Analyze this image layout, which contains multiple individual sub-images, panels or frames. Identify all the individual sub-images. Output a JSON array of bounding boxes for each sub-image. Each object in the array should have exactly these properties: `ymin`, `xmin`, `ymax`, `xmax`, all as integers between 0 and 1000. Do not include any other properties. Ensure the bounding boxes accurately cover each separate panel." }
-        ],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "ARRAY",
-          items: {
-            type: "OBJECT",
-            properties: {
-              ymin: { type: "INTEGER" }, xmin: { type: "INTEGER" }, ymax: { type: "INTEGER" }, xmax: { type: "INTEGER" }
-            },
-            required: ["ymin", "xmin", "ymax", "xmax"]
-          }
-        }
-      } as any
+    const prompt = 'Analyze this image layout, which contains multiple individual sub-images, panels or frames. Identify all the individual sub-images. Output a JSON object with a single key "boxes" whose value is an array of bounding boxes. Each object in the array must have exactly these properties: ymin, xmin, ymax, xmax — all integers between 0 and 1000. Do not include any other keys or commentary. Ensure the boxes accurately cover each separate panel. Example output: {"boxes":[{"ymin":0,"xmin":0,"ymax":500,"xmax":500}]}';
+
+    const { text } = await geminiChatViaKie({
+      imageBase64,
+      prompt,
+      kieApiKey,
+      jsonMode: true,
     });
 
-    const resultText = response.text;
-    if (!resultText) {
-      console.error("[api] Detect Grid empty:", JSON.stringify(response));
-      return res.status(500).json({ error: "AI response was empty or blocked." });
+    // Kie returns a JSON object; extract .boxes and return it as a JSON string so
+    // the client (which parses result as an array) keeps its existing shape.
+    let boxesJson = text;
+    try {
+      const parsed = JSON.parse(text);
+      const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.boxes) ? parsed.boxes : null);
+      if (arr) boxesJson = JSON.stringify(arr);
+    } catch {
+      // If parsing fails, pass through raw text — client has its own cleanup path.
     }
-    return res.json({ result: resultText });
+    return res.json({ result: boxesJson });
   } catch (error: any) {
     console.error("[api] Detect Grid Error:", error);
     return res.status(500).json({ error: formatGeminiError(error.message || "Internal Server Error") });

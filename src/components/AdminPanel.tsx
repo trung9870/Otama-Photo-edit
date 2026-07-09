@@ -255,6 +255,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     const inRange = usage.filter(u => { const m = tsMillis(u); return m >= lo && m <= hi; });
     const gens = inRange.filter(u => u.type === 'gen');
     const views = inRange.filter(u => u.type === 'view');
+    const geminiDirect = inRange.filter(u => u.type === 'gemini_direct');
     // Theo ngày (cho biểu đồ)
     const byDay: Record<string, { count: number; cost: number }> = {};
     gens.forEach(g => {
@@ -290,6 +291,16 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       byUser[u].cost += g.cost || 0;
     });
     views.forEach(v => { byView[v.view || 'unknown'] = (byView[v.view || 'unknown'] || 0) + 1; });
+    // Gemini direct calls (billed to GEMINI_API_KEY, not Kie) — split by feature + model
+    const geminiByFeature: Record<string, number> = {};
+    const geminiByModel: Record<string, number> = {};
+    let geminiTotal = 0;
+    geminiDirect.forEach(g => {
+      const c = g.count || 1;
+      geminiTotal += c;
+      geminiByFeature[g.feature || 'unknown'] = (geminiByFeature[g.feature || 'unknown'] || 0) + c;
+      geminiByModel[g.model || 'unknown'] = (geminiByModel[g.model || 'unknown'] || 0) + c;
+    });
     // Build the daily series WITH zero-count days so today (and any quiet day)
     // is always present in the chart instead of silently dropping out.
     const dayKey = (d: Date) =>
@@ -311,7 +322,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       const v = byDay[key] || { count: 0, cost: 0 };
       dailySeries.push({ day: key, ...v });
     }
-    return { totalImages, totalCost, totalCredits, totalViews: views.length, byModel, byModelSize, byFeature, byUser, byView, dailySeries };
+    return { totalImages, totalCost, totalCredits, totalViews: views.length, byModel, byModelSize, byFeature, byUser, byView, dailySeries, geminiTotal, geminiByFeature, geminiByModel };
   }, [usage, timeFilter, customFrom, customTo]);
 
   const stats = useMemo(() => ({
@@ -592,7 +603,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           )}
 
           {/* Biểu đồ cột theo ngày — always render today (and any zero day) so the bar for hôm nay is never silently missing */}
-          {analytics.totalImages > 0 && (
+          {(analytics.totalImages > 0 || analytics.geminiTotal > 0) && (
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
               <p className="uppercase font-semibold mb-4" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Ảnh gen theo ngày</p>
               {(() => {
@@ -818,6 +829,49 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Gemini direct calls (billed to GEMINI_API_KEY, not Kie) */}
+          <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Gemini direct (không qua Kie)</p>
+                <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                  Các call tính vào <code>GEMINI_API_KEY</code>. Sau migrate chỉ còn Try-on white-bg — con số này phải ≈ 0 nếu không dùng Thay đồ.
+                </p>
+              </div>
+              <div className="font-bold" style={{ fontSize: 22, letterSpacing: '-0.02em', color: analytics.geminiTotal > 0 ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }}>
+                {analytics.geminiTotal}
+              </div>
+            </div>
+            {analytics.geminiTotal > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                <div>
+                  <p className="uppercase font-semibold mb-2" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo tính năng</p>
+                  <div className="space-y-1.5">
+                    {(Object.entries(analytics.geminiByFeature) as [string, number][]).sort((a, b) => b[1] - a[1]).map(([f, c]) => (
+                      <div key={f} className="flex items-center justify-between" style={{ fontSize: 12 }}>
+                        <span style={{ color: 'var(--color-text)' }}>{f}</span>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>{c} call</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="uppercase font-semibold mb-2" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Theo model</p>
+                  <div className="space-y-1.5">
+                    {(Object.entries(analytics.geminiByModel) as [string, number][]).sort((a, b) => b[1] - a[1]).map(([m, c]) => (
+                      <div key={m} className="flex items-center justify-between" style={{ fontSize: 12 }}>
+                        <span style={{ color: 'var(--color-text)' }}>{m}</span>
+                        <span style={{ color: 'var(--color-text-secondary)' }}>{c} call</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 8 }}>Không có call Gemini direct nào trong khoảng thời gian này. ✓</p>
+            )}
           </div>
 
           <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>

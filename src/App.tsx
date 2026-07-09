@@ -2045,17 +2045,17 @@ function App() {
     if (!analyzeImage) return;
     setIsAnalyzing(true);
     setGlobalError(null);
-    logUsage('analyze', 'gemini-3-flash-preview', 1, '');
+    logUsage('analyze', 'gemini-3-5-flash-kie', 1, '');
 
     try {
       const base64 = analyzeImage.split(',')[1];
-      
-      // Try server-side API first
+
+      // Try server-side API first (via Kie.ai — migrated from Gemini direct)
       try {
         const response = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, mode: analyzeMode })
+          body: JSON.stringify({ imageBase64: base64, mode: analyzeMode, clientKieApiKey: kieApiKey })
         });
 
         if (response.ok) {
@@ -2236,6 +2236,7 @@ function App() {
                                tryOnProductCategory === 'shoes' ? 'shoes/footwear/accessories' :
                                'full outfit (both top and bottom)';
           
+          logGeminiCall('tryon-whitebg-auto', 'gemini-2.5-flash-image');
           const whiteBgResponse = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image',
             contents: {
@@ -2388,6 +2389,7 @@ function App() {
                            tryOnProductCategory === 'shoes' ? 'shoes/footwear/accessories' :
                            'full outfit (both top and bottom)';
 
+      logGeminiCall('tryon-whitebg-manual', 'gemini-2.5-flash-image');
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: {
@@ -2489,6 +2491,26 @@ function App() {
       });
     } catch (e) {
       console.warn('logUsage failed', e);
+    }
+  };
+
+  // Log each direct Gemini API call (billed to GEMINI_API_KEY, not Kie).
+  // Kept separate from logUsage so Admin can spot leaks — after the Kie migration
+  // only Try-on preprocess should still hit here.
+  const logGeminiCall = async (feature: string, modelId: string) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(collection(db, 'usage')), {
+        type: 'gemini_direct',
+        feature,
+        model: modelId,
+        count: 1,
+        uid: user.uid,
+        email: user.email,
+        ts: Timestamp.now(),
+      });
+    } catch (e) {
+      console.warn('logGeminiCall failed', e);
     }
   };
 
@@ -3318,12 +3340,11 @@ function App() {
         base64ForApi = tempCanvas.toDataURL("image/jpeg").split(',')[1];
       }
 
-      // 1. Ask AI to detect grid boxes 
-      const apiKey = googleApiKey || (process.env as any).GEMINI_API_KEY || '';
+      // 1. Ask AI to detect grid boxes (via Kie.ai — migrated from Gemini direct)
       const detectResponse = await fetch('/api/detect-grid', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64ForApi, clientGoogleApiKey: apiKey })
+        body: JSON.stringify({ imageBase64: base64ForApi, clientKieApiKey: kieApiKey })
       });
       if (!detectResponse.ok) {
         let errorData;
