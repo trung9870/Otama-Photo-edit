@@ -166,3 +166,12 @@ html[data-theme="dark"] {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* Hide native scrollbar on horizontally-scrolling tab rows without losing scrollability. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Safety net — a long header row or accidentally-wide child must not push the
+   whole page into horizontal scroll on mobile. Individual scroll containers
+   opt in via overflow-x:auto. */
+html, body { overflow-x: hidden; }

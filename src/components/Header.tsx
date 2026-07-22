@@ -252,15 +252,16 @@ export function Header(props: HeaderProps) {
           </div>
         </div>
 
-        {/* Mobile segmented (full width, second row) */}
+        {/* Mobile segmented (scrolls horizontally on narrow phones when 5-6 tabs
+            would exceed viewport width — bleed to edges via -mx-4 so the scroll
+            hint is visible at both sides). */}
         {modeOptions.length > 1 && (
-          <div className="md:hidden">
+          <div className="md:hidden -mx-4 px-4 overflow-x-auto no-scrollbar">
             <Segmented<AppMode>
               value={appMode}
               onChange={onModeChange}
               options={modeOptions}
-              size="lg"
-              fullWidth
+              size="md"
             />
           </div>
         )}

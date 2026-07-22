@@ -53,11 +53,11 @@ export function Segmented<T extends string = string>({
             key={opt.value}
             type="button"
             onClick={() => onChange?.(opt.value)}
-            className="relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors"
+            className="relative inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition-colors shrink-0"
             style={{
               flex: fullWidth ? 1 : undefined,
               height: s.h,
-              padding: '0 14px',
+              padding: '0 10px',
               fontSize: s.fs,
               fontWeight: active ? 600 : 500,
               color: active ? 'var(--color-text)' : 'var(--color-text-secondary)',
