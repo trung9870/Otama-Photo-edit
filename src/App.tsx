@@ -578,6 +578,7 @@ function App() {
   const [ecomThayResult, setEcomThayResult] = useState<string | null>(null);
   const [isEcomThayGenerating, setIsEcomThayGenerating] = useState(false);
   const [ecomThayModel, setEcomThayModel] = useState<ModelType>('banana-pro');
+  const [ecomThayAspectRatio, setEcomThayAspectRatio] = useState<string>('3:4');
   const [ecomThayPrompt, setEcomThayPrompt] = useState<string>("Thay thế toàn bộ chăn ga gối trên giường bằng họa tiết và chất liệu từ ảnh sản phẩm. Giữ nguyên ánh sáng, nếp gấp và góc nhìn của giường. Output ONLY the resulting image.");
   const ecomThayModelInputRef = useRef<HTMLInputElement>(null);
   const ecomThayProductInputRef = useRef<HTMLInputElement>(null);
@@ -3173,7 +3174,7 @@ function App() {
           prompt: `Virtual Try-On Task: ${ecomThayPrompt}`,
           imageBase64: productB64,
           templateBase64: modelB64,
-          aspectRatio: "3:4",
+          aspectRatio: ecomThayAspectRatio,
           imageSize: "1K",
           numberOfImages: 1,
           clientKieApiKey: kieApiKey,
@@ -4198,7 +4199,7 @@ function App() {
                     <h3 className="font-bold" style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>Cấu hình Thay Đồ</h3>
                   </div>
 
-                  {/* Model */}
+                  {/* Model + Aspect Ratio */}
                   <div>
                     <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chọn mô hình AI</p>
                     <ModelCardPicker<ModelType>
@@ -4210,6 +4211,17 @@ function App() {
                         sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
                         best: m === 'banana-pro',
                       }))}
+                    />
+                  </div>
+
+                  {/* Aspect Ratio */}
+                  <div>
+                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ ảnh</p>
+                    <SettingsDropdown<string>
+                      value={ecomThayAspectRatio}
+                      onChange={(v) => setEcomThayAspectRatio(v)}
+                      options={['1:1', '3:4', '4:3', '9:16', '16:9', '4:5'].map((a) => ({ value: a, label: a }))}
+                      width="fill"
                     />
                   </div>
 
