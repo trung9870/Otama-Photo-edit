@@ -578,6 +578,7 @@ function App() {
   const [ecomThayModelImage, setEcomThayModelImage] = useState<string | null>(null);
   const [ecomThayProductImage, setEcomThayProductImage] = useState<string | null>(null);
   const [ecomThayResults, setEcomThayResults] = useState<string[]>([]);
+  const [ecomThayActiveIdx, setEcomThayActiveIdx] = useState(0);
   const [isEcomThayGenerating, setIsEcomThayGenerating] = useState(false);
   const [ecomThayModel, setEcomThayModel] = useState<ModelType>('banana-pro');
   const [ecomThayAspectRatio, setEcomThayAspectRatio] = useState<string>('3:4');
@@ -3161,6 +3162,7 @@ function App() {
     setIsEcomThayGenerating(true);
     setGlobalError(null);
     setEcomThayResults([]);
+    setEcomThayActiveIdx(0);
 
     try {
       // Compress both images before sending — Vercel's request body limit is 4.5 MB.
@@ -5275,32 +5277,70 @@ function App() {
                             </div>
                           </>
                         ) : ecomThayResults.length > 0 ? (
-                          <div className={`w-full h-full grid gap-1 ${ecomThayResults.length === 1 ? 'grid-cols-1' : ecomThayResults.length === 2 ? 'grid-rows-2' : 'grid-rows-3'}`}>
-                            {ecomThayResults.map((url, idx) => (
-                              <div key={idx} className="relative w-full h-full overflow-hidden group/thay">
-                                <img src={url} alt={`Thay Result ${idx + 1}`} className="w-full h-full object-contain" />
-                                <button
-                                  onClick={() => setZoomImage(url)}
-                                  className="absolute top-1.5 right-1.5 p-1 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10 opacity-0 group-hover/thay:opacity-100"
-                                  title="Phóng to"
-                                >
-                                  <ZoomIn size={12} />
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    const link = document.createElement('a');
-                                    link.href = url;
-                                    link.download = `thay-result-${Date.now()}-${idx + 1}.png`;
-                                    link.click();
-                                  }}
-                                  className="absolute bottom-2 right-2 p-2 bg-editor-accent text-white rounded-full shadow-lg hover:scale-110 transition-transform opacity-0 group-hover/thay:opacity-100"
-                                  title="Tải ảnh về"
-                                >
-                                  <Download size={14} />
-                                </button>
+                          (() => {
+                            const activeIdx = Math.min(ecomThayActiveIdx, ecomThayResults.length - 1);
+                            const activeUrl = ecomThayResults[activeIdx];
+                            return (
+                              <div className="w-full h-full relative flex flex-col">
+                                <div className="flex-1 relative overflow-hidden">
+                                  <img src={activeUrl} alt={`Thay Result ${activeIdx + 1}`} className="w-full h-full object-contain" />
+                                  <button
+                                    onClick={() => setZoomImage(activeUrl)}
+                                    className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10"
+                                    title="Phóng to"
+                                  >
+                                    <ZoomIn size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const link = document.createElement('a');
+                                      link.href = activeUrl;
+                                      link.download = `thay-result-${Date.now()}-${activeIdx + 1}.png`;
+                                      link.click();
+                                    }}
+                                    className="absolute bottom-3 right-3 p-3 bg-editor-accent text-white rounded-full shadow-lg hover:scale-110 transition-transform"
+                                    title="Tải ảnh về"
+                                  >
+                                    <Download size={18} />
+                                  </button>
+                                  {ecomThayResults.length > 1 && (
+                                    <span
+                                      className="absolute top-2 left-2 rounded backdrop-blur-sm border border-white/20"
+                                      style={{ padding: '3px 8px', fontSize: 11, fontWeight: 600, background: 'rgba(0,0,0,0.55)', color: '#fff' }}
+                                    >
+                                      {activeIdx + 1} / {ecomThayResults.length}
+                                    </span>
+                                  )}
+                                </div>
+                                {ecomThayResults.length > 1 && (
+                                  <div className="flex gap-1.5 mt-1.5 px-1 pb-1">
+                                    {ecomThayResults.map((url, idx) => {
+                                      const isActive = idx === activeIdx;
+                                      return (
+                                        <button
+                                          key={idx}
+                                          onClick={() => setEcomThayActiveIdx(idx)}
+                                          className="flex-1 aspect-square overflow-hidden rounded-md transition-all"
+                                          style={{
+                                            border: isActive ? '2px solid var(--color-accent)' : '2px solid transparent',
+                                            outline: isActive ? '0.5px solid rgba(0,0,0,0.35)' : 'none',
+                                            padding: 0,
+                                            cursor: 'pointer',
+                                            opacity: isActive ? 1 : 0.65,
+                                          }}
+                                          onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.opacity = '0.9'; }}
+                                          onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.opacity = '0.65'; }}
+                                          title={`Ảnh ${idx + 1}`}
+                                        >
+                                          <img src={url} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
-                            ))}
-                          </div>
+                            );
+                          })()
                         ) : (
                           <div className="flex flex-col items-center gap-3 text-gray-500 px-4 text-center">
                             <ImageIcon size={40} className="opacity-50" />
