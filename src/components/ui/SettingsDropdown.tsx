@@ -99,9 +99,9 @@ export function SettingsDropdown<T extends string | number = string>({
             position: 'absolute',
             top: 'calc(100% + 5px)',
             left: 0,
-            right: 0,
             zIndex: 30,
             minWidth: '100%',
+            width: 'max-content',
             background: 'var(--color-card)',
             border: '1px solid var(--color-border)',
             borderRadius: 12,
@@ -142,7 +142,7 @@ export function SettingsDropdown<T extends string | number = string>({
                   if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent';
                 }}
               >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 7, font: '600 12px/1 inherit' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7, font: '600 12px/1 inherit', whiteSpace: 'nowrap' }}>
                   {opt.label}
                   {opt.badge && (
                     <span

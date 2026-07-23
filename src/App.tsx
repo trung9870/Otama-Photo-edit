@@ -4209,12 +4209,14 @@ function App() {
                     <h3 className="font-bold" style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>Cấu hình Thay Đồ</h3>
                   </div>
 
-                  {/* Model + Aspect Ratio */}
+                  {/* Model — 4 cards in one row, compact */}
                   <div>
                     <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Chọn mô hình AI</p>
                     <ModelCardPicker<ModelType>
                       value={ecomThayModel}
                       onChange={(m) => setEcomThayModel(m)}
+                      columns={4}
+                      size="sm"
                       options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
                         value: m,
                         name: MODEL_CONFIG[m].name,
@@ -4224,8 +4226,8 @@ function App() {
                     />
                   </div>
 
-                  {/* Aspect ratio + Quality + Count — compact one-row dropdowns */}
-                  <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
+                  {/* Aspect ratio + Quality + Count — three equal-width dropdowns, centered row */}
+                  <div className="p-3 flex gap-2 items-stretch justify-center" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     <SettingsDropdown<string>
                       value={ecomThayAspectRatio}
                       onChange={(v) => setEcomThayAspectRatio(v)}
@@ -4236,11 +4238,13 @@ function App() {
                       value={ecomThayQuality}
                       onChange={(v) => setEcomThayQuality(v)}
                       options={(['1k', '2k', '4k'] as const).map((s) => ({ value: s, label: s.toUpperCase() }))}
+                      width="fill"
                     />
                     <SettingsDropdown<number>
                       value={ecomThayCount}
                       onChange={(v) => setEcomThayCount(v)}
                       options={[1, 2, 3].map((c) => ({ value: c, label: `${c} ảnh` }))}
+                      width="fill"
                     />
                   </div>
 
