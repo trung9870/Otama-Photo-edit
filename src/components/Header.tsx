@@ -12,6 +12,7 @@ import {
   Moon,
   Monitor,
   Key,
+  Clock,
   LogIn,
   LogOut,
   User as UserIcon,
@@ -48,6 +49,9 @@ export interface HeaderProps {
   user: FirebaseUser | null;
   onLogin: () => void;
   onLogout: () => void;
+
+  // History panel (Lịch sử của tôi)
+  onOpenHistory?: () => void;
 
   // Trailing action slot (e.g. clothing toolbar buttons)
   actions?: React.ReactNode;
@@ -165,6 +169,28 @@ function AvatarPill({ user, onLogin, onLogout }: { user: FirebaseUser | null; on
   );
 }
 
+function HistoryButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Lịch sử của tôi (15 ngày)"
+      aria-label="Lịch sử"
+      className="flex items-center justify-center rounded-lg transition-colors"
+      style={{
+        width: 34, height: 32,
+        background: 'var(--color-fill)',
+        color: 'var(--color-text-secondary)',
+        border: 'none', cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-accent)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
+    >
+      <Clock size={15} strokeWidth={2} />
+    </button>
+  );
+}
+
 function ThemeToggle({ theme, resolvedTheme, onThemeChange }: { theme: Theme; resolvedTheme: 'light' | 'dark'; onThemeChange: (t: Theme) => void }) {
   // Compact Sun/Moon icon toggle per handoff. Icon-only keeps the button
   // tight in the header cluster and dodges the "invisible label" trap when
@@ -207,6 +233,7 @@ export function Header(props: HeaderProps) {
     theme, resolvedTheme, onThemeChange,
     hasApiKey, onOpenSettings,
     isAuthReady, user, onLogin, onLogout,
+    onOpenHistory,
     actions,
   } = props;
 
@@ -247,6 +274,7 @@ export function Header(props: HeaderProps) {
 
           {/* Mobile right cluster (compact) */}
           <div className="flex md:hidden items-center gap-2">
+            {user && onOpenHistory && <HistoryButton onClick={onOpenHistory} />}
             <ThemeToggle theme={theme} resolvedTheme={resolvedTheme} onThemeChange={onThemeChange} />
             {isAuthReady && <AvatarPill user={user} onLogin={onLogin} onLogout={onLogout} />}
           </div>
@@ -281,6 +309,7 @@ export function Header(props: HeaderProps) {
               {hasApiKey ? 'API Key' : 'Thêm API Key'}
             </Button>
           )}
+          {user && onOpenHistory && <HistoryButton onClick={onOpenHistory} />}
           <ThemeToggle theme={theme} resolvedTheme={resolvedTheme} onThemeChange={onThemeChange} />
           {isAuthReady && <AvatarPill user={user} onLogin={onLogin} onLogout={onLogout} />}
         </div>

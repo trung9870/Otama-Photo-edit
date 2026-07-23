@@ -84,6 +84,7 @@ import { useTheme } from './hooks/useTheme';
 import { useNotify } from './hooks/useNotify';
 import { Button } from './components/ui';
 import { Header } from './components/Header';
+import HistoryModal from './components/HistoryModal';
 import { Login } from './components/Login';
 import { Segmented, SettingsDropdown } from './components/ui';
 import type { SettingsDropdownOption } from './components/ui';
@@ -396,6 +397,7 @@ function App() {
 
   // API Keys and Settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [kieApiKey, setKieApiKey] = useState<string>(() => localStorage.getItem('kieApiKey') || '');
   const [googleApiKey, setGoogleApiKey] = useState<string>(() => localStorage.getItem('googleApiKey') || '');
 
@@ -3620,6 +3622,7 @@ function App() {
         onThemeChange={setTheme}
         hasApiKey={!!(kieApiKey || googleApiKey)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenHistory={() => setIsHistoryOpen(true)}
         isAuthReady={isAuthReady}
         user={user}
         onLogin={handleLogin}
@@ -8210,6 +8213,12 @@ function App() {
           © 2026 Professional Photo Editor AI
         </div>
       </footer>
+      <HistoryModal
+        open={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        userId={user?.uid || null}
+        onZoom={(url) => setZoomImage(url)}
+      />
       <AnimatePresence>
         {isSettingsOpen && (
           <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4">
