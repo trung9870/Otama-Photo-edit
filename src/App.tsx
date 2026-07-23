@@ -575,10 +575,12 @@ function App() {
   // THAY State
   const [ecomThayModelImage, setEcomThayModelImage] = useState<string | null>(null);
   const [ecomThayProductImage, setEcomThayProductImage] = useState<string | null>(null);
-  const [ecomThayResult, setEcomThayResult] = useState<string | null>(null);
+  const [ecomThayResults, setEcomThayResults] = useState<string[]>([]);
   const [isEcomThayGenerating, setIsEcomThayGenerating] = useState(false);
   const [ecomThayModel, setEcomThayModel] = useState<ModelType>('banana-pro');
   const [ecomThayAspectRatio, setEcomThayAspectRatio] = useState<string>('3:4');
+  const [ecomThayQuality, setEcomThayQuality] = useState<'1k' | '2k' | '4k'>('1k');
+  const [ecomThayCount, setEcomThayCount] = useState<number>(1);
   const [ecomThayPrompt, setEcomThayPrompt] = useState<string>("Thay thế toàn bộ chăn ga gối trên giường bằng họa tiết và chất liệu từ ảnh sản phẩm. Giữ nguyên ánh sáng, nếp gấp và góc nhìn của giường. Output ONLY the resulting image.");
   const ecomThayModelInputRef = useRef<HTMLInputElement>(null);
   const ecomThayProductInputRef = useRef<HTMLInputElement>(null);
@@ -3156,7 +3158,7 @@ function App() {
 
     setIsEcomThayGenerating(true);
     setGlobalError(null);
-    setEcomThayResult(null);
+    setEcomThayResults([]);
 
     try {
       // Compress both images before sending — Vercel's request body limit is 4.5 MB.
@@ -3165,6 +3167,7 @@ function App() {
       const modelB64 = compressedModel.split(',')[1];
       const productB64 = compressedProduct.split(',')[1];
       const actualModelId = MODEL_CONFIG[ecomThayModel]?.id || 'nano-banana-pro';
+      const count = Math.max(1, Math.min(3, ecomThayCount));
 
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -3175,8 +3178,8 @@ function App() {
           imageBase64: productB64,
           templateBase64: modelB64,
           aspectRatio: ecomThayAspectRatio,
-          imageSize: "1K",
-          numberOfImages: 1,
+          imageSize: ecomThayQuality.toUpperCase(),
+          numberOfImages: count,
           clientKieApiKey: kieApiKey,
           clientGoogleApiKey: googleApiKey
         })
@@ -3189,21 +3192,23 @@ function App() {
 
       const data = await response.json();
       // GPT2 (Kie.ai) trả về async — cần poll; Gemini trả về base64 ngay
-      let thayResultUrl = '';
+      let thayResultUrls: string[] = [];
       if (data.isAsync && Array.isArray(data.taskIds)) {
         const urls = await pollKieTasks(data.taskIds, kieApiKey);
-        if (!urls[0]) throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
-        thayResultUrl = urls[0];
-      } else {
-        const b64 = data.imagesBase64?.[0] || data.imageBase64;
-        if (!b64) {
-          throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
-        }
-        thayResultUrl = `data:image/png;base64,${b64}`;
+        thayResultUrls = urls.filter((u) => !!u);
+      } else if (Array.isArray(data.imagesBase64) && data.imagesBase64.length > 0) {
+        thayResultUrls = data.imagesBase64.map((b: string) => `data:image/png;base64,${b}`);
+      } else if (data.imageBase64) {
+        thayResultUrls = [`data:image/png;base64,${data.imageBase64}`];
       }
-      setEcomThayResult(thayResultUrl);
-      logUsage('ecom-thay', actualModelId, 1, '1k');
-      pushHistory(thayResultUrl, { feature: 'ecom-thay', model: actualModelId, size: '1k' });
+      if (thayResultUrls.length === 0) {
+        throw new Error("AI không trả về ảnh. Vui lòng thử lại với prompt khác.");
+      }
+      setEcomThayResults(thayResultUrls);
+      logUsage('ecom-thay', actualModelId, thayResultUrls.length, ecomThayQuality);
+      thayResultUrls.forEach((u) =>
+        pushHistory(u, { feature: 'ecom-thay', model: actualModelId, size: ecomThayQuality })
+      );
     } catch (err: any) {
       console.error(err);
       setGlobalError(err.message || "Có lỗi xảy ra khi thực hiện THAY.");
@@ -4214,14 +4219,23 @@ function App() {
                     />
                   </div>
 
-                  {/* Aspect Ratio */}
-                  <div>
-                    <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Tỉ lệ ảnh</p>
+                  {/* Aspect ratio + Quality + Count — compact one-row dropdowns */}
+                  <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     <SettingsDropdown<string>
                       value={ecomThayAspectRatio}
                       onChange={(v) => setEcomThayAspectRatio(v)}
                       options={['1:1', '3:4', '4:3', '9:16', '16:9', '4:5'].map((a) => ({ value: a, label: a }))}
                       width="fill"
+                    />
+                    <SettingsDropdown<'1k' | '2k' | '4k'>
+                      value={ecomThayQuality}
+                      onChange={(v) => setEcomThayQuality(v)}
+                      options={(['1k', '2k', '4k'] as const).map((s) => ({ value: s, label: s.toUpperCase() }))}
+                    />
+                    <SettingsDropdown<number>
+                      value={ecomThayCount}
+                      onChange={(v) => setEcomThayCount(v)}
+                      options={[1, 2, 3].map((c) => ({ value: c, label: `${c} ảnh` }))}
                     />
                   </div>
 
@@ -5257,29 +5271,33 @@ function App() {
                               <p className="text-gray-400 text-[10px] max-w-[180px] text-center">AI đang xử lý, 30s — 2 phút.</p>
                             </div>
                           </>
-                        ) : ecomThayResult ? (
-                          <>
-                            <img src={ecomThayResult} alt="Thay Result" className="w-full h-full object-contain" />
-                            <button
-                              onClick={() => setZoomImage(ecomThayResult)}
-                              className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10"
-                              title="Phóng to"
-                            >
-                              <ZoomIn size={14} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                const link = document.createElement('a');
-                                link.href = ecomThayResult;
-                                link.download = `thay-result-${Date.now()}.png`;
-                                link.click();
-                              }}
-                              className="absolute bottom-3 right-3 p-3 bg-editor-accent text-white rounded-full shadow-lg hover:scale-110 transition-transform"
-                              title="Tải ảnh về"
-                            >
-                              <Download size={18} />
-                            </button>
-                          </>
+                        ) : ecomThayResults.length > 0 ? (
+                          <div className={`w-full h-full grid gap-1 ${ecomThayResults.length === 1 ? 'grid-cols-1' : ecomThayResults.length === 2 ? 'grid-rows-2' : 'grid-rows-3'}`}>
+                            {ecomThayResults.map((url, idx) => (
+                              <div key={idx} className="relative w-full h-full overflow-hidden group/thay">
+                                <img src={url} alt={`Thay Result ${idx + 1}`} className="w-full h-full object-contain" />
+                                <button
+                                  onClick={() => setZoomImage(url)}
+                                  className="absolute top-1.5 right-1.5 p-1 bg-black/70 hover:bg-black text-white rounded-md backdrop-blur-sm border border-white/20 transition-colors z-10 opacity-0 group-hover/thay:opacity-100"
+                                  title="Phóng to"
+                                >
+                                  <ZoomIn size={12} />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const link = document.createElement('a');
+                                    link.href = url;
+                                    link.download = `thay-result-${Date.now()}-${idx + 1}.png`;
+                                    link.click();
+                                  }}
+                                  className="absolute bottom-2 right-2 p-2 bg-editor-accent text-white rounded-full shadow-lg hover:scale-110 transition-transform opacity-0 group-hover/thay:opacity-100"
+                                  title="Tải ảnh về"
+                                >
+                                  <Download size={14} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         ) : (
                           <div className="flex flex-col items-center gap-3 text-gray-500 px-4 text-center">
                             <ImageIcon size={40} className="opacity-50" />
