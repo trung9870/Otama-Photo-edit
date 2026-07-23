@@ -11,7 +11,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Clock, Download, Trash2, X, Filter, ZoomIn, Loader2 } from 'lucide-react';
 import {
   db, storage,
-  collection, query, where, orderBy, limit, getDocs, doc, deleteDoc, Timestamp,
+  collection, query, where, getDocs, doc, deleteDoc,
   storageRef, deleteObject,
 } from '../firebase';
 
@@ -97,45 +97,36 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
       setError(null);
       try {
         const cutoffMs = Date.now() - RETENTION_DAYS * 24 * 3600 * 1000;
-        const cutoffTs = Timestamp.fromMillis(cutoffMs);
 
-        // Fresh window — what the user actually sees.
-        const freshQ = query(
-          collection(db, 'history'),
-          where('uid', '==', userId),
-          where('ts', '>=', cutoffTs),
-          orderBy('ts', 'desc'),
-          limit(PAGE_LIMIT),
-        );
-        const freshSnap = await getDocs(freshQ);
+        // Only use where('uid') — Firestore's auto single-field index covers it.
+        // Combining where(uid) + orderBy(ts) or where(ts) would need a composite
+        // index that has to be created manually in the Firebase console. Since
+        // the per-user sweep keeps this collection small, sorting + filtering
+        // client-side is cheap and skips that setup entirely.
+        const q = query(collection(db, 'history'), where('uid', '==', userId));
+        const snap = await getDocs(q);
         if (cancelled) return;
-        const list: HistoryDoc[] = freshSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-        setItems(list);
+        const all: HistoryDoc[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 
-        // Sweep expired entries for this user in the background — no await,
-        // no blocking. Firestore rules limit deletes to the user's own docs.
+        const fresh = all
+          .filter((it) => tsMillis(it.ts) >= cutoffMs)
+          .sort((a, b) => tsMillis(b.ts) - tsMillis(a.ts))
+          .slice(0, PAGE_LIMIT);
+        setItems(fresh);
+
+        // Background sweep — delete this user's docs older than 15 days.
+        // No await, no blocking. Firestore rules keep it scoped to the caller.
         (async () => {
-          try {
-            const staleQ = query(
-              collection(db, 'history'),
-              where('uid', '==', userId),
-              where('ts', '<', cutoffTs),
-              limit(50), // small batch — repeat next open if there's more
-            );
-            const staleSnap = await getDocs(staleQ);
-            for (const d of staleSnap.docs) {
-              const data = d.data() as any;
-              try {
-                if (data.path) {
-                  await deleteObject(storageRef(storage, data.path)).catch(() => {});
-                }
-                await deleteDoc(doc(db, 'history', d.id));
-              } catch {
-                // Swallow — retry on next open.
+          const stale = all.filter((it) => tsMillis(it.ts) < cutoffMs).slice(0, 50);
+          for (const it of stale) {
+            try {
+              if (it.path) {
+                await deleteObject(storageRef(storage, it.path)).catch(() => {});
               }
+              await deleteDoc(doc(db, 'history', it.id));
+            } catch {
+              // Swallow — retry on next open.
             }
-          } catch {
-            // Non-fatal: sweep is best-effort.
           }
         })();
       } catch (e: any) {
