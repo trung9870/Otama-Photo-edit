@@ -102,6 +102,20 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Lịch sử ảnh gen của từng user (giữ 15 ngày, sweep phía client).
+    // - Ghi: chỉ ghi doc có uid == auth.uid (không giả mạo owner).
+    // - Đọc: chủ doc hoặc admin. Query `where uid == auth.uid` sẽ pass vì mỗi doc trả về đều thoả điều kiện.
+    // - Xoá: chủ doc hoặc admin (dùng cho sweep 15 ngày + nút xoá thủ công).
+    // - Update: chặn hoàn toàn để giữ nguyên trạng.
+    match /history/{historyId} {
+      allow read: if isAuthenticated() && (isDocOwner() || isAdmin());
+      allow create: if isAuthenticated()
+                     && request.resource.data.uid == request.auth.uid
+                     && request.resource.data.keys().hasAll(['uid', 'url', 'ts', 'feature']);
+      allow delete: if isAuthenticated() && (isDocOwner() || isAdmin());
+      allow update: if false;
+    }
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isAuthenticated() && (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
