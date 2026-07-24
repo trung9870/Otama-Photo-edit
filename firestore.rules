@@ -81,14 +81,28 @@ service cloud.firestore {
     }
 
     match /models/{modelId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid || isAdmin());
+      // Read: owner, admin, hoặc bất kỳ user đăng nhập nếu doc được đánh dấu isShared.
+      // Doc shared = "Mẫu chung Otama" — tất cả nick trong shop dùng chung.
+      allow read: if isAuthenticated() && (
+        resource == null ||
+        resource.data.uid == request.auth.uid ||
+        isAdmin() ||
+        ('isShared' in resource.data && resource.data.isShared == true)
+      );
       allow create: if isAuthenticated() && hasRequiredFields(['id', 'imageUrl', 'uid', 'createdAt']) && isValidModel(request.resource.data);
       allow update: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin()) && isValidModel(request.resource.data) && request.resource.data.uid == resource.data.uid;
       allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
     }
 
     match /rooms/{roomId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid || isAdmin());
+      // Read: owner, admin, hoặc bất kỳ user đăng nhập nếu doc được đánh dấu isShared.
+      // Doc shared = "Giường chung Otama" — tất cả nick trong shop dùng chung.
+      allow read: if isAuthenticated() && (
+        resource == null ||
+        resource.data.uid == request.auth.uid ||
+        isAdmin() ||
+        ('isShared' in resource.data && resource.data.isShared == true)
+      );
       allow create: if isAuthenticated() && hasRequiredFields(['id', 'imageUrl', 'uid', 'createdAt']) && isValidModel(request.resource.data);
       allow update: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin()) && isValidModel(request.resource.data) && request.resource.data.uid == resource.data.uid;
       allow delete: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
