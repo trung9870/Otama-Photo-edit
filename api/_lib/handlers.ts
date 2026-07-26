@@ -1,5 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
-
 // Generic Request/Response interface compatible with both Express and Vercel
 type Req = {
   body: any;
@@ -186,13 +184,63 @@ async function pollKieTaskOnce(taskId: string, apiKey: string): Promise<{ status
   return { status: 'pending' };
 }
 
-export async function uploadBase64WithFallback(b64: string, apiKey: string): Promise<string> {
-  const buffer = Buffer.from(b64, 'base64');
+type ParsedImagePayload = {
+  buffer: Buffer;
+  dataUrl: string;
+  mimeType: string;
+  extension: string;
+};
+
+function parseImagePayload(payload: string): ParsedImagePayload {
+  const dataUrlMatch = payload.match(/^data:([^;,]+);base64,(.+)$/s);
+  const rawBase64 = dataUrlMatch ? dataUrlMatch[2] : payload;
+  const buffer = Buffer.from(rawBase64, 'base64');
+  let mimeType = dataUrlMatch?.[1]?.toLowerCase() || '';
+
+  // Legacy callers sent raw base64 and the old code mislabeled every file as
+  // JPEG. Detect the true format so Kie receives the original bytes and MIME.
+  if (!mimeType) {
+    if (buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+      mimeType = 'image/png';
+    } else if (buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) {
+      mimeType = 'image/jpeg';
+    } else if (buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') {
+      mimeType = 'image/webp';
+    } else {
+      mimeType = 'application/octet-stream';
+    }
+  }
+
+  const extension = mimeType === 'image/png'
+    ? 'png'
+    : mimeType === 'image/webp'
+      ? 'webp'
+      : mimeType === 'image/jpeg'
+        ? 'jpg'
+        : 'bin';
+
+  return {
+    buffer,
+    dataUrl: `data:${mimeType};base64,${rawBase64}`,
+    mimeType,
+    extension,
+  };
+}
+
+function isRemoteImageUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+export async function uploadBase64WithFallback(payload: string, apiKey: string): Promise<string> {
+  if (isRemoteImageUrl(payload)) return payload;
+
+  const { buffer, dataUrl, mimeType, extension } = parseImagePayload(payload);
+  const uniqueName = `image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
   const uploadToKieAi = async () => {
     const res = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ base64Data: `data:image/jpeg;base64,${b64}`, uploadPath: 'images/base64', fileName: `image-${Date.now()}.jpg` })
+      body: JSON.stringify({ base64Data: dataUrl, uploadPath: 'images/base64', fileName: uniqueName })
     });
     const data: any = await res.json();
     const url = data?.data?.downloadUrl;
@@ -202,7 +250,7 @@ export async function uploadBase64WithFallback(b64: string, apiKey: string): Pro
   const uploadToCatbox = async () => {
     const formData = new FormData();
     formData.append('reqtype', 'fileupload');
-    formData.append('fileToUpload', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
+    formData.append('fileToUpload', new Blob([buffer], { type: mimeType }), uniqueName);
     const res = await fetch('https://catbox.moe/user/api.php', { method: 'POST', body: formData });
     const text = (await res.text()).trim();
     if (!res.ok || !text.startsWith('https://')) throw new Error(`${res.status} ${text.slice(0, 100)}`);
@@ -210,7 +258,7 @@ export async function uploadBase64WithFallback(b64: string, apiKey: string): Pro
   };
   const uploadToTmpFiles = async () => {
     const formData = new FormData();
-    formData.append('file', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
+    formData.append('file', new Blob([buffer], { type: mimeType }), uniqueName);
     const res = await fetch('https://tmpfiles.org/api/v1/upload', { method: 'POST', body: formData });
     const data: any = await res.json();
     const pageUrl = data?.data?.url;
@@ -219,7 +267,7 @@ export async function uploadBase64WithFallback(b64: string, apiKey: string): Pro
   };
   const uploadTo0x0 = async () => {
     const formData = new FormData();
-    formData.append('file', new Blob([buffer], { type: 'image/jpeg' }), 'image.jpg');
+    formData.append('file', new Blob([buffer], { type: mimeType }), uniqueName);
     const res = await fetch('https://0x0.st', { method: 'POST', body: formData });
     const text = (await res.text()).trim();
     if (!res.ok || !text.startsWith('https://')) throw new Error(`${res.status} ${text.slice(0, 100)}`);
@@ -249,7 +297,10 @@ export async function uploadBase64WithFallback(b64: string, apiKey: string): Pro
 // ============== /api/generate ==============
 export async function handleGenerate(req: Req, res: Res) {
   try {
-    const { modelId, prompt, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, t2iMode, clientKieApiKey, clientGoogleApiKey } = req.body;
+    const { modelId, prompt, referenceMode, referenceImages, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, t2iMode, clientKieApiKey } = req.body;
+    const explicitReferences: string[] = Array.isArray(referenceImages)
+      ? referenceImages.filter((value: any) => typeof value === 'string' && value.length > 0)
+      : [];
     const composeList: string[] = Array.isArray(composeImages) ? composeImages.filter((b: any) => typeof b === 'string' && b.length > 0) : [];
     // T2I = client explicitly opted in via flag. Don't fall back when imageBase64 happens to be missing —
     // that masks real upload failures behind a silently-T2I path. Old clients without the flag stay i2i.
@@ -259,12 +310,15 @@ export async function handleGenerate(req: Req, res: Res) {
     if (isT2I && (!prompt || !String(prompt).trim())) {
       return res.status(400).json({ error: "Chế độ Text-to-Image cần prompt mô tả ảnh muốn tạo." });
     }
-    if (!isT2I && !imageBase64 && composeList.length === 0 && !templateBase64) {
+    if (!isT2I && explicitReferences.length === 0 && !imageBase64 && composeList.length === 0 && !templateBase64) {
       return res.status(400).json({ error: "Thiếu ảnh sản phẩm. Bật chế độ Text-to-Image nếu muốn gen từ prompt thuần." });
     }
 
-    const defaultGoogleKey = process.env.GEMINI_API_KEY;
     const defaultKieKey = process.env.KIE_API_KEY;
+
+    if (!KIE_MODELS.includes(modelId)) {
+      return res.status(400).json({ error: `Model "${modelId}" không được hỗ trợ. Ứng dụng này chỉ gọi model qua Kie.ai.` });
+    }
 
     if (KIE_MODELS.includes(modelId)) {
       const apiKey = clientKieApiKey || defaultKieKey;
@@ -275,13 +329,16 @@ export async function handleGenerate(req: Req, res: Res) {
         if (isT2I) {
           // Text-to-image: no images uploaded; createKieImageTask will branch on empty inputUrls
           inputUrls = [];
+        } else if (explicitReferences.length > 0) {
+          // Canonical order: Product Reference first, Composition Reference second.
+          inputUrls = await Promise.all(explicitReferences.map((source) => uploadBase64WithFallback(source, apiKey)));
         } else if (composeList.length > 0) {
-          // Composition mode: upload all N images as input
-          inputUrls = await Promise.all(composeList.map((b64) => uploadBase64WithFallback(b64, apiKey)));
+          inputUrls = await Promise.all(composeList.map((source) => uploadBase64WithFallback(source, apiKey)));
         } else if (templateBase64) {
+          // Preserve the new canonical order for legacy two-image clients too.
           inputUrls = await Promise.all([
-            uploadBase64WithFallback(templateBase64, apiKey),
-            uploadBase64WithFallback(imageBase64, apiKey)
+            uploadBase64WithFallback(imageBase64, apiKey),
+            uploadBase64WithFallback(templateBase64, apiKey)
           ]);
         } else {
           inputUrls = [await uploadBase64WithFallback(imageBase64, apiKey)];
@@ -291,14 +348,16 @@ export async function handleGenerate(req: Req, res: Res) {
       }
 
       const count = numberOfImages && typeof numberOfImages === 'number' && numberOfImages > 0 ? numberOfImages : 1;
+      const finalPrompt = referenceMode === 'product-composition' && inputUrls.length >= 2
+        ? `Reference Image 1 = Product Reference. Preserve its identity, material, colors, texture, logos, and fine details.\nReference Image 2 = Composition Reference. Use it only for layout, pose, camera, lighting, and scene structure.\n\n${prompt}`
+        : prompt;
       try {
         // Create N tasks in parallel, return taskIds immediately.
         // Client will poll /api/generate-check to track each task's completion.
         const taskIds = await Promise.all(
-          Array.from({ length: count }).map((_, i) => {
-            const variedPrompt = prompt + ' '.repeat(i);
-            return createKieImageTask(modelId, inputUrls, variedPrompt, apiKey, aspectRatio, imageSize);
-          })
+          Array.from({ length: count }).map(() =>
+            createKieImageTask(modelId, inputUrls, finalPrompt, apiKey, aspectRatio, imageSize)
+          )
         );
         console.log("[api] Created Kie taskIds:", taskIds);
         return res.json({ taskIds, isAsync: true });
@@ -308,65 +367,6 @@ export async function handleGenerate(req: Req, res: Res) {
       }
     }
 
-    // Default Gemini processing
-    let activeApiKey = defaultGoogleKey;
-    let aiOptions: any = {};
-    if (modelId === 'gemini-3-pro-image-preview' || modelId === 'gemini-3.1-flash-image-preview') {
-      activeApiKey = clientGoogleApiKey || defaultGoogleKey;
-      aiOptions = { apiKey: activeApiKey || '' };
-    } else {
-      aiOptions = { apiKey: defaultGoogleKey || '' };
-    }
-    if (!activeApiKey) return res.status(500).json({ error: "Chưa cấu hình API key Google. Vui lòng liên hệ Admin." });
-
-    const ai = new GoogleGenAI(aiOptions);
-    const count = numberOfImages && typeof numberOfImages === 'number' && numberOfImages > 0 ? numberOfImages : 1;
-
-    const callGeminiOnce = async (variantIdx: number): Promise<string[]> => {
-      const variedPrompt = prompt + ' '.repeat(variantIdx);
-      const parts: any[] = [];
-      if (composeList.length > 0) {
-        // Composition mode: send all N images as input parts
-        for (const b64 of composeList) {
-          parts.push({ inlineData: { data: b64, mimeType: "image/jpeg" } });
-        }
-      } else if (!isT2I) {
-        if (templateBase64) {
-          parts.push({ inlineData: { data: templateBase64, mimeType: "image/jpeg" } });
-        }
-        if (imageBase64) {
-          parts.push({ inlineData: { data: imageBase64, mimeType: "image/jpeg" } });
-        }
-      }
-      parts.push({ text: variedPrompt });
-      const response = await ai.models.generateContent({
-        model: modelId,
-        contents: { parts },
-        config: {
-          imageConfig: {
-            aspectRatio: aspectRatio || "1:1",
-            imageSize: imageSize || "1K",
-            numberOfImages: 1
-          } as any
-        }
-      });
-      const out: string[] = [];
-      for (const cand of response.candidates || []) {
-        for (const part of cand.content?.parts || []) {
-          if (part.inlineData) out.push(part.inlineData.data);
-        }
-      }
-      return out;
-    };
-
-    const results = await Promise.all(Array.from({ length: count }).map((_, i) => callGeminiOnce(i)));
-    const imagesBase64: string[] = results.flat();
-    console.log(`[api] Gemini returned ${imagesBase64.length} image(s) for ${count} requested`);
-
-    if (imagesBase64.length > 0) {
-      return res.json({ imageBase64: imagesBase64[0], imagesBase64 });
-    }
-    return res.status(500).json({ error: "No image generated in response." });
   } catch (error: any) {
     console.error("[api] AI Error:", error);
     return res.status(500).json({ error: formatGeminiError(error.message || "Internal Server Error") });

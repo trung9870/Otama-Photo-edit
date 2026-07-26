@@ -1,24 +1,28 @@
-import { GoogleGenAI } from "@google/genai";
-
 async function test() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.KIE_API_KEY;
   if (!apiKey) {
-    console.error("No API KEY");
+    console.error("No KIE_API_KEY");
     return;
   }
-  const ai = new GoogleGenAI({ apiKey });
+
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3.1-pro-preview",
-      contents: {
-        parts: [
-          { text: "Hello" }
-        ],
-      }
+    const response = await fetch('https://api.kie.ai/gemini-3-5-flash-openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gemini-3.5-flash',
+        messages: [{ role: 'user', content: 'Hello' }],
+      }),
     });
-    console.log("Success:", response.text);
-  } catch (e) {
-    console.error("Test failed:", e);
+    const data = await response.json();
+    if (!response.ok) throw new Error(JSON.stringify(data));
+    console.log("Success:", data?.choices?.[0]?.message?.content);
+  } catch (error) {
+    console.error("Test failed:", error);
   }
 }
+
 test();

@@ -6,10 +6,17 @@
 import React, { useState, useRef, useEffect, useCallback, Component } from 'react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { GoogleGenAI } from "@google/genai";
 import Cropper from 'react-easy-crop';
 import { getCroppedImg } from './utils/cropImage';
 import { stitchImages } from './utils/imageStitcher';
+
+// Guard old unreachable fallback branches against accidental Google-direct use.
+class KieOnlyGuard {
+  models: any;
+  constructor(_options?: unknown) {
+    throw new Error('Direct Google calls are disabled. Use Kie.ai.');
+  }
+}
 import { 
   Upload,
   Palette,
@@ -317,6 +324,82 @@ async function compressImageDataUrl(dataUrl: string, maxDim = 1600, quality = 0.
     img.onerror = () => reject(new Error('Image load error'));
     img.src = dataUrl;
   });
+}
+
+// Upload reference files straight from the browser to Kie's temporary storage.
+// This bypasses Vercel's 4.5 MB request-body limit while preserving the original
+// PNG/JPEG/WebP bytes, dimensions, MIME type, EXIF, and color profile.
+async function uploadOriginalReferenceToKie(source: string, apiKey: string, index: number): Promise<string> {
+  if (/^https?:\/\//i.test(source)) return source;
+  if (!source.startsWith('data:')) throw new Error('Ảnh tham chiếu không có định dạng hợp lệ.');
+
+  const mimeType = source.match(/^data:([^;,]+)/)?.[1] || 'application/octet-stream';
+  const extension = mimeType === 'image/png'
+    ? 'png'
+    : mimeType === 'image/webp'
+      ? 'webp'
+      : mimeType === 'image/jpeg'
+        ? 'jpg'
+        : 'bin';
+  const blob = await (await fetch(source)).blob();
+  const formData = new FormData();
+  formData.append('file', blob, `reference-${Date.now()}-${index + 1}.${extension}`);
+  formData.append('uploadPath', 'images/otama-references');
+  formData.append('fileName', `reference-${Date.now()}-${index + 1}.${extension}`);
+
+  const response = await fetch('https://kieai.redpandaai.co/api/file-stream-upload', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: formData,
+  });
+  const data = await response.json().catch(() => ({}));
+  const downloadUrl = data?.data?.downloadUrl;
+  if (!response.ok || !downloadUrl) {
+    throw new Error(data?.msg || `Kie upload lỗi ${response.status}`);
+  }
+  return downloadUrl;
+}
+
+async function prepareKieReferences(sources: string[], apiKey: string): Promise<string[]> {
+  const validSources = sources.filter((source) => typeof source === 'string' && source.length > 0);
+  if (validSources.length === 0) return [];
+
+  // A personal Kie key allows lossless direct upload. The key already lives in
+  // this browser's local storage and is sent to /api/generate in the current app.
+  if (apiKey) {
+    try {
+      return await Promise.all(validSources.map((source, index) =>
+        uploadOriginalReferenceToKie(source, apiKey, index)
+      ));
+    } catch (error) {
+      console.warn('Direct Kie reference upload failed; using adaptive request fallback.', error);
+    }
+  }
+
+  // Server-key fallback: keep originals when they fit. Only if Vercel's hard
+  // body limit would be exceeded do we adaptively reduce them, at a much higher
+  // ceiling/quality than the previous fixed 1600px JPEG 0.85 conversion.
+  const TARGET_JSON_CHARS = 3_300_000;
+  if (validSources.reduce((sum, source) => sum + source.length, 0) <= TARGET_JSON_CHARS) {
+    return validSources;
+  }
+
+  const profiles = [
+    { maxDim: 3072, quality: 0.96 },
+    { maxDim: 2560, quality: 0.95 },
+    { maxDim: 2048, quality: 0.93 },
+    { maxDim: 1600, quality: 0.90 },
+    { maxDim: 1280, quality: 0.88 },
+    { maxDim: 1024, quality: 0.85 },
+  ];
+  let prepared = validSources;
+  for (const profile of profiles) {
+    prepared = await Promise.all(validSources.map((source) =>
+      /^https?:\/\//i.test(source) ? source : compressImageDataUrl(source, profile.maxDim, profile.quality)
+    ));
+    if (prepared.reduce((sum, source) => sum + source.length, 0) <= TARGET_JSON_CHARS) break;
+  }
+  return prepared;
 }
 
 // Poll an array of Kie.ai task IDs until each completes (or fails / times out).
@@ -1899,14 +1982,10 @@ function App() {
 
       const executeEdit = async (): Promise<void> => {
         try {
-          // 1. Apply simulated traditional edits - ALWAYS start from source image
-          let currentImageData = img.source;
-          // Apply fixed 20% brightness as per original requirement
-          currentImageData = await applyBrightness(currentImageData, 20);
-          currentImageData = await applyCentralCrop(currentImageData, img.aspectRatio);
-
-          // 2. Call AI
-          const mainBase64 = currentImageData.split(',')[1];
+          // Send the untouched source. Brightness, crop, resizing, and JPEG
+          // re-encoding before AI materially reduce reference fidelity.
+          const referenceImages = await prepareKieReferences([img.source], kieApiKey);
+          const mainBase64 = img.source.includes(',') ? img.source.split(',')[1] : img.source;
           const promptText = aiPrompt;
           
           let resultUrl = '';
@@ -1919,7 +1998,7 @@ function App() {
               body: JSON.stringify({
                 modelId,
                 prompt: promptText,
-                imageBase64: mainBase64,
+                referenceImages,
                 aspectRatio: img.aspectRatio,
                 clientKieApiKey: kieApiKey,
                 clientGoogleApiKey: googleApiKey
@@ -1948,60 +2027,7 @@ function App() {
                 return await executeEdit();
               }
 
-              // If server fails with 400 (Invalid Key), 403 (Permission Denied) or it's a paid model, try client-side if key is available
-              if (config.requiredKey === 'kie') {
-                 throw new Error(errorData.error || "Lỗi từ máy chủ Kie.ai.");
-              }
-              if (response.status === 400 || response.status === 403 || config.requiredKey !== 'google') {
-                let apiKey = '';
-                if (config.requiredKey === 'google') {
-                  apiKey = googleApiKey;
-                  if (!apiKey && window.aistudio) {
-                    const hasKey = await window.aistudio.hasSelectedApiKey();
-                    if (!hasKey) {
-                      await window.aistudio.openSelectKey();
-                    }
-                  }
-                } else if (config.requiredKey === 'kie') {
-                  apiKey = kieApiKey;
-                }
-                
-                if (!apiKey && config.requiredKey === 'kie') {
-                   throw new Error("Vui lòng nhập API Key cho model này tại Mục Cài đặt.");
-                }
-
-                // If it is google and we have no key but aistudio is ready, we initialize without key
-                const ai = apiKey ? new GoogleGenAI({ apiKey }) : new GoogleGenAI({});
-                const aiResponse = await ai.models.generateContent({
-                  model: modelId,
-                  contents: {
-                    parts: [
-                      {
-                        inlineData: {
-                          data: mainBase64,
-                          mimeType: 'image/jpeg',
-                        },
-                      },
-                      { text: promptText }
-                    ]
-                  },
-                  config: {
-                    imageConfig: {
-                      aspectRatio: img.aspectRatio as any,
-                      imageSize: "1K"
-                    }
-                  }
-                });
-
-                for (const part of aiResponse.candidates?.[0]?.content?.parts || []) {
-                  if (part.inlineData) {
-                    resultUrl = `data:image/png;base64,${part.inlineData.data}`;
-                    break;
-                  }
-                }
-              } else {
-                throw new Error(errorData.error || "Lỗi từ máy chủ AI");
-              }
+              throw new Error(errorData.error || "Lỗi từ máy chủ Kie.ai.");
             }
           } catch (serverErr: any) {
             // Check for 503 in client-side call or network error
@@ -2076,54 +2102,6 @@ function App() {
         throw serverErr;
       }
 
-      // Fallback to client-side if server fails
-      let apiKey = process.env.API_KEY;
-      
-      if (!apiKey) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        if (!hasKey) {
-          await window.aistudio.openSelectKey();
-          const updatedHasKey = await window.aistudio.hasSelectedApiKey();
-          setHasPersonalKey(updatedHasKey);
-        }
-        apiKey = process.env.API_KEY;
-      }
-
-      if (!apiKey) {
-        throw new Error("Vui lòng chọn API Key cá nhân để thực hiện phân tích ảnh.");
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      let response;
-      try {
-        response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: {
-            parts: [
-              {
-                inlineData: {
-                  data: base64,
-                  mimeType: 'image/jpeg',
-                },
-              },
-              { 
-                text: "Analyze this image and generate a detailed prompt for recreating a similar product photo. Focus on: styling, angle, lighting, background, props, and technical details. IMPORTANT: Do not describe the specific product shown in the image (e.g., don't say 'denim shorts'). Instead, use a generic placeholder like 'the product' or 'main subject' so this prompt can be reused for any item. Output ONLY the JSON object." 
-              }
-            ]
-          },
-          config: {
-            responseMimeType: "application/json"
-          }
-        });
-      } catch (genAiErr: any) {
-        if (genAiErr.message?.includes("API key not valid") || genAiErr.message?.includes("400")) {
-          throw new Error("API Key cá nhân của bạn không hợp lệ hoặc đã hết hạn. Vui lòng nhấn nút 'Cài đặt API' để chọn Key mới.");
-        }
-        throw genAiErr;
-      }
-
-      const result = response.text;
-      setAnalyzedPrompt(result);
     } catch (err: any) {
       console.error("Analysis error:", err);
       setGlobalError(err.message || "Lỗi phân tích ảnh.");
@@ -2202,6 +2180,53 @@ function App() {
     setTryOnStep('preparing');
     setGlobalError(null);
 
+    // Kie-only try-on. Keep the original product untouched and send it first;
+    // the model photo is the composition reference in slot 2.
+    try {
+      const referenceImages = await prepareKieReferences(
+        [tryOnProductImage, tryOnModelImage],
+        kieApiKey
+      );
+      const categoryText = tryOnProductCategory === 'top' ? 'top/shirt/jacket'
+        : tryOnProductCategory === 'bottom' ? 'pants/skirt/bottom'
+          : tryOnProductCategory === 'shoes' ? 'shoes/footwear/accessories'
+            : 'clothing item(s)';
+      const prompt = `Virtual Try-On Task: Take ONLY the ${categoryText} from Product Reference Image 1 and place it onto the person in Composition Reference Image 2. CRITICAL: Do NOT include any human parts from the product image. ${tryOnPrompt ? `Additional instructions: ${tryOnPrompt}` : "Ensure the fit is natural and follows the person's pose."} Output ONLY the resulting image.`;
+      setTryOnStep('processing');
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelId: MODEL_CONFIG[selectedModel].id,
+          prompt,
+          referenceImages,
+          referenceMode: 'product-composition',
+          aspectRatio: '3:4',
+          imageSize: '1K',
+          numberOfImages: 1,
+          clientKieApiKey: kieApiKey,
+        }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Lỗi Kie.ai' }));
+        throw new Error(errorData.error || 'Lỗi Kie.ai');
+      }
+      const data = await response.json();
+      const resultUrls = data.isAsync && Array.isArray(data.taskIds)
+        ? await pollKieTasks(data.taskIds, kieApiKey)
+        : (data.imagesBase64 || []);
+      if (!resultUrls[0]) throw new Error('Kie.ai không trả về ảnh.');
+      setTryOnResult(resultUrls[0]);
+      onGenComplete('Quần áo: Thay đồ xong', 'Ảnh sẵn sàng');
+    } catch (error: any) {
+      setGlobalError(error.message || 'Lỗi xử lý thay đồ qua Kie.ai.');
+      onGenComplete('Quần áo: Thay đồ FAIL', error.message || 'Lỗi Kie.ai');
+    } finally {
+      setIsTryOnProcessing(false);
+      setTryOnStep('idle');
+    }
+    return;
+
     const maxRetries = 3;
     let retryCount = 0;
 
@@ -2232,7 +2257,7 @@ function App() {
            }
         }
 
-        const ai = apiKey ? new GoogleGenAI({ apiKey }) : new GoogleGenAI({});
+        const ai = apiKey ? new KieOnlyGuard({ apiKey }) : new KieOnlyGuard({});
 
         // Step 1: Generate White Background for Product (if not already done or just always for best results)
         // We do this to ensure the best try-on quality as requested by the user
@@ -2243,7 +2268,7 @@ function App() {
                                'full outfit (both top and bottom)';
           
           logGeminiCall('tryon-whitebg-auto', 'gemini-2.5-flash-image');
-          const whiteBgResponse = await ai.models.generateContent({
+          const whiteBgResponse = await ai.models.blockedDirectCall({
             model: 'gemini-2.5-flash-image',
             contents: {
               parts: [
@@ -2274,8 +2299,8 @@ function App() {
                                  'clothing item(s)';
                                  
         const callTryOn = async (currentApiKey: string) => {
-          const ai = new GoogleGenAI({ apiKey: currentApiKey });
-          return await ai.models.generateContent({
+          const ai = new KieOnlyGuard({ apiKey: currentApiKey });
+          return await ai.models.blockedDirectCall({
             model: modelId,
             contents: {
               parts: [
@@ -2384,43 +2409,36 @@ function App() {
     setGlobalError(null);
 
     try {
-      const productBase64 = tryOnProductImage.split(',')[1];
-      const mimeType = tryOnProductImage.split(';')[0].split(':')[1];
-      
-      const apiKey = (process.env as any).GEMINI_API_KEY || '';
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const categoryText = tryOnProductCategory === 'top' ? 'top/shirt/jacket' : 
-                           tryOnProductCategory === 'bottom' ? 'pants/skirt/bottom' : 
-                           tryOnProductCategory === 'shoes' ? 'shoes/footwear/accessories' :
-                           'full outfit (both top and bottom)';
-
-      logGeminiCall('tryon-whitebg-manual', 'gemini-2.5-flash-image');
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: {
-          parts: [
-            { inlineData: { data: productBase64, mimeType } },
-            { text: `Isolate ONLY the ${categoryText} from this image. CRITICAL: Remove ALL human parts (legs, feet, socks, hands, arms, etc.), mannequins, and background completely. Place ONLY the ${categoryText} on a clean, professional, solid white studio background (ghost mannequin or flat lay style). Ensure the product's texture and details are preserved perfectly. Output ONLY the resulting image.` }
-          ]
-        }
+      const referenceImages = await prepareKieReferences([tryOnProductImage], kieApiKey);
+      const categoryText = tryOnProductCategory === 'top' ? 'top/shirt/jacket'
+        : tryOnProductCategory === 'bottom' ? 'pants/skirt/bottom'
+          : tryOnProductCategory === 'shoes' ? 'shoes/footwear/accessories'
+            : 'full outfit (both top and bottom)';
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          modelId: 'nano-banana-pro',
+          prompt: `Isolate ONLY the ${categoryText} from this image. Remove all human parts, mannequins, and background. Place only the product on a clean solid white studio background. Preserve texture, color, logos, shape, and fine details exactly. Output ONLY the resulting image.`,
+          referenceImages,
+          aspectRatio: '1:1',
+          imageSize: '2K',
+          numberOfImages: 1,
+          clientKieApiKey: kieApiKey,
+        }),
       });
-
-      let foundImage = false;
-      for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-          setTryOnProductImage(`data:image/png;base64,${part.inlineData.data}`);
-          foundImage = true;
-          break;
-        }
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Lỗi Kie.ai' }));
+        throw new Error(errorData.error || 'Lỗi Kie.ai');
       }
-      
-      if (!foundImage) {
-        throw new Error("Không tìm thấy ảnh kết quả từ AI.");
-      }
+      const data = await response.json();
+      const resultUrls = data.isAsync && Array.isArray(data.taskIds)
+        ? await pollKieTasks(data.taskIds, kieApiKey)
+        : (data.imagesBase64 || []);
+      if (!resultUrls[0]) throw new Error('Kie.ai không trả về ảnh.');
+      setTryOnProductImage(resultUrls[0]);
     } catch (error: any) {
-      console.error("Error generating white background:", error);
-      setGlobalError("Không thể tạo nền trắng cho sản phẩm. Vui lòng thử lại.");
+      setGlobalError(error.message || 'Không thể tạo nền trắng qua Kie.ai.');
     } finally {
       setIsGeneratingWhiteBg(false);
     }
@@ -2617,7 +2635,6 @@ function App() {
 
     let currentPrompt = snapshot.promptText || "帮我给我们这件产品做一个详情页,高级感,像山下有松一样表达的售卖详情页。帮我生成电商详情页9:16详情图8张图一张图一页面一卖点";
     let config = MODEL_CONFIG[snapshot.model];
-    let templateB64: string | undefined = undefined;
     let templateSource: string | undefined = undefined;
 
     if (ecomSubTab === 'clone-template') {
@@ -2669,29 +2686,31 @@ function App() {
     }
 
     try {
-      // Compress images to stay under Vercel's 4.5 MB request body limit.
-      // T2I mode skips this — no product image to send.
-      const mainBase64: string | null = snapshot.productImage
-        ? (await compressImageDataUrl(snapshot.productImage, 1600, 0.85)).split(',')[1]
+      // Prefer original Kie URLs/bytes; only the server-key fallback adapts
+      // oversized payloads to Vercel's hard request limit.
+      const referenceImages = snapshot.t2iMode
+        ? []
+        : await prepareKieReferences([
+            ...(snapshot.productImage ? [snapshot.productImage] : []),
+            ...(templateSource ? [templateSource] : []),
+          ], kieApiKey);
+      const mainBase64 = referenceImages[0]?.startsWith('data:')
+        ? referenceImages[0].split(',')[1]
         : null;
-      if (templateSource) {
-        templateB64 = (await compressImageDataUrl(templateSource, 1600, 0.85)).split(',')[1];
-      }
 
       let generatedImages: string[] = [];
       let serverFailed = false;
 
       // Try server first
       try {
-        const fullEcomPrompt = `${currentPrompt} (Quality: ${snapshot.imageSize.toUpperCase()})`;
         const response = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             modelId: config.id,
-            prompt: fullEcomPrompt,
-            imageBase64: mainBase64,
-            templateBase64: templateB64,
+            prompt: currentPrompt,
+            referenceImages,
+            referenceMode: templateSource ? 'product-composition' : undefined,
             aspectRatio: snapshot.aspectRatio,
             imageSize: snapshot.imageSize,
             numberOfImages: snapshot.imageCount,
@@ -2725,6 +2744,7 @@ function App() {
       }
       
       if (serverFailed) {
+        throw new Error("Không thể tạo ảnh qua Kie.ai. Ứng dụng không fallback sang Google trực tiếp.");
         // Fallback to client-side
         let apiKey = '';
         if (config.requiredKey === 'google') {
@@ -2747,14 +2767,14 @@ function App() {
           throw new Error("Mô hình này không hỗ trợ gọi trực tiếp từ trình duyệt bằng API Key cá nhân.");
         }
 
-        const ai = apiKey ? new GoogleGenAI({ apiKey }) : new GoogleGenAI({});
+        const ai = apiKey ? new KieOnlyGuard({ apiKey }) : new KieOnlyGuard({});
             // Skip image inline data in T2I mode (mainBase64 is null)
             const aiParts: any[] = [];
             if (mainBase64) {
               aiParts.push({ inlineData: { data: mainBase64, mimeType: 'image/jpeg' } });
             }
             aiParts.push({ text: `${currentPrompt} (Quality: ${snapshot.imageSize.toUpperCase()})` });
-            const aiResponse = await ai.models.generateContent({
+            const aiResponse = await ai.models.blockedDirectCall({
               model: config.id,
               contents: { parts: aiParts },
               config: {
@@ -2820,16 +2840,15 @@ function App() {
     const config = MODEL_CONFIG[ecomModel];
 
     try {
-      const mainBase64 = (await compressImageDataUrl(patternSourceImage, 1600, 0.85)).split(',')[1];
-      const fullPrompt = `${currentPrompt} (Quality: 1K)`;
+      const referenceImages = await prepareKieReferences([patternSourceImage], kieApiKey);
 
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelId: config.id,
-          prompt: fullPrompt,
-          imageBase64: mainBase64,
+          prompt: currentPrompt,
+          referenceImages,
           aspectRatio: '1:1',
           imageSize: '1k',
           numberOfImages: 1,
@@ -2926,20 +2945,16 @@ function App() {
     setGlobalError(null);
     setComposeResults([]);
     try {
-      // Compress every input image to stay under Vercel's 4.5 MB body limit
-      const compressed = await Promise.all(imgs.map((u) => compressImageDataUrl(u, 1600, 0.85)));
-      const base64s = compressed.map((c) => c.split(',')[1]);
+      const referenceImages = await prepareKieReferences(imgs, kieApiKey);
       const config = MODEL_CONFIG[composeModel];
-      const fullPrompt = `${composePrompt} (Quality: ${composeQuality.toUpperCase()})`;
 
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelId: config.id,
-          prompt: fullPrompt,
-          composeImages: base64s,
-          imageBase64: base64s[0],
+          prompt: composePrompt,
+          referenceImages,
           aspectRatio: composeAspectRatio,
           imageSize: composeQuality,
           numberOfImages: composeCount,
@@ -3008,7 +3023,7 @@ function App() {
 
       for (const category of selected) {
         if (cancelRef.current) break;
-        const fullPrompt = `${buildOfaPrompt(category, batch.productName, batch.description)}\n\n(Quality: ${batch.quality.toUpperCase()})`;
+        const fullPrompt = buildOfaPrompt(category, batch.productName, batch.description);
         try {
           const response = await fetch('/api/generate', {
             method: 'POST',
@@ -3016,8 +3031,7 @@ function App() {
             body: JSON.stringify({
               modelId: config.id,
               prompt: fullPrompt,
-              composeImages: batch.imageBase64s,
-              imageBase64: batch.imageBase64s[0],
+              referenceImages: batch.imageBase64s,
               aspectRatio: batch.aspectRatio,
               imageSize: batch.quality,
               numberOfImages: 1,
@@ -3114,8 +3128,7 @@ function App() {
     }
     setGlobalError(null);
     try {
-      const compressed = await Promise.all(imgs.map((u) => compressImageDataUrl(u, 1600, 0.85)));
-      const base64s = compressed.map((c) => c.split(',')[1]);
+      const base64s = await prepareKieReferences(imgs, kieApiKey);
       const newBatch: OfaBatch = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         startedAt: Date.now(),
@@ -3165,11 +3178,12 @@ function App() {
     setEcomThayActiveIdx(0);
 
     try {
-      // Compress both images before sending — Vercel's request body limit is 4.5 MB.
-      const compressedModel = await compressImageDataUrl(ecomThayModelImage, 1600, 0.85);
-      const compressedProduct = await compressImageDataUrl(ecomThayProductImage, 1600, 0.85);
-      const modelB64 = compressedModel.split(',')[1];
-      const productB64 = compressedProduct.split(',')[1];
+      // Product first, model/composition second. Original files are uploaded
+      // directly to Kie when a client Kie key is available.
+      const referenceImages = await prepareKieReferences(
+        [ecomThayProductImage, ecomThayModelImage],
+        kieApiKey
+      );
       const actualModelId = MODEL_CONFIG[ecomThayModel]?.id || 'nano-banana-pro';
       const count = Math.max(1, Math.min(3, ecomThayCount));
 
@@ -3178,9 +3192,9 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelId: actualModelId,
-          prompt: `Virtual Try-On Task: ${ecomThayPrompt}`,
-          imageBase64: productB64,
-          templateBase64: modelB64,
+          prompt: ecomThayPrompt,
+          referenceImages,
+          referenceMode: 'product-composition',
           aspectRatio: ecomThayAspectRatio,
           imageSize: ecomThayQuality.toUpperCase(),
           numberOfImages: count,
@@ -3229,10 +3243,9 @@ function App() {
 
     const currentPrompt = "Replace the pattern on the main textile product visible in image with the pattern from image 1. Apply the new pattern as actual printed fabric, not as a flat overlay or sticker. Preserve all original fabric wrinkles, folds, creases, soft shadows, highlights, and natural depth of the PRODUCT. The pattern must follow the contours of the fabric — stretching at tension points, compressing at folds, darkening in shadowed areas, brightening where light hits. Keep the original lighting, scene, composition, pose, and all other elements unchanged. Photorealistic textile rendering.";
     const config = MODEL_CONFIG[ecomModel];
+    const patternPrompt = currentPrompt.replace('from image 1', 'from Reference Image 2');
 
     try {
-      const mainBase64 = (await compressImageDataUrl(patternMockupImage, 1600, 0.85)).split(',')[1];
-
       let finalTemplateBase64 = generatedPattern;
       if (generatedPattern.startsWith('http')) {
         const proxyUrl = generatedPattern.includes('tmpfiles.org') 
@@ -3248,17 +3261,19 @@ function App() {
         });
       }
       
-      const templateBase64 = (await compressImageDataUrl(finalTemplateBase64, 1600, 0.85)).split(',')[1];
-      const fullPrompt = `${currentPrompt} (Quality: ${ecomImageSize.toUpperCase()})`;
+      const referenceImages = await prepareKieReferences(
+        [patternMockupImage, finalTemplateBase64],
+        kieApiKey
+      );
 
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelId: config.id,
-          prompt: fullPrompt,
-          imageBase64: mainBase64,
-          templateBase64: templateBase64,
+          prompt: patternPrompt,
+          referenceImages,
+          referenceMode: 'product-composition',
           aspectRatio: ecomAspectRatio, // Use the selected aspect ratio
           imageSize: ecomImageSize,
           numberOfImages: ecomImageCount,
@@ -3457,14 +3472,14 @@ function App() {
         
         const promises = batch.map(async (box) => {
           try {
-             const base64Data = box.cropUrl.split(',')[1];
+             const referenceImages = await prepareKieReferences([box.cropUrl], kieApiKey);
              const res = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   modelId: enhanceModel === 'banana-pro' ? 'nano-banana-pro' : 'nano-banana-2',
                   prompt: 'High-resolution upscale of this product image. Preserve all details, colors, and the original composition. Enhance sharpness, clarity and remove any compression artifacts. Professional studio quality.',
-                  imageBase64: base64Data,
+                  referenceImages,
                   aspectRatio: enhanceAspectRatio,
                   imageSize: ecomImageSize.toUpperCase() || '1K',
                   numberOfImages: 1,
@@ -3533,14 +3548,14 @@ function App() {
           }
 
           try {
-             const base64Data = imgToTranslate.url.split(',')[1];
+             const referenceImages = await prepareKieReferences([imgToTranslate.url], kieApiKey);
              const res = await fetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   modelId: 'nano-banana-2', // Banana 2 qua Kie.ai (rẻ)
                   prompt: 'Translate all Chinese text in this image into Vietnamese. Keep the exact same layout, background, font style, formatting and colors. Only change the text to Vietnamese.',
-                  imageBase64: base64Data,
+                  referenceImages,
                   aspectRatio: enhanceAspectRatio,
                   imageSize: ecomImageSize.toUpperCase() || '1K',
                   numberOfImages: 1,
