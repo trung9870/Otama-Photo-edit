@@ -125,6 +125,10 @@ interface EcomBatch {
   promptText: string;              // full prompt used at submit time (incl. supplementary) — internal
   promptSource: 'manual' | 'saved';// 'saved' → hide promptText in UI (admin protection)
   promptLabel?: string;            // saved prompt name (only when source='saved')
+  promptId?: string;
+  basePromptText?: string;
+  supplementaryPrompt?: string;
+  inputImage?: string | null;
   imageCount: number;
   model: 'banana-pro' | 'banana-2' | 'gpt2';
   aspectRatio: string;
@@ -141,6 +145,16 @@ interface EcomHistoryItem {
   feature: string;
   model?: string;
   size?: string;
+  batchId?: string;
+  prompt?: string;
+  supplementaryPrompt?: string;
+  promptId?: string;
+  promptSource?: 'manual' | 'saved';
+  inputImage?: string;
+  modelKey?: ModelType;
+  aspectRatio?: string;
+  imageCount?: number;
+  t2iMode?: boolean;
   ts: any;
 }
 
@@ -2538,6 +2552,39 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const reuseEcomGeneration = (settings: {
+    prompt?: string;
+    supplementaryPrompt?: string;
+    promptId?: string;
+    promptSource?: 'manual' | 'saved';
+    inputImage?: string | null;
+    modelKey?: ModelType;
+    aspectRatio?: string;
+    imageSize?: string;
+    imageCount?: number;
+    t2iMode?: boolean;
+  }) => {
+    const savedPromptStillExists = !!settings.promptId
+      && ecomSavedPrompts.some((prompt) => prompt.id === settings.promptId);
+
+    setAppMode('ecom');
+    setEcomSubTab('gen-new');
+    setEcomT2IMode(!!settings.t2iMode);
+    setEcomProductImage(settings.t2iMode ? null : (settings.inputImage || null));
+    setEcomPromptText(settings.prompt || '');
+    setEcomSupplementaryPrompt(settings.supplementaryPrompt || '');
+    setSelectedEcomPromptId(savedPromptStillExists ? settings.promptId! : 'manual');
+    if (settings.modelKey && settings.modelKey in MODEL_CONFIG) setEcomModel(settings.modelKey);
+    if (settings.aspectRatio) setEcomAspectRatio(settings.aspectRatio);
+    if (settings.imageSize) setEcomImageSize(settings.imageSize);
+    if (typeof settings.imageCount === 'number') setEcomImageCount(settings.imageCount);
+    setGlobalError(settings.t2iMode || settings.inputImage
+      ? 'Đã nạp lại ảnh, prompt và cài đặt của lần gen trước. Bạn có thể chỉnh sửa rồi gen tiếp.'
+      : 'Đã nạp lại prompt và cài đặt. Ảnh đầu vào của lịch sử cũ không còn dữ liệu.');
+    setTimeout(() => setGlobalError(null), 4000);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   // ───────── Usage tracking (Admin analytics) ─────────
   // Số CREDIT Kie.ai tiêu thụ/ảnh (đúng bảng giá Kie — 1 credit = $0.005):
   //  - GPT2:        1K=6  / 2K=10 / 4K=16 credits
@@ -2599,7 +2646,21 @@ function App() {
   // Lưu lịch sử vào Firestore. Kết quả Kie đã là URL remote nên không cần
   // Firebase Storage (project Spark hiện không hỗ trợ tạo Storage bucket mới).
   // Với kết quả dạng data URL, nén đủ nhỏ để nằm dưới giới hạn 1 MiB/document.
-  const pushHistory = async (imageSrc: string, meta: { feature: string; model: string; size?: string }) => {
+  const pushHistory = async (imageSrc: string, meta: {
+    feature: string;
+    model: string;
+    size?: string;
+    batchId?: string;
+    prompt?: string;
+    supplementaryPrompt?: string;
+    promptId?: string;
+    promptSource?: 'manual' | 'saved';
+    inputImage?: string | null;
+    modelKey?: ModelType;
+    aspectRatio?: string;
+    imageCount?: number;
+    t2iMode?: boolean;
+  }) => {
     if (!user || !imageSrc) return;
     try {
       let historyUrl = imageSrc;
@@ -2613,8 +2674,19 @@ function App() {
         }
       }
 
+      let reusableInput = meta.inputImage || '';
+      if (reusableInput.startsWith('data:')) {
+        reusableInput = await compressImageDataUrl(reusableInput, 900, 0.62);
+        if (reusableInput.length > 600_000) {
+          reusableInput = await compressImageDataUrl(meta.inputImage!, 700, 0.55);
+        }
+      }
+      // Firestore documents are capped at 1 MiB. Prefer keeping the output;
+      // omit an oversized input snapshot rather than losing the whole history item.
+      if (historyUrl.length + reusableInput.length > 900_000) reusableInput = '';
+
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      await setDoc(doc(collection(db, 'history'), id), {
+      const historyData: Record<string, any> = {
         id,
         url: historyUrl,
         feature: meta.feature,
@@ -2623,7 +2695,18 @@ function App() {
         uid: user.uid,
         email: user.email,
         ts: Timestamp.now(),
-      });
+      };
+      if (meta.batchId) historyData.batchId = meta.batchId;
+      if (meta.prompt) historyData.prompt = meta.prompt;
+      if (meta.supplementaryPrompt) historyData.supplementaryPrompt = meta.supplementaryPrompt;
+      if (meta.promptId) historyData.promptId = meta.promptId;
+      if (meta.promptSource) historyData.promptSource = meta.promptSource;
+      if (reusableInput) historyData.inputImage = reusableInput;
+      if (meta.modelKey) historyData.modelKey = meta.modelKey;
+      if (meta.aspectRatio) historyData.aspectRatio = meta.aspectRatio;
+      if (typeof meta.imageCount === 'number') historyData.imageCount = meta.imageCount;
+      if (typeof meta.t2iMode === 'boolean') historyData.t2iMode = meta.t2iMode;
+      await setDoc(doc(collection(db, 'history'), id), historyData);
     } catch (e) {
       console.warn('pushHistory failed', e);
     }
@@ -2670,7 +2753,10 @@ function App() {
     // Gen-new uses concurrent batch mode (doesn't block UI); other sub-tabs use original single-batch flow.
     const isConcurrent = ecomSubTab === 'gen-new';
 
-    // Snapshot all inputs at submit time so async run uses values current when user clicked.
+    // Snapshot all inputs at submit time so async run and history reuse the
+    // exact values that were active when the user clicked.
+    const isPromptManualAtSubmit = selectedEcomPromptId === 'manual';
+    const selectedPromptAtSubmit = ecomSavedPrompts.find((prompt) => prompt.id === selectedEcomPromptId);
     const snapshot = {
       productImage: t2iActive ? null : ecomProductImage,
       t2iMode: t2iActive,
@@ -2683,6 +2769,9 @@ function App() {
       templateImage: ecomTemplateImage,
       cloneManualMode,
       clonePromptType,
+      promptId: isPromptManualAtSubmit ? undefined : selectedEcomPromptId,
+      promptSource: (isPromptManualAtSubmit ? 'manual' : 'saved') as 'manual' | 'saved',
+      promptLabel: isPromptManualAtSubmit ? undefined : selectedPromptAtSubmit?.name,
     };
 
     let currentPrompt = snapshot.promptText || "帮我给我们这件产品做一个详情页,高级感,像山下有松一样表达的售卖详情页。帮我生成电商详情页9:16详情图8张图一张图一页面一卖点";
@@ -2706,18 +2795,16 @@ function App() {
     let batchId: string | null = null;
     if (isConcurrent) {
       batchId = `ecom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      // Distinguish manual-typed prompt from admin's saved prompts
-      // → saved ones are hidden in UI to protect prompt IP
-      const isPromptManual = selectedEcomPromptId === 'manual';
-      const promptLabel = isPromptManual
-        ? undefined
-        : ecomSavedPrompts.find(p => p.id === selectedEcomPromptId)?.name;
       const newBatch: EcomBatch = {
         id: batchId,
         startedAt: Date.now(),
         promptText: currentPrompt,
-        promptSource: isPromptManual ? 'manual' : 'saved',
-        promptLabel,
+        promptSource: snapshot.promptSource,
+        promptLabel: snapshot.promptLabel,
+        promptId: snapshot.promptId,
+        basePromptText: snapshot.promptText,
+        supplementaryPrompt: snapshot.supplementaryPrompt,
+        inputImage: snapshot.productImage,
         imageCount: snapshot.imageCount,
         model: snapshot.model,
         aspectRatio: snapshot.aspectRatio,
@@ -2848,7 +2935,7 @@ function App() {
         const feat = ecomSubTab === 'clone-template' ? 'ecom-clone' : 'ecom-gen-new';
         logUsage(feat, config.id, generatedImages.length, snapshot.imageSize);
         // The Kie result is ready now. Do not block the result card on the
-        // optional history upload (proxy + Storage + Firestore); a slow or
+        // optional Firestore history write; a slow or
         // temporarily unavailable history service must never leave a batch
         // stuck in "ĐANG GEN".
         if (isConcurrent && batchId) {
@@ -2865,7 +2952,21 @@ function App() {
 
         // Persist history in the background after the UI is marked complete.
         void Promise.allSettled(generatedImages.map((u) =>
-          pushHistory(u, { feature: feat, model: config.id, size: snapshot.imageSize })
+          pushHistory(u, {
+            feature: feat,
+            model: config.id,
+            size: snapshot.imageSize,
+            batchId: batchId || undefined,
+            prompt: snapshot.promptText,
+            supplementaryPrompt: snapshot.supplementaryPrompt,
+            promptId: snapshot.promptId,
+            promptSource: snapshot.promptSource,
+            inputImage: snapshot.t2iMode ? null : (referenceImages[0] || snapshot.productImage),
+            modelKey: snapshot.model,
+            aspectRatio: snapshot.aspectRatio,
+            imageCount: snapshot.imageCount,
+            t2iMode: snapshot.t2iMode,
+          })
         ));
       } else {
         throw new Error("Không có ảnh kết quả trả về.");
@@ -6109,16 +6210,40 @@ function App() {
                                 </p>
                               )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setEcomBatches((prev) => prev.filter(b => b.id !== batch.id))}
-                              className="p-1.5 rounded-lg shrink-0"
-                              style={{ color: 'var(--color-text-tertiary)' }}
-                              title="Xoá batch khỏi danh sách"
-                              aria-label="Xoá batch"
-                            >
-                              <X size={14} />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {batch.status === 'done' && (
+                                <button
+                                  type="button"
+                                  onClick={() => reuseEcomGeneration({
+                                    prompt: batch.basePromptText || batch.promptText,
+                                    supplementaryPrompt: batch.supplementaryPrompt,
+                                    promptId: batch.promptId,
+                                    promptSource: batch.promptSource,
+                                    inputImage: batch.inputImage,
+                                    modelKey: batch.model,
+                                    aspectRatio: batch.aspectRatio,
+                                    imageSize: batch.imageSize,
+                                    imageCount: batch.imageCount,
+                                    t2iMode: batch.t2iMode,
+                                  })}
+                                  className="px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] font-semibold"
+                                  style={{ background: 'var(--color-fill)', color: 'var(--color-accent)' }}
+                                  title="Nạp lại ảnh, prompt và cài đặt"
+                                >
+                                  <RotateCcw size={11} /> Sử dụng lại
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setEcomBatches((prev) => prev.filter(b => b.id !== batch.id))}
+                                className="p-1.5 rounded-lg"
+                                style={{ color: 'var(--color-text-tertiary)' }}
+                                title="Xoá batch khỏi danh sách"
+                                aria-label="Xoá batch"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
                           </div>
 
                           {/* Batch body */}
@@ -6257,6 +6382,25 @@ function App() {
                                   >
                                     <ZoomIn size={16} />
                                   </button>
+                                  {item.prompt && (
+                                    <button
+                                      onClick={() => reuseEcomGeneration({
+                                        prompt: item.prompt,
+                                        supplementaryPrompt: item.supplementaryPrompt,
+                                        promptId: item.promptId,
+                                        promptSource: item.promptSource,
+                                        inputImage: item.inputImage,
+                                        modelKey: item.modelKey,
+                                        aspectRatio: item.aspectRatio,
+                                        imageSize: item.size,
+                                        imageCount: item.imageCount,
+                                        t2iMode: item.t2iMode,
+                                      })}
+                                      className="px-3 py-1.5 bg-white text-black font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
+                                    >
+                                      <RotateCcw size={12} /> Sử dụng lại
+                                    </button>
+                                  )}
                                   <button
                                     onClick={() => useEcomImageAsInput(item.url)}
                                     className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
