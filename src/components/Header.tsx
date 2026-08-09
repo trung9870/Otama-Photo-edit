@@ -79,9 +79,9 @@ function OtamaLogo({ size = 36 }: { size?: number }) {
 
 function OtamaWordmark() {
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="otama-wordmark flex items-center gap-2.5">
       <OtamaLogo size={36} />
-      <div className="flex flex-col">
+      <div className="otama-wordmark-copy flex flex-col">
         <div
           className="font-bold leading-none"
           style={{
@@ -217,6 +217,7 @@ function ThemeToggle({ theme, resolvedTheme, onThemeChange }: { theme: Theme; re
     <div
       role="group"
       aria-label="Theme"
+      className="theme-toggle"
       style={{ display: 'inline-flex', padding: 2, background: 'var(--color-fill)', border: '1px solid var(--color-border-soft)', borderRadius: 11, gap: 2 }}
     >
       <button type="button" onClick={() => onThemeChange('light')} title="Light mode" style={cellStyle(active === 'light')}>
@@ -280,7 +281,7 @@ export function Header(props: HeaderProps) {
           )}
 
           {/* Mobile right cluster (compact) */}
-          <div className="flex lg:hidden items-center gap-2">
+          <div className="mobile-header-actions flex lg:hidden items-center gap-2">
             {user && onOpenHistory && <HistoryButton onClick={onOpenHistory} />}
             <ThemeToggle theme={theme} resolvedTheme={resolvedTheme} onThemeChange={onThemeChange} />
             {isAuthReady && <AvatarPill user={user} onLogin={onLogin} onLogout={onLogout} />}

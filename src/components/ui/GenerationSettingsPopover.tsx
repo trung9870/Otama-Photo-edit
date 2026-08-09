@@ -59,9 +59,10 @@ export function GenerationSettingsPopover({
   }, [open]);
 
   return (
-    <div ref={rootRef} style={{ position: 'relative', flex: '0 0 auto', minWidth: 0 }}>
+    <div ref={rootRef} className="generation-settings-root" style={{ position: 'relative', flex: '0 0 auto', minWidth: 0 }}>
       <button
         type="button"
+        className="generation-settings-trigger"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -102,6 +103,7 @@ export function GenerationSettingsPopover({
         <div
           role="dialog"
           aria-label="Cài đặt đầu ra ảnh"
+          className="generation-settings-menu"
           style={{
             position: 'absolute',
             ...(placement === 'top'

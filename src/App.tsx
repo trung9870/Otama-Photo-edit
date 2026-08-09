@@ -6485,7 +6485,7 @@ function App() {
                           {/* Batch body */}
                           {(() => {
                             // Fix card size at 1/3 width regardless of imageCount — empty cells stay invisible
-                            const batchGridCols = 'grid-cols-3';
+                            const batchGridCols = 'grid-cols-1 sm:grid-cols-3';
                             return batch.status === 'running' ? (
                             <div className={`grid ${batchGridCols} gap-3`}>
                               {Array.from({ length: batch.imageCount }).map((_, i) => (
@@ -6529,7 +6529,7 @@ function App() {
                                   style={{ borderRadius: 14, background: 'var(--color-card-secondary)' }}
                                 >
                                   <img src={res} alt={`Batch ${batch.id} #${i+1}`} className="block w-full h-auto" />
-                                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                  <div className="image-action-overlay absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
                                     <button
                                       onClick={() => setZoomImage(res)}
                                       className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition"
@@ -6633,7 +6633,7 @@ function App() {
                               return (
                                 <div
                                   key={historyGroup.key}
-                                  className="relative p-3 pr-12 rounded-xl"
+                                  className="relative p-3 rounded-xl"
                                   style={{ background: 'var(--color-card)', border: '1px solid var(--color-border-soft)' }}
                                 >
                                   <button
@@ -6649,7 +6649,7 @@ function App() {
                                   >
                                     <Trash2 size={15} />
                                   </button>
-                                  <div className="flex items-start gap-3 mb-3">
+                                  <div className="flex items-start gap-3 mb-3 pr-10">
                                     <div className="flex-1 min-w-0">
                                       <div className="flex flex-wrap items-center gap-2 mb-1">
                                         <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--color-text-tertiary)', letterSpacing: '0.04em' }}>
@@ -6703,7 +6703,7 @@ function App() {
                                     </div>
                                   </div>
 
-                                  <div className="grid grid-cols-3 gap-3 items-start">
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
                                     {historyGroup.items.map((item, index) => (
                                       <div
                                         key={item.id}
@@ -6711,7 +6711,7 @@ function App() {
                                         style={{ borderRadius: 14, background: 'var(--color-card-secondary)' }}
                                       >
                                         <img src={item.url} alt={`Lịch sử Gen New ${index + 1}`} className="block w-full h-auto" />
-                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                        <div className="image-action-overlay absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
                                           <button
                                             onClick={() => setZoomImage(item.url)}
                                             className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition"

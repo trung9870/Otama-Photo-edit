@@ -55,11 +55,12 @@ export function SettingsDropdown<T extends string | number = string>({
   return (
     <div
       ref={rootRef}
-      className={className}
+      className={`settings-dropdown-root ${className || ''}`}
       style={{ position: 'relative', flex: width === 'fill' ? '1 1 0' : '0 0 auto', minWidth: 0 }}
     >
       <button
         type="button"
+        className="settings-dropdown-trigger"
         onClick={() => setOpen((v) => !v)}
         style={{
           width: '100%',
@@ -103,6 +104,7 @@ export function SettingsDropdown<T extends string | number = string>({
 
       {open && (
         <div
+          className="settings-dropdown-menu"
           style={{
             position: 'absolute',
             ...(placement === 'top'
