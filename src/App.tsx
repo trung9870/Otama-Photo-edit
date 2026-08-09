@@ -135,6 +135,15 @@ interface EcomBatch {
   errorMessage?: string;
 }
 
+interface EcomHistoryItem {
+  id: string;
+  url: string;
+  feature: string;
+  model?: string;
+  size?: string;
+  ts: any;
+}
+
 // Error Boundary Component
 class ErrorBoundary extends (Component as any) {
   constructor(props: any) {
@@ -585,6 +594,7 @@ function App() {
   const [ecomResults, setEcomResults] = useState<string[]>([]);
   // Concurrent gen-new batches — user can fire many in parallel without waiting
   const [ecomBatches, setEcomBatches] = useState<EcomBatch[]>([]);
+  const [ecomHistoryItems, setEcomHistoryItems] = useState<EcomHistoryItem[]>([]);
   const [selectedEcomGrid, setSelectedEcomGrid] = useState<string | null>(null);
   const [isEcomEnhancing, setIsEcomEnhancing] = useState(false);
   const [isTranslatingImages, setIsTranslatingImages] = useState(false);
@@ -982,6 +992,46 @@ function App() {
       if (unsubUserDoc) unsubUserDoc();
     };
   }, []);
+
+  // Keep the current user's recent Gen New history visible on the main canvas.
+  // The same live listener also performs the 7-day lazy cleanup after login.
+  useEffect(() => {
+    if (!isAuthReady || !user) {
+      setEcomHistoryItems([]);
+      return;
+    }
+
+    const cutoffMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    let cleanupStarted = false;
+    const historyQuery = query(collection(db, 'history'), where('uid', '==', user.uid));
+    const unsubscribe = onSnapshot(historyQuery, (snapshot) => {
+      const all = snapshot.docs.map((historyDoc) => ({
+        id: historyDoc.id,
+        ...(historyDoc.data() as Omit<EcomHistoryItem, 'id'>),
+      }));
+      const toMillis = (value: any) => {
+        if (typeof value?.toMillis === 'function') return value.toMillis();
+        if (typeof value?.seconds === 'number') return value.seconds * 1000;
+        return 0;
+      };
+
+      setEcomHistoryItems(all
+        .filter((item) => item.feature === 'ecom-gen-new' && toMillis(item.ts) >= cutoffMs)
+        .sort((a, b) => toMillis(b.ts) - toMillis(a.ts))
+        .slice(0, 12));
+
+      if (!cleanupStarted) {
+        cleanupStarted = true;
+        const stale = all.filter((item) => toMillis(item.ts) < cutoffMs);
+        void Promise.allSettled(stale.map((item) => deleteDoc(doc(db, 'history', item.id))));
+      }
+    }, (error) => {
+      console.warn('inline history load failed', error);
+      setEcomHistoryItems([]);
+    });
+
+    return unsubscribe;
+  }, [isAuthReady, user?.uid]);
 
   // Auto-switch appMode khi user không có quyền với mode hiện tại
   useEffect(() => {
@@ -5997,7 +6047,7 @@ function App() {
                   )}
                 </div>
               ) : ecomSubTab === 'gen-new' ? (
-                ecomBatches.length === 0 ? (
+                ecomBatches.length === 0 && ecomHistoryItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center text-gray-500 h-full">
                     <ImageIcon size={64} className="opacity-20 mb-4" />
                     <p>Kết quả sẽ hiển thị ở đây</p>
@@ -6153,6 +6203,79 @@ function App() {
                         </div>
                       );
                     })}
+                    {(() => {
+                      const currentResultUrls = new Set(ecomBatches.flatMap((batch) => batch.results));
+                      const visibleHistory = ecomHistoryItems.filter((item) => !currentResultUrls.has(item.url));
+                      if (visibleHistory.length === 0) return null;
+
+                      return (
+                        <section
+                          className="rounded-2xl p-4"
+                          style={{
+                            background: 'var(--color-card-secondary)',
+                            border: '0.5px solid var(--color-border-soft)',
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-3 mb-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Clock size={15} style={{ color: 'var(--color-accent)' }} />
+                              <div className="min-w-0">
+                                <p className="font-bold text-sm" style={{ color: 'var(--color-text)' }}>Lịch sử 7 ngày</p>
+                                <p className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
+                                  {visibleHistory.length} ảnh Gen New gần nhất
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsHistoryOpen(true)}
+                              className="shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold"
+                              style={{ background: 'var(--color-fill)', color: 'var(--color-accent)' }}
+                            >
+                              Xem tất cả
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3 items-start">
+                            {visibleHistory.map((item, index) => (
+                              <div
+                                key={item.id}
+                                className="relative group overflow-hidden"
+                                style={{ borderRadius: 14, background: 'var(--color-card)' }}
+                              >
+                                <img src={item.url} alt={`Lịch sử Gen New ${index + 1}`} className="block w-full h-auto" />
+                                <div
+                                  className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase"
+                                  style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', backdropFilter: 'blur(6px)' }}
+                                >
+                                  {item.model || 'Gen New'}{item.size ? ` · ${item.size.toUpperCase()}` : ''}
+                                </div>
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => setZoomImage(item.url)}
+                                    className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition"
+                                    title="Phóng to"
+                                  >
+                                    <ZoomIn size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => useEcomImageAsInput(item.url)}
+                                    className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
+                                  >
+                                    <Copy size={12} /> Dùng làm Mẫu
+                                  </button>
+                                  <button
+                                    onClick={() => handleImageDownload(item.url, `ecom-history-${item.id}.png`)}
+                                    className="px-3 py-1.5 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
+                                  >
+                                    <Download size={12} /> Tải
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      );
+                    })()}
                   </div>
                 )
               ) : isEcomGenerating ? (
