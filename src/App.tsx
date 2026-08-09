@@ -81,10 +81,6 @@ import {
   Timestamp,
   OperationType,
   handleFirestoreError,
-  storage,
-  storageRef,
-  uploadString,
-  getDownloadURL,
   User as FirebaseUser
 } from './firebase';
 import AdminPanel from './components/AdminPanel';
@@ -2550,33 +2546,27 @@ function App() {
     }
   };
 
-  // Lưu 1 ảnh kết quả vào Lịch sử (Firebase Storage + Firestore 'history').
-  // Nhận data URL (base64) hoặc URL remote (Kie). Nén JPEG trước khi upload.
+  // Lưu lịch sử vào Firestore. Kết quả Kie đã là URL remote nên không cần
+  // Firebase Storage (project Spark hiện không hỗ trợ tạo Storage bucket mới).
+  // Với kết quả dạng data URL, nén đủ nhỏ để nằm dưới giới hạn 1 MiB/document.
   const pushHistory = async (imageSrc: string, meta: { feature: string; model: string; size?: string }) => {
     if (!user || !imageSrc) return;
     try {
-      // Chuẩn hoá về data URL
-      let dataUrl = imageSrc;
-      if (!imageSrc.startsWith('data:')) {
-        const resp = await fetch(`/api/proxy-image?url=${encodeURIComponent(imageSrc)}`);
-        if (!resp.ok) return;
-        const blob = await resp.blob();
-        dataUrl = await new Promise<string>((resolve) => {
-          const r = new FileReader();
-          r.onloadend = () => resolve(r.result as string);
-          r.readAsDataURL(blob);
-        });
+      let historyUrl = imageSrc;
+      if (imageSrc.startsWith('data:')) {
+        historyUrl = await compressImageDataUrl(imageSrc, 1200, 0.72);
+        if (historyUrl.length > 900_000) {
+          historyUrl = await compressImageDataUrl(imageSrc, 900, 0.65);
+        }
+        if (historyUrl.length > 900_000) {
+          throw new Error('Ảnh lịch sử vượt giới hạn Firestore 1 MiB');
+        }
       }
-      const compressed = await compressImageDataUrl(dataUrl, 1600, 0.8);
+
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const path = `history/${user.uid}/${id}.jpg`;
-      const sref = storageRef(storage, path);
-      await uploadString(sref, compressed, 'data_url');
-      const url = await getDownloadURL(sref);
       await setDoc(doc(collection(db, 'history'), id), {
         id,
-        url,
-        path,
+        url: historyUrl,
         feature: meta.feature,
         model: meta.model,
         size: meta.size || '',
