@@ -49,20 +49,6 @@ export function ModelCardPicker<T extends string = string>({
               border: active ? '1px solid var(--color-accent)' : '1px solid transparent',
             }}
           >
-            {opt.best && (
-              <div
-                className="absolute top-0 right-0 text-white font-bold"
-                style={{
-                  padding: isSm ? '1px 4px' : '2px 6px',
-                  background: 'var(--color-warning)',
-                  fontSize: isSm ? 8 : 9,
-                  borderBottomLeftRadius: 6,
-                  letterSpacing: '0.04em',
-                }}
-              >
-                BEST
-              </div>
-            )}
             <div
               className="font-bold"
               style={{

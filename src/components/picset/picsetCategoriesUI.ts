@@ -47,7 +47,7 @@ export const PICSET_CATEGORIES_UI: Record<PicsetCategoryId, CategoryUIMeta> = {
 };
 
 export const DENSITY_TONE: Record<CategoryUIMeta['density'], { bg: string; fg: string }> = {
-  STANDARD:     { bg: 'rgba(0,122,255,0.15)',  fg: 'var(--color-accent)'  },
+  STANDARD:     { bg: 'color-mix(in srgb, var(--color-accent) 15%, transparent)',  fg: 'var(--color-accent)'  },
   MINIMAL:      { bg: 'rgba(175,82,222,0.15)', fg: '#af52de'              },
   HIGH_DENSITY: { bg: 'rgba(255,149,0,0.15)',  fg: 'var(--color-warning)' },
 };

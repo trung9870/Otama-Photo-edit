@@ -204,30 +204,30 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
             exit={{ opacity: 0 }}
             onClick={onClose}
             className="absolute inset-0"
-            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)' }}
+            style={{ background: 'rgba(10,9,8,0.58)', backdropFilter: 'blur(10px)' }}
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-            className="relative w-full max-w-4xl flex flex-col"
+            className="relative w-full max-w-6xl flex flex-col"
             style={{
-              maxHeight: '86vh',
-              background: 'var(--color-card)',
-              borderRadius: 22,
-              border: '0.5px solid var(--color-border-soft)',
+              maxHeight: '88dvh',
+              background: 'color-mix(in srgb, var(--color-card) 98%, transparent)',
+              borderRadius: 26,
+              border: '1px solid var(--color-border-soft)',
               boxShadow: 'var(--shadow-sheet)',
             }}
           >
             {/* Header */}
             <div
               className="flex items-center justify-between shrink-0"
-              style={{ padding: '16px 20px', borderBottom: '0.5px solid var(--color-border-soft)' }}
+              style={{ padding: '18px 22px', borderBottom: '1px solid var(--color-border-soft)' }}
             >
               <div className="flex items-center gap-2">
                 <Clock size={18} style={{ color: 'var(--color-accent)' }} />
-                <h3 className="font-bold" style={{ fontSize: 17, color: 'var(--color-text)', letterSpacing: '-0.02em' }}>
+                <h3 className="font-bold" style={{ fontSize: 19, color: 'var(--color-text)', letterSpacing: '-0.035em' }}>
                   Lịch sử của tôi
                 </h3>
                 <span
@@ -243,7 +243,7 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
               </div>
               <button
                 onClick={onClose}
-                className="rounded-full p-1.5 transition-colors"
+                className="rounded-full p-2 transition-colors"
                 style={{ color: 'var(--color-text-tertiary)' }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-fill)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -257,7 +257,7 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
             {items.length > 0 && (
               <div
                 className="flex items-center gap-1.5 shrink-0 overflow-x-auto no-scrollbar"
-                style={{ padding: '10px 16px', borderBottom: '0.5px solid var(--color-border-soft)' }}
+                style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-border-soft)' }}
               >
                 <Filter size={13} style={{ color: 'var(--color-text-tertiary)', flexShrink: 0, marginRight: 2 }} />
                 <FilterChip
@@ -280,7 +280,7 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
             )}
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto" style={{ padding: '12px 16px 20px' }}>
+            <div className="flex-1 overflow-y-auto" style={{ padding: '16px 20px 24px' }}>
               {loading ? (
                 <div className="py-16 flex flex-col items-center gap-3">
                   <Loader2 size={22} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
@@ -310,7 +310,7 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
                       >
                         {g.label} · {g.items.length} ảnh
                       </p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {g.items.map((it, idx) => {
                           const isDeleting = deleting.has(it.id);
                           const ms = tsMillis(it.ts);
@@ -320,10 +320,11 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
                           return (
                             <div
                               key={it.id}
-                              className="relative aspect-square rounded-xl overflow-hidden group"
+                              className="relative aspect-square rounded-2xl overflow-hidden group"
                               style={{
                                 background: 'var(--color-fill)',
-                                border: '0.5px solid var(--color-border-soft)',
+                                border: '1px solid var(--color-border-soft)',
+                                boxShadow: 'var(--sh-up-sm)',
                               }}
                             >
                               <img
@@ -335,7 +336,7 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
                               />
                               {/* Hover overlay */}
                               <div
-                                className="absolute inset-0 flex flex-col justify-between opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="absolute inset-0 flex flex-col justify-between opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                                 style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 30%, transparent 60%, rgba(0,0,0,0.65))' }}
                               >
                                 <div className="flex items-start justify-between p-2">
@@ -409,7 +410,7 @@ function FilterChip({ active, onClick, label }: { active: boolean; onClick: () =
       onClick={onClick}
       className="rounded-full whitespace-nowrap transition-colors"
       style={{
-        padding: '5px 10px', fontSize: 11, fontWeight: 600,
+        minHeight: 34, padding: '6px 11px', fontSize: 11, fontWeight: 600,
         background: active ? 'var(--color-accent-soft)' : 'var(--color-fill)',
         color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)',
         border: '0.5px solid transparent',
@@ -432,9 +433,13 @@ function IconBtn({
       onClick={onClick}
       title={title}
       disabled={disabled}
-      className="rounded-md transition-transform hover:scale-110 disabled:opacity-40"
+      className="rounded-lg transition-colors disabled:opacity-40"
       style={{
-        padding: 6,
+        width: 36,
+        height: 36,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         background: 'rgba(0,0,0,0.55)',
         color,
         backdropFilter: 'blur(4px)',

@@ -18,3 +18,9 @@ export type { SectionHeaderProps } from './SectionHeader';
 
 export { SettingsDropdown } from './SettingsDropdown';
 export type { SettingsDropdownProps, SettingsDropdownOption } from './SettingsDropdown';
+
+export { ModelLogo } from './ModelLogo';
+export type { ModelLogoProps } from './ModelLogo';
+
+export { GenerationSettingsPopover } from './GenerationSettingsPopover';
+export type { GenerationSettingsPopoverProps } from './GenerationSettingsPopover';

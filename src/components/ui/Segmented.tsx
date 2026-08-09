@@ -20,9 +20,9 @@ export interface SegmentedProps<T extends string = string> {
 }
 
 const SIZE: Record<SegmentedSize, { h: number; fs: number; r: number; p: number; iconSize: number }> = {
-  sm: { h: 28, fs: 12, r: 7, p: 2, iconSize: 13 },
-  md: { h: 32, fs: 13, r: 8, p: 2, iconSize: 14 },
-  lg: { h: 40, fs: 14, r: 10, p: 3, iconSize: 15 },
+  sm: { h: 32, fs: 11, r: 8, p: 3, iconSize: 13 },
+  md: { h: 36, fs: 12, r: 10, p: 3, iconSize: 14 },
+  lg: { h: 44, fs: 13, r: 12, p: 4, iconSize: 16 },
 };
 
 export function Segmented<T extends string = string>({
@@ -43,6 +43,7 @@ export function Segmented<T extends string = string>({
         padding: s.p,
         background: 'var(--color-fill)',
         borderRadius: s.r + 2,
+        boxShadow: 'inset 0 0 0 1px var(--color-border-soft)',
       }}
     >
       {options.map((opt) => {
@@ -57,7 +58,7 @@ export function Segmented<T extends string = string>({
             style={{
               flex: fullWidth ? 1 : undefined,
               height: s.h,
-              padding: '0 10px',
+              padding: '0 12px',
               fontSize: s.fs,
               fontWeight: active ? 600 : 500,
               color: active ? 'var(--color-text)' : 'var(--color-text-secondary)',
@@ -75,9 +76,9 @@ export function Segmented<T extends string = string>({
                 style={{
                   borderRadius: s.r,
                   background: 'var(--color-card)',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.08), 0 3px 8px rgba(0,0,0,0.06)',
+                  boxShadow: 'var(--sh-up-sm), inset 0 0 0 1px var(--color-border-soft)',
                 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                transition={{ type: 'spring', stiffness: 480, damping: 38 }}
               />
             )}
             <span className="relative z-10 inline-flex items-center gap-1.5">

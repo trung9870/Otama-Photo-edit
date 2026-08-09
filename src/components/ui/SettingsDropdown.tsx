@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 export interface SettingsDropdownOption<T extends string | number = string> {
   value: T;
   label: string;
+  icon?: React.ReactNode;
   badge?: { text: string; tone?: 'accent' | 'neutral' };
   disabled?: boolean;
 }
@@ -14,6 +15,8 @@ export interface SettingsDropdownProps<T extends string | number = string> {
   /** Width hint. `auto` = fit to current value text, `fill` = take remaining row width. */
   width?: 'auto' | 'fill';
   className?: string;
+  /** Menu direction. Bottom is the default; floating bottom composers should use top. */
+  placement?: 'top' | 'bottom';
 }
 
 /**
@@ -27,6 +30,7 @@ export function SettingsDropdown<T extends string | number = string>({
   onChange,
   width = 'auto',
   className,
+  placement = 'bottom',
 }: SettingsDropdownProps<T>) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -63,13 +67,14 @@ export function SettingsDropdown<T extends string | number = string>({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 3,
-          padding: '7px 8px',
-          borderRadius: 9,
+          minHeight: 40,
+          padding: '8px 10px',
+          borderRadius: 11,
           border: '1px solid var(--color-border-soft)',
           background: 'var(--color-card)',
           cursor: 'pointer',
           color: 'var(--color-text)',
-          font: '600 11px/1 inherit',
+          font: '600 12px/1 inherit',
           letterSpacing: '-0.01em',
           boxShadow: 'var(--sh-up-sm)',
           whiteSpace: 'nowrap',
@@ -77,7 +82,10 @@ export function SettingsDropdown<T extends string | number = string>({
           textOverflow: 'ellipsis',
         }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{current?.label ?? '—'}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, overflow: 'hidden' }}>
+          {current?.icon}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{current?.label ?? '—'}</span>
+        </span>
         <svg
           width="11"
           height="11"
@@ -97,16 +105,18 @@ export function SettingsDropdown<T extends string | number = string>({
         <div
           style={{
             position: 'absolute',
-            top: 'calc(100% + 5px)',
+            ...(placement === 'top'
+              ? { bottom: 'calc(100% + 5px)' }
+              : { top: 'calc(100% + 5px)' }),
             left: 0,
             zIndex: 30,
             minWidth: '100%',
             width: 'max-content',
             background: 'var(--color-card)',
             border: '1px solid var(--color-border)',
-            borderRadius: 12,
-            boxShadow: '0 12px 30px rgba(0,0,0,0.2)',
-            padding: 5,
+            borderRadius: 14,
+            boxShadow: 'var(--shadow-pop)',
+            padding: 6,
           }}
         >
           {options.map((opt) => {
@@ -143,6 +153,7 @@ export function SettingsDropdown<T extends string | number = string>({
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 7, font: '600 12px/1 inherit', whiteSpace: 'nowrap' }}>
+                  {opt.icon}
                   {opt.label}
                   {opt.badge && (
                     <span

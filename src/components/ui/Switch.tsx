@@ -26,7 +26,7 @@ export function Switch({ checked, onChange, disabled, ariaLabel, size = 'md' }: 
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => onChange?.(!checked)}
-      className="relative shrink-0 rounded-full transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+      className="relative shrink-0 rounded-full cursor-pointer transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
       style={{
         width: d.w,
         height: d.h,

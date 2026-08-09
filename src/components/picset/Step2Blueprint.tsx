@@ -243,7 +243,7 @@ interface ImageCardProps {
 
 // Broad image_category (6 enum) → small secondary pill color
 const IMAGE_CATEGORY_TONE: Record<string, { bg: string; fg: string }> = {
-  'Feature Image':                  { bg: 'rgba(0,122,255,0.10)',  fg: 'var(--color-accent)' },
+  'Feature Image':                  { bg: 'color-mix(in srgb, var(--color-accent) 10%, transparent)',  fg: 'var(--color-accent)' },
   'Pain Point Image':               { bg: 'rgba(255,59,48,0.10)',  fg: 'var(--color-danger)' },
   'Detail / Material Image':        { bg: 'rgba(175,82,222,0.10)', fg: '#af52de' },
   'Selling Point Image':            { bg: 'rgba(52,199,89,0.10)',  fg: 'var(--color-success)' },

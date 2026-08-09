@@ -398,14 +398,17 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   ];
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6" style={{ color: 'var(--color-text)' }}>
-      <div>
-        <h2 className="font-bold flex items-center gap-2" style={{ fontSize: 26, letterSpacing: '-0.03em' }}>
-          <Shield style={{ color: 'var(--color-accent)' }} /> Quản trị viên
+    <div className="py-2 max-w-[1600px] mx-auto space-y-5" style={{ color: 'var(--color-text)' }}>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+        <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: 'var(--color-accent)', letterSpacing: '0.1em' }}>Control center</p>
+        <h2 className="font-bold flex items-center gap-2" style={{ fontSize: 28, letterSpacing: '-0.04em' }}>
+          <Shield size={24} style={{ color: 'var(--color-accent)' }} /> Quản trị viên
         </h2>
         <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginTop: 2 }}>
           Quản lý người dùng và phân quyền sử dụng các tính năng.
         </p>
+        </div>
       </div>
 
       {error && (

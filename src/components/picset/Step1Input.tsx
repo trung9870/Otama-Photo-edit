@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Upload, Image as ImageIcon, X, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
-import { Button, SettingsDropdown } from '../ui';
+import { Button, ModelLogo, SettingsDropdown } from '../ui';
 
 // ============== Public types ==============
 export type PicsetPlatform = 'Shopee' | 'TikTok Shop' | 'Lazada' | 'Smart Match';
@@ -245,7 +245,7 @@ export default function Step1Input({
                 {mainDragOver && (
                   <div
                     className="absolute inset-0 flex items-center justify-center rounded-lg pointer-events-none"
-                    style={{ background: 'rgba(0,122,255,0.18)', color: 'var(--color-accent)' }}
+                    style={{ background: 'color-mix(in srgb, var(--color-accent) 18%, transparent)', color: 'var(--color-accent)' }}
                   >
                     <span className="text-xs font-semibold">Thả để thay ảnh</span>
                   </div>
@@ -394,8 +394,8 @@ export default function Step1Input({
               onChange={(v) => onChange({ ...form, model: v })}
               width="fill"
               options={[
-                { value: 'banana-pro', label: 'Banana Pro', badge: { text: 'BEST', tone: 'accent' } },
-                { value: 'gpt2', label: 'GPT2' },
+                { value: 'banana-pro', label: 'Banana Pro', icon: <ModelLogo model="banana-pro" /> },
+                { value: 'gpt2', label: 'GPT2', icon: <ModelLogo model="gpt2" /> },
               ]}
             />
           </Field>
@@ -541,4 +541,3 @@ function Field({
     </div>
   );
 }
-

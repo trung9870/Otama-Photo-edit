@@ -115,12 +115,12 @@ export async function createKieImageTask(model: string, inputUrls: string[], pro
       input.image_urls = (inputUrls || []).slice(0, 10);
     }
   } else if (isGpt2I2I || isGpt2T2I) {
-    // GPT Image 2 supports: 1:1, 3:4, 4:3, 9:16, 16:9, auto.
-    // Only constraint: 1:1 can't go up to 4K — clamp to 2K.
-    const SUPPORTED = ['1:1', '3:4', '4:3', '9:16', '16:9', 'auto'];
+    // GPT Image 2 ratios from Kie.ai OpenAPI. auto is 1K-only; 5:4/4:5 are
+    // 1K-only; 1:1 supports up to 2K.
+    const SUPPORTED = ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '21:9', '9:21'];
     const finalAspectRatio = SUPPORTED.includes(aspectRatio) ? aspectRatio : 'auto';
     const requestedSize = (imageSize || '1K').toUpperCase();
-    const finalResolution = finalAspectRatio === 'auto'
+    const finalResolution = finalAspectRatio === 'auto' || finalAspectRatio === '5:4' || finalAspectRatio === '4:5'
       ? '1K'
       : (finalAspectRatio === '1:1' && requestedSize === '4K' ? '2K' : requestedSize);
     // T2I alias has no input_urls field

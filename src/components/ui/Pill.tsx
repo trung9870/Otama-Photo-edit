@@ -28,10 +28,11 @@ function toneStyle(tone: PillTone): React.CSSProperties {
 export function Pill({ tone = 'secondary', icon: Icon, children, className = '', style, ...rest }: PillProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full font-semibold ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full font-semibold ${className}`}
       style={{
-        padding: '3px 9px',
-        fontSize: 11,
+        padding: '4px 9px',
+        fontSize: 10,
+        border: '1px solid var(--color-border-soft)',
         letterSpacing: '-0.01em',
         ...toneStyle(tone),
         ...style,

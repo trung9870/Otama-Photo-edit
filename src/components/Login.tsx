@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { Palette, Loader2, LogIn, Sparkles, Check, Bed } from 'lucide-react';
 import { Button, Pill } from './ui';
 
@@ -22,7 +23,7 @@ function OtamaMark({ size = 64 }: { size?: number }) {
         height: size,
         borderRadius: size * 0.28,
         background: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-indigo) 100%)',
-        boxShadow: '0 6px 20px rgba(0,122,255,0.30), inset 0 0.5px 0.5px rgba(255,255,255,0.4)',
+        boxShadow: '0 6px 20px color-mix(in srgb, var(--color-accent) 30%, transparent), inset 0 0.5px 0.5px rgba(255,255,255,0.4)',
       }}
     >
       <Palette size={size * 0.55} strokeWidth={2.2} />
@@ -204,17 +205,52 @@ function LoginForm(props: LoginProps) {
   );
 }
 
+/* Hai khối màu ấm trôi chậm phía sau — tạo chiều sâu thay cho nền phẳng */
+function AmbientGlow() {
+  return (
+    <div className="absolute inset-0 overflow-hidden" aria-hidden>
+      <motion.div
+        className="absolute rounded-full"
+        style={{
+          width: 620, height: 620, top: '-18%', left: '-8%',
+          background: 'color-mix(in srgb, var(--color-accent) 30%, transparent)',
+          filter: 'blur(110px)',
+        }}
+        animate={{ x: [0, 70, 0], y: [0, 45, 0] }}
+        transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <motion.div
+        className="absolute rounded-full"
+        style={{
+          width: 520, height: 520, bottom: '-22%', right: '-6%',
+          background: 'color-mix(in srgb, var(--color-indigo) 18%, transparent)',
+          filter: 'blur(120px)',
+        }}
+        animate={{ x: [0, -60, 0], y: [0, -40, 0] }}
+        transition={{ duration: 32, repeat: Infinity, ease: 'easeInOut' }}
+      />
+    </div>
+  );
+}
+
+const stagger = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } },
+};
+const rise = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
+};
+
 export function Login(props: LoginProps) {
   return (
     <div
-      className="min-h-screen w-full"
-      style={{
-        background: 'var(--color-bg)',
-        backgroundImage: 'radial-gradient(circle at 30% 20%, var(--color-accent-soft), transparent 60%)',
-      }}
+      className="min-h-dvh w-full relative"
+      style={{ background: 'var(--color-bg)' }}
     >
+      <AmbientGlow />
       {/* Mobile + small tablet: stacked single column */}
-      <div className="md:hidden min-h-screen flex flex-col px-6 pt-14 pb-8">
+      <div className="md:hidden min-h-dvh flex flex-col px-6 pt-14 pb-8 relative">
         <div className="flex-1 flex flex-col justify-center gap-9">
           <div className="flex flex-col items-start gap-5">
             <OtamaMark size={64} />
@@ -259,31 +295,47 @@ export function Login(props: LoginProps) {
       </div>
 
       {/* Desktop: split layout */}
-      <div className="hidden md:flex min-h-screen">
+      <div className="hidden md:flex min-h-dvh relative">
         {/* Left brand panel */}
-        <div
+        <motion.div
           className="flex flex-col justify-between"
           style={{
-            width: 540,
+            width: 560,
             padding: '56px 56px',
           }}
+          variants={stagger}
+          initial="hidden"
+          animate="show"
         >
-          <OtamaWordmark large />
+          <motion.div variants={rise}><OtamaWordmark large /></motion.div>
 
           <div className="flex flex-col gap-4">
-            <div
+            <motion.div
+              variants={rise}
+              className="font-semibold uppercase"
+              style={{
+                fontSize: 11.5,
+                color: 'var(--color-accent)',
+                letterSpacing: '0.18em',
+              }}
+            >
+              Công cụ ảnh nội bộ · Otama Bedding
+            </motion.div>
+            <motion.div
+              variants={rise}
               className="font-bold"
               style={{
-                fontSize: 52,
+                fontSize: 56,
                 color: 'var(--color-text)',
                 letterSpacing: '-0.04em',
-                lineHeight: 1,
+                lineHeight: 1.02,
+                textWrap: 'balance',
               }}
             >
               Chụp ảnh đẹp.<br />
               <span
                 style={{
-                  background: 'linear-gradient(135deg, var(--color-accent), var(--color-purple))',
+                  background: 'linear-gradient(135deg, var(--color-accent), var(--color-indigo))',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
@@ -291,41 +343,47 @@ export function Login(props: LoginProps) {
               >
                 Tự động.
               </span>
-            </div>
-            <div
+            </motion.div>
+            <motion.div
+              variants={rise}
               style={{
                 fontSize: 17,
                 color: 'var(--color-text-secondary)',
                 maxWidth: 380,
-                lineHeight: 1.45,
+                lineHeight: 1.5,
                 letterSpacing: '-0.01em',
               }}
             >
               AI tạo ảnh sản phẩm, thay đồ người mẫu và dựng trang chi tiết TMĐT chỉ trong vài giây.
-            </div>
-            <div className="flex gap-2 mt-2 flex-wrap">
+            </motion.div>
+            <motion.div variants={rise} className="flex gap-2 mt-2 flex-wrap">
               <Pill tone="accent" icon={Sparkles}>Gemini 3 Pro</Pill>
               <Pill tone="success" icon={Check}>Đồng bộ Cloud</Pill>
               <Pill tone="warning" icon={Bed}>Bedding · Fashion</Pill>
-            </div>
+            </motion.div>
           </div>
 
-          <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+          <motion.div variants={rise} style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
             © 2026 Otama. Made with care in Hà Nội.
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
         {/* Right login card */}
         <div className="flex-1 flex items-center justify-center p-10">
-          <div
+          <motion.div
             className="flex flex-col gap-5"
+            initial={{ opacity: 0, y: 22, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.15 }}
             style={{
               width: 420,
               padding: 36,
               borderRadius: 22,
-              background: 'var(--color-card)',
-              boxShadow: 'var(--shadow-sheet)',
-              border: '0.5px solid var(--color-border-soft)',
+              background: 'color-mix(in srgb, var(--color-card) 76%, transparent)',
+              backdropFilter: 'blur(24px) saturate(1.4)',
+              WebkitBackdropFilter: 'blur(24px) saturate(1.4)',
+              boxShadow: 'var(--shadow-sheet), inset 0 1px 0 rgba(255,255,255,0.09)',
+              border: '1px solid color-mix(in srgb, var(--color-border) 80%, transparent)',
             }}
           >
             <div>
@@ -361,7 +419,7 @@ export function Login(props: LoginProps) {
             >
               Tài khoản nhân viên do quản trị viên (Sếp) cấp.
             </p>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>

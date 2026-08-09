@@ -259,19 +259,23 @@ export default function PicsetTab() {
   };
 
   return (
-    <main className="flex-1 max-w-7xl mx-auto w-full p-4">
+    <main className="flex-1 max-w-[1600px] mx-auto w-full py-2">
       {/* Compact header */}
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <Wand2 size={18} style={{ color: 'var(--color-accent)' }} />
-          <h1 className="text-base font-bold" style={{ color: 'var(--color-text)' }}>Picset Studio</h1>
+      <div className="flex items-end justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: 'var(--color-accent)', letterSpacing: '0.1em' }}>Creative workflow</p>
+          <div className="flex items-center gap-2">
+          <Wand2 size={22} style={{ color: 'var(--color-accent)' }} />
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)', letterSpacing: '-0.04em' }}>Picset Studio</h1>
+          </div>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>Từ ảnh sản phẩm đến blueprint và bộ ảnh thương mại hoàn chỉnh.</p>
         </div>
         {/* Mini stepper inline */}
         <Stepper step={step} isAnalyzing={isAnalyzing} isGenerating={isGenerating} allDone={allGenDone} />
       </div>
 
       {/* 2-col layout: settings always left, Live Preview right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 xl:gap-6">
         {/* Left: compact settings */}
         <div className="lg:col-span-5">
           <Step1Input

@@ -545,16 +545,17 @@ export default function RunninghubTab() {
   const elapsedSec = task ? Math.floor(task.elapsedMs / 1000) : 0;
 
   return (
-    <main className="flex-1 max-w-7xl mx-auto w-full">
+    <main className="flex-1 max-w-[1600px] mx-auto w-full py-2">
       {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <Boxes size={20} style={{ color: 'var(--color-accent)' }} />
-        <h1 className="text-xl font-bold" style={{ color: 'var(--color-text)' }}>RunningHub Studio</h1>
+      <p className="uppercase font-semibold mb-1" style={{ fontSize: 10, color: 'var(--color-accent)', letterSpacing: '0.1em' }}>External workflows</p>
+      <div className="flex items-center gap-2 mb-1">
+        <Boxes size={22} style={{ color: 'var(--color-accent)' }} />
+        <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text)', letterSpacing: '-0.04em' }}>RunningHub Studio</h1>
         <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--color-fill)', color: 'var(--color-text-tertiary)' }}>
           {WORKFLOWS.length} workflow
         </span>
       </div>
-      <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+      <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
         Chạy ComfyUI workflows trên RunningHub.ai. Yêu cầu account RunningHub có membership trả phí.
       </p>
 
@@ -575,7 +576,7 @@ export default function RunninghubTab() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_220px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_240px] gap-5">
         {/* ============== Left: input ============== */}
         <div
           className="p-5 flex flex-col gap-4"
@@ -1023,13 +1024,13 @@ export default function RunninghubTab() {
 
         {/* ============== History rail (right column) ============== */}
         <aside
-          className="p-3 flex flex-col gap-2 self-start lg:sticky lg:top-4"
+          className="p-3 flex flex-col gap-2 self-start lg:sticky lg:top-20"
           style={{
             background: 'var(--color-card)',
             border: '0.5px solid var(--color-border-soft)',
             borderRadius: 14,
             boxShadow: 'var(--shadow-card)',
-            maxHeight: 'calc(100vh - 2rem)',
+            maxHeight: 'calc(100vh - 6rem)',
             overflowY: 'auto',
             width: historyCollapsed ? 44 : undefined,
             transition: 'width 200ms ease',
@@ -1486,7 +1487,7 @@ function BeforeAfterSlider({
             <div
               className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-xs font-semibold pointer-events-none"
               style={{
-                background: 'rgba(0,122,255,0.85)',
+                background: 'color-mix(in srgb, var(--color-accent) 85%, transparent)',
                 color: '#fff',
                 backdropFilter: 'blur(8px)',
               }}
@@ -1791,7 +1792,7 @@ function VideoBeforeAfterSlider({
             </div>
             <div
               className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-xs font-semibold pointer-events-none"
-              style={{ background: 'rgba(0,122,255,0.85)', color: '#fff', backdropFilter: 'blur(8px)' }}
+              style={{ background: 'color-mix(in srgb, var(--color-accent) 85%, transparent)', color: '#fff', backdropFilter: 'blur(8px)' }}
             >
               Sau{afterMeta ? ` · ${afterMeta.w}×${afterMeta.h} · ${formatDuration(afterMeta.duration)}` : ''}
             </div>

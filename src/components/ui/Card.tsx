@@ -29,11 +29,11 @@ export function Card({
     <div
       className={className}
       style={{
-        background: 'var(--color-card)',
+        background: 'color-mix(in srgb, var(--color-card) 97%, transparent)',
         borderRadius: RADIUS_PX[radius],
         padding,
         boxShadow: raised ? 'var(--shadow-card)' : 'none',
-        border: raised ? 'none' : '0.5px solid var(--color-border-soft)',
+        border: '1px solid var(--color-border-soft)',
         ...style,
       }}
       {...rest}

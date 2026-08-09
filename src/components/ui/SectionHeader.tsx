@@ -11,7 +11,7 @@ export interface SectionHeaderProps {
 export function SectionHeader({ eyebrow, title, action, className = '', style }: SectionHeaderProps) {
   return (
     <div
-      className={`flex items-end justify-between mb-3 ${className}`}
+      className={`flex items-end justify-between gap-4 mb-4 ${className}`}
       style={style}
     >
       <div>
@@ -19,9 +19,9 @@ export function SectionHeader({ eyebrow, title, action, className = '', style }:
           <div
             className="font-semibold uppercase mb-1"
             style={{
-              fontSize: 11,
+              fontSize: 10,
               color: 'var(--color-text-tertiary)',
-              letterSpacing: '0.06em',
+              letterSpacing: '0.09em',
             }}
           >
             {eyebrow}
@@ -31,9 +31,9 @@ export function SectionHeader({ eyebrow, title, action, className = '', style }:
           <div
             className="font-semibold"
             style={{
-              fontSize: 17,
+              fontSize: 18,
               color: 'var(--color-text)',
-              letterSpacing: '-0.02em',
+              letterSpacing: '-0.035em',
             }}
           >
             {title}

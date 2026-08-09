@@ -55,6 +55,9 @@ export interface HeaderProps {
 
   // Trailing action slot (e.g. clothing toolbar buttons)
   actions?: React.ReactNode;
+
+  // Contextual tabs for the active workspace (e.g. Ecom subtabs)
+  workspaceNav?: React.ReactNode;
 }
 
 function OtamaLogo({ size = 36 }: { size?: number }) {
@@ -66,7 +69,7 @@ function OtamaLogo({ size = 36 }: { size?: number }) {
         height: size,
         borderRadius: size * 0.28,
         background: 'linear-gradient(135deg, var(--color-accent) 0%, var(--color-indigo) 100%)',
-        boxShadow: '0 2px 6px rgba(0,122,255,0.25), inset 0 0.5px 0.5px rgba(255,255,255,0.4)',
+        boxShadow: '0 2px 6px color-mix(in srgb, var(--color-accent) 25%, transparent), inset 0 0.5px 0.5px rgba(255,255,255,0.4)',
       }}
     >
       <Palette size={size * 0.55} strokeWidth={2.2} />
@@ -174,19 +177,19 @@ function HistoryButton({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      title="Lịch sử của tôi (15 ngày)"
+      title="Lịch sử của tôi (7 ngày)"
       aria-label="Lịch sử"
       className="flex items-center justify-center rounded-lg transition-colors"
       style={{
-        width: 34, height: 32,
+        width: 40, height: 36,
         background: 'var(--color-fill)',
         color: 'var(--color-text-secondary)',
-        border: 'none', cursor: 'pointer',
+        border: '1px solid var(--color-border-soft)', cursor: 'pointer',
       }}
       onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-accent)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
     >
-      <Clock size={15} strokeWidth={2} />
+      <Clock size={16} strokeWidth={1.9} />
     </button>
   );
 }
@@ -197,15 +200,15 @@ function ThemeToggle({ theme, resolvedTheme, onThemeChange }: { theme: Theme; re
   // text-on-thumb contrast is weak in light mode.
   const active = theme === 'system' ? resolvedTheme : theme;
   const cellStyle = (isOn: boolean): React.CSSProperties => ({
-    width: 32,
-    height: 28,
+    width: 36,
+    height: 32,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     background: isOn ? 'var(--color-card)' : 'transparent',
     color: isOn ? 'var(--color-text)' : 'var(--color-text-tertiary)',
     border: 'none',
-    borderRadius: 8,
+    borderRadius: 9,
     cursor: 'pointer',
     boxShadow: isOn ? '0 1px 2px rgba(0,0,0,0.08), 0 3px 8px rgba(0,0,0,0.06)' : 'none',
     transition: 'background-color 150ms, color 150ms',
@@ -214,7 +217,7 @@ function ThemeToggle({ theme, resolvedTheme, onThemeChange }: { theme: Theme; re
     <div
       role="group"
       aria-label="Theme"
-      style={{ display: 'inline-flex', padding: 2, background: 'var(--color-fill)', borderRadius: 10, gap: 2 }}
+      style={{ display: 'inline-flex', padding: 2, background: 'var(--color-fill)', border: '1px solid var(--color-border-soft)', borderRadius: 11, gap: 2 }}
     >
       <button type="button" onClick={() => onThemeChange('light')} title="Light mode" style={cellStyle(active === 'light')}>
         <Sun size={14} strokeWidth={2} />
@@ -235,6 +238,7 @@ export function Header(props: HeaderProps) {
     isAuthReady, user, onLogin, onLogout,
     onOpenHistory,
     actions,
+    workspaceNav,
   } = props;
 
   const modeOptions: SegmentedOption<AppMode>[] = [
@@ -248,13 +252,16 @@ export function Header(props: HeaderProps) {
 
   return (
     <header
-      className="w-full"
+      className="w-full sticky top-0 z-40"
       style={{
-        background: 'var(--color-bg-elevated)',
-        borderBottom: '0.5px solid var(--color-border-soft)',
+        background: 'color-mix(in srgb, var(--color-bg-elevated) 88%, transparent)',
+        backdropFilter: 'blur(20px) saturate(1.25)',
+        WebkitBackdropFilter: 'blur(20px) saturate(1.25)',
+        borderBottom: '1px solid var(--color-border-soft)',
+        boxShadow: '0 6px 24px color-mix(in srgb, var(--color-text) 4%, transparent)',
       }}
     >
-      <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-3.5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="max-w-[1800px] mx-auto px-3 md:px-5 xl:px-6 py-2.5 flex flex-col md:flex-row md:flex-wrap md:items-center md:justify-between gap-2.5">
         {/* Row 1 desktop: logo + segmented + right cluster.
             On mobile: logo + right cluster on top, segmented below */}
         <div className="flex items-center justify-between md:justify-start gap-4 md:flex-1">
@@ -262,18 +269,18 @@ export function Header(props: HeaderProps) {
 
           {/* Desktop segmented (inline) */}
           {modeOptions.length > 1 && (
-            <div className="hidden md:flex md:ml-6">
+            <nav className="hidden lg:flex lg:ml-5" aria-label="Khu vực làm việc">
               <Segmented<AppMode>
                 value={appMode}
                 onChange={onModeChange}
                 options={modeOptions}
                 size="md"
               />
-            </div>
+            </nav>
           )}
 
           {/* Mobile right cluster (compact) */}
-          <div className="flex md:hidden items-center gap-2">
+          <div className="flex lg:hidden items-center gap-2">
             {user && onOpenHistory && <HistoryButton onClick={onOpenHistory} />}
             <ThemeToggle theme={theme} resolvedTheme={resolvedTheme} onThemeChange={onThemeChange} />
             {isAuthReady && <AvatarPill user={user} onLogin={onLogin} onLogout={onLogout} />}
@@ -284,7 +291,7 @@ export function Header(props: HeaderProps) {
             would exceed viewport width — bleed to edges via -mx-4 so the scroll
             hint is visible at both sides). */}
         {modeOptions.length > 1 && (
-          <div className="md:hidden -mx-4 px-4 overflow-x-auto no-scrollbar">
+          <div className="lg:hidden -mx-4 px-4 overflow-x-auto no-scrollbar">
             <Segmented<AppMode>
               value={appMode}
               onChange={onModeChange}
@@ -294,8 +301,15 @@ export function Header(props: HeaderProps) {
           </div>
         )}
 
+
+        {workspaceNav && (
+          <div className="w-full md:basis-full md:order-3 md:max-w-[760px] md:mx-auto -mx-4 md:mx-auto px-4 md:px-0 overflow-x-auto no-scrollbar">
+            {workspaceNav}
+          </div>
+        )}
+
         {/* Desktop right cluster */}
-        <div className="hidden md:flex items-center gap-2">
+        <div className="hidden lg:flex items-center gap-2">
           {actions}
           {isAdmin && (
             <Button
@@ -316,7 +330,7 @@ export function Header(props: HeaderProps) {
 
         {/* Mobile action row (if any) */}
         {actions && (
-          <div className="flex md:hidden items-center justify-end gap-2 flex-wrap">
+          <div className="flex lg:hidden items-center justify-end gap-2 flex-wrap">
             {isAdmin && (
               <Button
                 variant="secondary"

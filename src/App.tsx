@@ -90,7 +90,7 @@ import { Button } from './components/ui';
 import { Header } from './components/Header';
 import HistoryModal from './components/HistoryModal';
 import { Login } from './components/Login';
-import { Segmented, SettingsDropdown } from './components/ui';
+import { GenerationSettingsPopover, ModelLogo, Segmented, SettingsDropdown } from './components/ui';
 import type { SettingsDropdownOption } from './components/ui';
 import { ARSelector, ModelCardPicker, PromptRow, PromptListModal } from './components/clothing';
 import { OFA_PROMPT_LIBRARY, buildOfaPrompt, type OfaPromptCategory } from './utils/ofaPromptLibrary';
@@ -129,8 +129,9 @@ interface EcomBatch {
   basePromptText?: string;
   supplementaryPrompt?: string;
   inputImage?: string | null;
+  inputImages?: string[];
   imageCount: number;
-  model: 'banana-pro' | 'banana-2' | 'gpt2';
+  model: ModelType;
   aspectRatio: string;
   imageSize: string;
   t2iMode?: boolean;               // true when batch was submitted as text-to-image (no product image)
@@ -151,11 +152,26 @@ interface EcomHistoryItem {
   promptId?: string;
   promptSource?: 'manual' | 'saved';
   inputImage?: string;
+  inputImages?: string[];
   modelKey?: ModelType;
   aspectRatio?: string;
   imageCount?: number;
   t2iMode?: boolean;
   ts: any;
+}
+
+interface EcomGenerationSettings {
+  prompt?: string;
+  supplementaryPrompt?: string;
+  promptId?: string;
+  promptSource?: 'manual' | 'saved';
+  inputImage?: string | null;
+  inputImages?: string[];
+  modelKey?: ModelType;
+  aspectRatio?: string;
+  imageSize?: string;
+  imageCount?: number;
+  t2iMode?: boolean;
 }
 
 // Error Boundary Component
@@ -317,6 +333,28 @@ const MODEL_CONFIG = {
 };
 
 type ModelType = keyof typeof MODEL_CONFIG;
+
+const MODEL_ASPECT_RATIOS: Record<ModelType, string[]> = {
+  gpt2: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '21:9', '9:21'],
+  'banana-pro': ['auto', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
+  'banana-2': ['auto', '1:1', '2:3', '3:2', '1:4', '4:1', '3:4', '4:3', '4:5', '5:4', '1:8', '8:1', '9:16', '16:9', '21:9'],
+  'seedream-4-5': ['1:1', '2:3', '3:2', '3:4', '4:3', '9:16', '16:9', '21:9'],
+};
+
+// Keep the ratio menu stable when switching models. Unsupported ratios remain
+// visible for comparison, but SettingsDropdown renders them dimmed + disabled.
+const ALL_ASPECT_RATIOS = [
+  'auto', '1:1',
+  '3:2', '2:3',
+  '4:3', '3:4',
+  '5:4', '4:5',
+  '16:9', '9:16',
+  '2:1', '1:2',
+  '3:1', '1:3',
+  '4:1', '1:4',
+  '8:1', '1:8',
+  '21:9', '9:21',
+] as const;
 
 // Resize + re-encode an image data URL so the request body fits Vercel's 4.5 MB limit.
 // Keeps aspect ratio. Default 1600px long edge / JPEG 0.85 ≈ 200-400 KB per image.
@@ -517,8 +555,8 @@ function App() {
     } catch(e) {}
     return defaultEcomPrompts;
   });
-  const [selectedEcomPromptId, setSelectedEcomPromptId] = useState<string>('e1');
-  const [ecomPromptText, setEcomPromptText] = useState<string>(defaultEcomPrompts[0].prompt);
+  const [selectedEcomPromptId, setSelectedEcomPromptId] = useState<string>('manual');
+  const [ecomPromptText, setEcomPromptText] = useState<string>('');
   const [draggedEcomPromptIndex, setDraggedEcomPromptIndex] = useState<number | null>(null);
   const [ecomSupplementaryPrompt, setEcomSupplementaryPrompt] = useState<string>('');
   // Kho prompt riêng cho tab Thay (type 'ecom-thay'), tách khỏi Gen new
@@ -541,6 +579,7 @@ function App() {
 
   const [isAddingEcomPrompt, setIsAddingEcomPrompt] = useState(false);
   const [showEcomPromptModal, setShowEcomPromptModal] = useState(false);
+  const [ecomComposerExpanded, setEcomComposerExpanded] = useState(false);
   const ecomPromptSectionRef = useRef<HTMLDivElement>(null);
   const ecomMainRef = useRef<HTMLElement>(null);
   const [ecomPromptPopupTop, setEcomPromptPopupTop] = useState(20);
@@ -585,6 +624,7 @@ function App() {
   const [enhanceModel, setEnhanceModel] = useState<'banana-pro' | 'banana-2'>('banana-2');
   const [isDetectingBoxes, setIsDetectingBoxes] = useState(false);
   const [ecomProductImage, setEcomProductImage] = useState<string | null>(null);
+  const [ecomProductImages, setEcomProductImages] = useState<string[]>([]);
   // Text-to-image mode (Gen new only) — skip product image upload, just use prompt
   const [ecomT2IMode, setEcomT2IMode] = useState<boolean>(false);
   const [ecomModel, setEcomModel] = useState<ModelType>('gpt2');
@@ -593,10 +633,16 @@ function App() {
 
   // Auto-correct ecomImageSize khi model/aspect-ratio thay đổi khiến size hiện tại không khả dụng
   useEffect(() => {
+    const supportedRatios = MODEL_ASPECT_RATIOS[ecomModel];
+    if (!supportedRatios.includes(ecomAspectRatio)) {
+      setEcomAspectRatio(supportedRatios.includes('auto') ? 'auto' : '1:1');
+      return;
+    }
     const availableSizes: string[] = ecomModel === 'gpt2'
-      ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
-        : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
-        : ['1k'])
+      ? (ecomAspectRatio === 'auto' ? ['1k']
+        : ecomAspectRatio === '5:4' || ecomAspectRatio === '4:5' ? ['1k']
+        : ecomAspectRatio === '1:1' ? ['1k', '2k']
+        : ['1k', '2k', '4k'])
       : ['1k', '2k', '4k'];
     if (!availableSizes.includes(ecomImageSize)) {
       setEcomImageSize(availableSizes[availableSizes.length - 1]);
@@ -609,6 +655,13 @@ function App() {
   // Concurrent gen-new batches — user can fire many in parallel without waiting
   const [ecomBatches, setEcomBatches] = useState<EcomBatch[]>([]);
   const [ecomHistoryItems, setEcomHistoryItems] = useState<EcomHistoryItem[]>([]);
+  const [pendingEcomHistoryDelete, setPendingEcomHistoryDelete] = useState<{
+    key: string;
+    items: EcomHistoryItem[];
+  } | null>(null);
+  const [isDeletingEcomHistory, setIsDeletingEcomHistory] = useState(false);
+  const [copiedPromptKey, setCopiedPromptKey] = useState<string | null>(null);
+  const [pendingEcomRegenerate, setPendingEcomRegenerate] = useState<EcomGenerationSettings | null>(null);
   const [selectedEcomGrid, setSelectedEcomGrid] = useState<string | null>(null);
   const [isEcomEnhancing, setIsEcomEnhancing] = useState(false);
   const [isTranslatingImages, setIsTranslatingImages] = useState(false);
@@ -618,6 +671,25 @@ function App() {
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>('gen-new');
   const [ecomTemplateImage, setEcomTemplateImage] = useState<string | null>(null);
+
+  const replaceEcomProductImages = useCallback((sources: string[]) => {
+    const next = sources.filter(Boolean).slice(0, 5);
+    setEcomProductImages(next);
+    setEcomProductImage(next[0] || null);
+    setEcomResults([]);
+  }, []);
+
+  const appendEcomProductImages = useCallback((sources: string[]) => {
+    setEcomProductImages((current) => {
+      const next = [...current, ...sources.filter(Boolean)]
+        .filter((source, index, all) => all.indexOf(source) === index)
+        .slice(0, 5);
+      setEcomProductImage(next[0] || null);
+      setEcomResults([]);
+      return next;
+    });
+  }, []);
+
   const [clonePromptType, setClonePromptType] = useState<'amazon' | 'taobao'>('amazon');
   const [cloneManualMode, setCloneManualMode] = useState(false);
 
@@ -825,13 +897,12 @@ function App() {
     if (files.length === 0) return;
 
     if (appMode === 'ecom') {
-      const file = files[0];
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        setEcomProductImage(ev.target?.result as string);
-        setEcomResults([]); // Reset results when new image is uploaded
-      };
-      reader.readAsDataURL(file);
+      void Promise.all(files.slice(0, 5).map((file) => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target?.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      }))).then(appendEcomProductImages).catch(() => setGlobalError('Không đọc được ảnh đã chọn.'));
       return;
     }
 
@@ -899,7 +970,7 @@ function App() {
       };
       reader.readAsDataURL(file);
     });
-  }, [appMode, activeTab, isReplacing, selectedIndex, tryOnModelImage, tryOnProductImage]);
+  }, [appMode, activeTab, isReplacing, selectedIndex, tryOnModelImage, tryOnProductImage, appendEcomProductImages]);
 
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
@@ -2541,8 +2612,7 @@ function App() {
     if (options?.snapshot && ecomFinalImages.length > 0) {
       setEcomLastFinalImages(ecomFinalImages);
     }
-    setEcomProductImage(dataUrl);
-    setEcomResults([]);
+    replaceEcomProductImages([dataUrl]);
     setSelectedEcomGrid(null);
     setEcomBoxes([]);
     setSelectedBoxIds([]);
@@ -2552,25 +2622,19 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const reuseEcomGeneration = (settings: {
-    prompt?: string;
-    supplementaryPrompt?: string;
-    promptId?: string;
-    promptSource?: 'manual' | 'saved';
-    inputImage?: string | null;
-    modelKey?: ModelType;
-    aspectRatio?: string;
-    imageSize?: string;
-    imageCount?: number;
-    t2iMode?: boolean;
-  }) => {
+  const reuseEcomGeneration = (
+    settings: EcomGenerationSettings,
+    options?: { silent?: boolean; scroll?: boolean },
+  ) => {
     const savedPromptStillExists = !!settings.promptId
       && ecomSavedPrompts.some((prompt) => prompt.id === settings.promptId);
 
     setAppMode('ecom');
     setEcomSubTab('gen-new');
     setEcomT2IMode(!!settings.t2iMode);
-    setEcomProductImage(settings.t2iMode ? null : (settings.inputImage || null));
+    replaceEcomProductImages(settings.t2iMode
+      ? []
+      : (settings.inputImages?.length ? settings.inputImages : (settings.inputImage ? [settings.inputImage] : [])));
     setEcomPromptText(settings.prompt || '');
     setEcomSupplementaryPrompt(settings.supplementaryPrompt || '');
     setSelectedEcomPromptId(savedPromptStillExists ? settings.promptId! : 'manual');
@@ -2578,11 +2642,60 @@ function App() {
     if (settings.aspectRatio) setEcomAspectRatio(settings.aspectRatio);
     if (settings.imageSize) setEcomImageSize(settings.imageSize);
     if (typeof settings.imageCount === 'number') setEcomImageCount(settings.imageCount);
-    setGlobalError(settings.t2iMode || settings.inputImage
-      ? 'Đã nạp lại ảnh, prompt và cài đặt của lần gen trước. Bạn có thể chỉnh sửa rồi gen tiếp.'
-      : 'Đã nạp lại prompt và cài đặt. Ảnh đầu vào của lịch sử cũ không còn dữ liệu.');
-    setTimeout(() => setGlobalError(null), 4000);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!options?.silent) {
+      setGlobalError(settings.t2iMode || settings.inputImage || settings.inputImages?.length
+        ? 'Đã nạp lại ảnh, prompt và cài đặt của lần gen trước. Bạn có thể chỉnh sửa rồi gen tiếp.'
+        : 'Đã nạp lại prompt và cài đặt. Ảnh đầu vào của lịch sử cũ không còn dữ liệu.');
+      setTimeout(() => setGlobalError(null), 4000);
+    }
+    if (options?.scroll !== false) window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const regenerateEcomGeneration = (settings: EcomGenerationSettings) => {
+    reuseEcomGeneration(settings, { silent: true, scroll: false });
+    setPendingEcomRegenerate(settings);
+  };
+
+  const copyEcomPrompt = async (prompt: string, key: string) => {
+    if (!prompt.trim()) return;
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopiedPromptKey(key);
+      window.setTimeout(() => {
+        setCopiedPromptKey((current) => current === key ? null : current);
+      }, 1600);
+    } catch {
+      setGlobalError('Không thể copy prompt. Vui lòng thử lại.');
+      window.setTimeout(() => setGlobalError(null), 3000);
+    }
+  };
+
+  const confirmDeleteEcomHistoryGroup = async () => {
+    if (!pendingEcomHistoryDelete || isDeletingEcomHistory) return;
+    const target = pendingEcomHistoryDelete;
+    setIsDeletingEcomHistory(true);
+
+    const results = await Promise.allSettled(
+      target.items.map((item) => deleteDoc(doc(db, 'history', item.id))),
+    );
+    const deletedIds = new Set(
+      target.items
+        .filter((_, index) => results[index].status === 'fulfilled')
+        .map((item) => item.id),
+    );
+    const failedItems = target.items.filter((_, index) => results[index].status === 'rejected');
+
+    if (deletedIds.size > 0) {
+      setEcomHistoryItems((current) => current.filter((item) => !deletedIds.has(item.id)));
+    }
+    if (failedItems.length === 0) {
+      setPendingEcomHistoryDelete(null);
+    } else {
+      setPendingEcomHistoryDelete({ ...target, items: failedItems });
+      setGlobalError(`Không xoá được ${failedItems.length} ảnh. Vui lòng thử lại.`);
+      window.setTimeout(() => setGlobalError(null), 3500);
+    }
+    setIsDeletingEcomHistory(false);
   };
 
   // ───────── Usage tracking (Admin analytics) ─────────
@@ -2740,7 +2853,7 @@ function App() {
   const handleEcomGenerate = async () => {
     // Text-to-image mode is gen-new only; otherwise the regular i2i product-image requirement applies.
     const t2iActive = ecomSubTab === 'gen-new' && ecomT2IMode;
-    if (!t2iActive && !ecomProductImage) return;
+    if (!t2iActive && ecomProductImages.length === 0) return;
     if (t2iActive && !ecomPromptText.trim() && !ecomSupplementaryPrompt.trim()) {
       setGlobalError("Chế độ Text-to-Image cần ít nhất 1 prompt mô tả ảnh muốn tạo.");
       return;
@@ -2758,7 +2871,8 @@ function App() {
     const isPromptManualAtSubmit = selectedEcomPromptId === 'manual';
     const selectedPromptAtSubmit = ecomSavedPrompts.find((prompt) => prompt.id === selectedEcomPromptId);
     const snapshot = {
-      productImage: t2iActive ? null : ecomProductImage,
+      productImage: t2iActive ? null : (ecomProductImages[0] || ecomProductImage),
+      productImages: t2iActive ? [] : ecomProductImages,
       t2iMode: t2iActive,
       promptText: ecomPromptText,
       supplementaryPrompt: ecomSupplementaryPrompt,
@@ -2805,6 +2919,7 @@ function App() {
         basePromptText: snapshot.promptText,
         supplementaryPrompt: snapshot.supplementaryPrompt,
         inputImage: snapshot.productImage,
+        inputImages: snapshot.productImages,
         imageCount: snapshot.imageCount,
         model: snapshot.model,
         aspectRatio: snapshot.aspectRatio,
@@ -2830,7 +2945,7 @@ function App() {
       const referenceImages = snapshot.t2iMode
         ? []
         : await prepareKieReferences([
-            ...(snapshot.productImage ? [snapshot.productImage] : []),
+            ...snapshot.productImages,
             ...(templateSource ? [templateSource] : []),
           ], kieApiKey);
       const mainBase64 = referenceImages[0]?.startsWith('data:')
@@ -2990,6 +3105,12 @@ function App() {
       }
     }
   };
+
+  useEffect(() => {
+    if (!pendingEcomRegenerate) return;
+    setPendingEcomRegenerate(null);
+    void handleEcomGenerate();
+  }, [pendingEcomRegenerate]);
 
   const handleEcomGeneratePattern = async () => {
     if (!patternSourceImage) return;
@@ -3783,8 +3904,8 @@ function App() {
 
   return (
     <div
-      className="min-h-screen flex flex-col"
-      style={{ background: 'var(--color-bg)' }}
+      className="min-h-dvh flex flex-col"
+      style={{ background: 'transparent' }}
     >
       <Header
         appMode={appMode}
@@ -3805,6 +3926,21 @@ function App() {
         user={user}
         onLogin={handleLogin}
         onLogout={handleLogout}
+        workspaceNav={appMode === 'ecom' ? (
+          <Segmented<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>
+            value={ecomSubTab}
+            onChange={setEcomSubTab}
+            size="sm"
+            fullWidth
+            options={[
+              { value: 'gen-new', label: 'Gen new' },
+              { value: 'clone-template', label: 'Clone' },
+              { value: 'pattern-replace', label: 'Pattern' },
+              { value: 'thay', label: 'Thay' },
+              { value: 'ghep-anh', label: 'Ghép ảnh' },
+            ]}
+          />
+        ) : undefined}
         actions={
           <>
             {images.length > 0 && (
@@ -3845,23 +3981,23 @@ function App() {
         }
       />
 
-      <div className="flex-1 flex flex-col p-4 md:p-8 max-w-[1800px] mx-auto w-full">
+      <div className="flex-1 flex flex-col p-3 md:p-5 xl:p-6 max-w-[1800px] mx-auto w-full">
       {appMode === 'admin' && (
-        <main className="flex-1 w-full max-w-[1800px] mx-auto py-8">
+        <main className="flex-1 w-full max-w-[1800px] mx-auto py-2">
           <AdminPanel currentUser={user} />
         </main>
       )}
 
       {appMode === 'ecom' && (
-        <main ref={ecomMainRef} className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
+        <main ref={ecomMainRef} className={`flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 xl:gap-6 relative ${ecomSubTab === 'gen-new' ? 'gen-new-workspace' : ''}`}>
           {/* Left panel: Upload and Settings — full width on gen-new, pattern-replace + clone */}
           <div className={`flex flex-col gap-6 ${
             ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-4'
-            : ecomSubTab === 'gen-new' ? 'lg:col-span-4 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1'
+            : ecomSubTab === 'gen-new' ? 'gen-new-composer-shell lg:col-span-12'
             : 'lg:col-span-12'
           }`}>
             <div
-              className="p-4"
+              className={`p-4 ${ecomSubTab === 'gen-new' ? `gen-new-composer ${ecomComposerExpanded ? 'is-expanded' : ''}` : ''}`}
               style={{
                 background: 'var(--color-card)',
                 border: '0.5px solid var(--color-border-soft)',
@@ -3869,22 +4005,6 @@ function App() {
                 boxShadow: 'var(--shadow-card)',
               }}
             >
-              <div className="mb-4">
-                <Segmented<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>
-                  value={ecomSubTab}
-                  onChange={(v) => setEcomSubTab(v)}
-                  size="md"
-                  fullWidth
-                  options={[
-                    { value: 'gen-new', label: 'Gen new' },
-                    { value: 'clone-template', label: 'Clone' },
-                    { value: 'pattern-replace', label: 'Pattern' },
-                    { value: 'thay', label: 'Thay' },
-                    { value: 'ghep-anh', label: 'Ghép ảnh' },
-                  ]}
-                />
-              </div>
-
               {ecomSubTab === 'clone-template' ? (
                 <div className="flex flex-col gap-6">
                   {/* Title bar */}
@@ -3987,7 +4107,7 @@ function App() {
                         </p>
                       </div>
                       <div
-                        {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
+                        {...makeDropHandlers('ecom-product', (source) => replaceEcomProductImages([source]))}
                         className="w-full aspect-square flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
                         style={{
                           background: dragOverId === 'ecom-product' ? 'var(--color-accent-soft)' : 'var(--color-card)',
@@ -4149,13 +4269,8 @@ function App() {
                   {/* Settings — compact one-row dropdowns */}
                   <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     {(() => {
-                      const modelBadgeMap: Record<string, { text: string; tone: 'accent' | 'neutral' }> = {
-                        'banana-pro': { text: 'BEST', tone: 'accent' },
-                        'gpt2': { text: 'FAST', tone: 'neutral' },
-                        'banana-2': { text: 'STD', tone: 'neutral' },
-                      };
                       const modelOpts: SettingsDropdownOption<ModelType>[] = (Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
-                        value: m, label: MODEL_CONFIG[m].name, badge: modelBadgeMap[m],
+                        value: m, label: MODEL_CONFIG[m].name, icon: <ModelLogo model={m} />,
                       }));
                       const availableSizes: string[] = ecomModel === 'gpt2'
                         ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
@@ -4577,8 +4692,8 @@ function App() {
                   <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     {(() => {
                       const modelOpts: SettingsDropdownOption<'gpt2' | 'banana-pro'>[] = [
-                        { value: 'banana-pro', label: MODEL_CONFIG['banana-pro'].name, badge: { text: 'BEST', tone: 'accent' } },
-                        { value: 'gpt2', label: MODEL_CONFIG['gpt2'].name, badge: { text: 'FAST', tone: 'neutral' } },
+                        { value: 'banana-pro', label: MODEL_CONFIG['banana-pro'].name, icon: <ModelLogo model="banana-pro" /> },
+                        { value: 'gpt2', label: MODEL_CONFIG['gpt2'].name, icon: <ModelLogo model="gpt2" /> },
                       ];
                       const arOpts: SettingsDropdownOption<string>[] = ['1:1', '3:4', '4:3', '9:16', '16:9'].map((a) => ({ value: a, label: a }));
                       const sizeOpts: SettingsDropdownOption<string>[] = ['1k', '2k', '4k'].map((s) => ({ value: s, label: s.toUpperCase() }));
@@ -4643,65 +4758,78 @@ function App() {
                   )}
                 </div>
               ) : (
-                <div className="flex flex-col gap-3">
+                <div className="gen-new-composer-content flex flex-col gap-3">
                 {/* Settings — compact one-row dropdowns (per design handoff) */}
-                <div className="flex items-center justify-between gap-2">
+                <div className="gen-new-toolbar flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
                     <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Cài đặt</p>
                   </div>
                   {ecomSubTab === 'gen-new' && (
-                    <button
-                      type="button"
-                      onClick={() => setEcomT2IMode((v) => !v)}
-                      className="flex items-center gap-2 px-2.5 py-1 rounded-full transition-all"
-                      style={{
-                        background: ecomT2IMode ? 'var(--color-accent-soft)' : 'var(--color-fill)',
-                        border: ecomT2IMode ? '1px solid var(--color-accent)' : '1px solid transparent',
-                        color: ecomT2IMode ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
-                        fontSize: 10,
-                        fontWeight: 600,
-                        letterSpacing: '0.04em',
-                      }}
-                      title={ecomT2IMode ? 'Tắt chế độ Text-to-Image (cần ảnh sản phẩm)' : 'Bật chế độ Text-to-Image (chỉ cần prompt, không cần ảnh)'}
-                    >
-                      <span
-                        className="inline-block rounded-full transition-all"
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEcomT2IMode((v) => !v)}
+                        className="flex items-center gap-2 px-2.5 py-1 rounded-full transition-all"
                         style={{
-                          width: 7,
-                          height: 7,
-                          background: ecomT2IMode ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                          background: ecomT2IMode ? 'var(--color-accent-soft)' : 'var(--color-fill)',
+                          border: ecomT2IMode ? '1px solid var(--color-accent)' : '1px solid transparent',
+                          color: ecomT2IMode ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                          fontSize: 10,
+                          fontWeight: 600,
+                          letterSpacing: '0.04em',
                         }}
-                      />
-                      TEXT‑TO‑IMAGE
-                    </button>
+                        title={ecomT2IMode ? 'Tắt chế độ Text-to-Image (cần ảnh sản phẩm)' : 'Bật chế độ Text-to-Image (chỉ cần prompt, không cần ảnh)'}
+                      >
+                        <span
+                          className="inline-block rounded-full transition-all"
+                          style={{
+                            width: 7,
+                            height: 7,
+                            background: ecomT2IMode ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+                          }}
+                        />
+                        TEXT‑TO‑IMAGE
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEcomComposerExpanded((value) => !value)}
+                        className="gen-new-expand flex items-center gap-1 px-2.5 py-1 rounded-full transition-colors"
+                        title={ecomComposerExpanded ? 'Thu gọn thanh tạo ảnh' : 'Mở prompt đã lưu và cài đặt nâng cao'}
+                      >
+                        {ecomComposerExpanded ? 'Thu gọn' : 'Mở rộng'}
+                        <ChevronRight size={12} style={{ transform: ecomComposerExpanded ? 'rotate(90deg)' : 'none' }} />
+                      </button>
+                    </div>
                   )}
                 </div>
-                <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
+                <div className="gen-new-settings p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                   {(() => {
-                    const modelBadgeMap: Record<string, { text: string; tone: 'accent' | 'neutral' }> = {
-                      'banana-pro': { text: 'BEST', tone: 'accent' },
-                      'gpt2': { text: 'FAST', tone: 'neutral' },
-                      'banana-2': { text: 'STD', tone: 'neutral' },
-                    };
+                    const promptOptions: SettingsDropdownOption<string>[] = [
+                      { value: 'manual', label: 'Prompt thủ công' },
+                      ...ecomSavedPrompts.map((prompt) => ({ value: prompt.id, label: prompt.name })),
+                    ];
                     const modelOptions: SettingsDropdownOption<ModelType>[] = (Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
                       value: m,
                       label: MODEL_CONFIG[m].name,
-                      badge: modelBadgeMap[m],
+                      icon: <ModelLogo model={m} />,
                     }));
                     const availableSizes: string[] = ecomModel === 'gpt2'
-                      ? (ecomAspectRatio === '1:1' ? ['1k', '2k']
-                        : ecomAspectRatio === '9:16' ? ['1k', '2k', '4k']
-                        : ['1k'])
+                      ? (ecomAspectRatio === 'auto' ? ['1k']
+                        : ecomAspectRatio === '5:4' || ecomAspectRatio === '4:5' ? ['1k']
+                        : ecomAspectRatio === '1:1' ? ['1k', '2k']
+                        : ['1k', '2k', '4k'])
                       : ['1k', '2k', '4k'];
                     const sizeOptions: SettingsDropdownOption<string>[] = ['1k', '2k', '4k'].map((s) => ({
                       value: s,
                       label: s.toUpperCase(),
                       disabled: !availableSizes.includes(s),
                     }));
-                    const arOptions: SettingsDropdownOption<string>[] = ['1:1', '3:4', '4:3', '9:16', '16:9'].map((a) => ({
+                    const supportedAspectRatios = MODEL_ASPECT_RATIOS[ecomModel];
+                    const arOptions: SettingsDropdownOption<string>[] = ALL_ASPECT_RATIOS.map((a) => ({
                       value: a,
-                      label: a,
+                      label: a === 'auto' ? 'Tự động' : a,
+                      disabled: !supportedAspectRatios.includes(a),
                     }));
                     const countOptions: SettingsDropdownOption<number>[] = [1, 2, 3].map((c) => ({
                       value: c,
@@ -4709,36 +4837,64 @@ function App() {
                     }));
                     return (
                       <>
+                        <SettingsDropdown<string>
+                          value={selectedEcomPromptId}
+                          onChange={(promptId) => {
+                            setSelectedEcomPromptId(promptId);
+                            if (promptId === 'manual') return;
+                            const selectedPrompt = ecomSavedPrompts.find((prompt) => prompt.id === promptId);
+                            if (selectedPrompt) setEcomPromptText(selectedPrompt.prompt);
+                          }}
+                          options={promptOptions}
+                          width="fill"
+                          placement="top"
+                        />
                         <SettingsDropdown<ModelType>
                           value={ecomModel}
                           onChange={(v) => setEcomModel(v)}
                           options={modelOptions}
                           width="fill"
+                          placement="top"
                         />
-                        <SettingsDropdown<string>
-                          value={ecomAspectRatio}
-                          onChange={(v) => setEcomAspectRatio(v)}
-                          options={arOptions}
-                        />
-                        <SettingsDropdown<string>
-                          value={ecomImageSize}
-                          onChange={(v) => setEcomImageSize(v)}
-                          options={sizeOptions}
-                        />
-                        <SettingsDropdown<number>
-                          value={ecomImageCount}
-                          onChange={(v) => setEcomImageCount(v)}
-                          options={countOptions}
+                        <GenerationSettingsPopover
+                          aspectRatio={ecomAspectRatio}
+                          aspectRatios={arOptions}
+                          onAspectRatioChange={setEcomAspectRatio}
+                          imageSize={ecomImageSize}
+                          imageSizes={sizeOptions}
+                          onImageSizeChange={setEcomImageSize}
+                          imageCount={ecomImageCount}
+                          imageCounts={countOptions}
+                          onImageCountChange={setEcomImageCount}
+                          placement="top"
                         />
                       </>
                     );
                   })()}
+                  {(() => {
+                    const runningBatches = ecomBatches.filter((batch) => batch.status === 'running').length;
+                    const t2iReady = ecomT2IMode && Boolean(ecomPromptText.trim() || ecomSupplementaryPrompt.trim());
+                    const i2iReady = !ecomT2IMode && ecomProductImages.length > 0;
+                    const ready = t2iReady || i2iReady;
+                    return (
+                      <button
+                        type="button"
+                        onClick={handleEcomGenerate}
+                        disabled={!ready}
+                        className="gen-new-submit shrink-0 inline-flex items-center justify-center rounded-xl transition-all disabled:opacity-35 disabled:cursor-not-allowed"
+                        aria-label={runningBatches > 0 ? `Gen thêm batch, đang chạy ${runningBatches}` : 'Bắt đầu tạo ảnh'}
+                        title={runningBatches > 0 ? `Gen thêm batch · đang chạy ${runningBatches}` : ecomT2IMode ? 'Gen ảnh từ prompt' : 'Gen ảnh TMĐT'}
+                      >
+                        {runningBatches > 0 ? <span className="text-xs font-bold">+{runningBatches}</span> : <Sparkles size={18} />}
+                      </button>
+                    );
+                  })()}
                 </div>
 
-                <div className="grid grid-cols-1 gap-3">
+                <div className="gen-new-input-grid grid grid-cols-1 gap-3">
                   {/* Col 1 — Ảnh sản phẩm (hidden in T2I mode) */}
                   {!ecomT2IMode && (
-                    <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
+                    <div className="gen-new-reference-card p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                       <div className="mb-2 flex items-center gap-2">
                         <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
                         <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
@@ -4746,37 +4902,88 @@ function App() {
                         </p>
                       </div>
                       <div
-                        {...makeDropHandlers('ecom-product', (s) => { setEcomProductImage(s); setEcomResults([]); })}
-                        className="w-full aspect-[4/3] flex items-center justify-center cursor-pointer overflow-hidden transition-colors relative group"
+                        className="gen-new-reference-drop w-full flex items-center transition-colors relative"
                         style={{
-                          background: dragOverId === 'ecom-product' ? 'var(--color-accent-soft)' : 'var(--color-card)',
-                          border: `2px dashed ${dragOverId === 'ecom-product' || ecomProductImage ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                          background: dragOverId === 'ecom-product-stack' ? 'var(--color-accent-soft)' : 'var(--color-card)',
+                          border: `1px solid ${dragOverId === 'ecom-product-stack' || ecomProductImages.length > 0 ? 'var(--color-accent-muted)' : 'var(--color-border)'}`,
                           borderRadius: 12,
                         }}
-                        onClick={() => {
-                          setPasteTargetId('ecom-product');
-                          if (ecomFileInputRef.current) ecomFileInputRef.current.click();
+                        onDragEnter={(event) => { event.preventDefault(); event.stopPropagation(); setDragOverId('ecom-product-stack'); }}
+                        onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); }}
+                        onDragLeave={(event) => { event.preventDefault(); event.stopPropagation(); setDragOverId(null); }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setDragOverId(null);
+                          processFiles(Array.from(event.dataTransfer.files || []));
                         }}
                       >
-                        {ecomProductImage ? (
-                          <>
-                            <img src={ecomProductImage} alt="Product" className="w-full h-full object-contain" />
-                            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}>
-                              <span className="text-white font-bold text-xs">Thay đổi ảnh sản phẩm</span>
+                        <div className="gen-new-reference-stack relative w-full h-full group/stack">
+                          {ecomProductImages.map((source, index) => (
+                            <div
+                              key={`${source.slice(0, 40)}-${index}`}
+                              className={`gen-new-stack-item absolute ${index === 0 ? 'is-primary' : ''}`}
+                              style={{
+                                '--stack-index': index,
+                                '--stack-spread': `${index * 52}px`,
+                                '--stack-tilt': `${index % 2 === 0 ? -5 + index * 2 : 4 - index}px`,
+                                zIndex: index + 1,
+                              } as React.CSSProperties}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setZoomImage(source)}
+                                className="w-full h-full overflow-hidden rounded-md"
+                                title={`Xem ảnh tham chiếu ${index + 1}`}
+                              >
+                                <img src={source} alt={`Ảnh tham chiếu ${index + 1}`} className="w-full h-full object-cover" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => replaceEcomProductImages(ecomProductImages.filter((_, imageIndex) => imageIndex !== index))}
+                                className="gen-new-stack-remove absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-white bg-black/70"
+                                title="Xoá ảnh"
+                                aria-label={`Xoá ảnh tham chiếu ${index + 1}`}
+                              >
+                                <X size={11} />
+                              </button>
                             </div>
-                          </>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2" style={{ color: 'var(--color-text-tertiary)' }}>
-                            <Upload size={32} />
-                            <span style={{ fontSize: 13, fontWeight: 500 }}>Click, kéo thả hoặc Ctrl+V ảnh sản phẩm</span>
-                          </div>
-                        )}
+                          ))}
+                          {ecomProductImages.length < 5 && (
+                            <button
+                              type="button"
+                              onClick={() => ecomFileInputRef.current?.click()}
+                              className={`gen-new-stack-item gen-new-stack-add absolute flex items-center justify-center ${ecomProductImages.length > 0 ? 'is-compact' : ''}`}
+                              style={{
+                                '--stack-index': ecomProductImages.length,
+                                '--stack-spread': ecomProductImages.length > 0
+                                  ? `${Math.max(0, ecomProductImages.length - 1) * 52}px`
+                                  : '0px',
+                                '--stack-tilt': '4deg',
+                                zIndex: ecomProductImages.length + 1,
+                              } as React.CSSProperties}
+                              title="Thêm ảnh tham chiếu"
+                              aria-label="Thêm ảnh tham chiếu"
+                            >
+                              <Plus size={ecomProductImages.length > 0 ? 15 : 18} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
 
                   {/* Col 2 — Prompt */}
-                  <div className="p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
+                  <div className="gen-new-prompt-card p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
+                    <textarea
+                      value={ecomPromptText}
+                      onChange={(event) => {
+                        setEcomPromptText(event.target.value);
+                        if (selectedEcomPromptId !== 'manual') setSelectedEcomPromptId('manual');
+                      }}
+                      placeholder="Kết hợp ảnh tham chiếu và mô tả điều bạn muốn tạo…"
+                      className="gen-new-compact-prompt w-full resize-none outline-none"
+                    />
                     <div className="mb-2 flex items-center gap-2">
                       <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>2</span>
                       <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
@@ -5065,16 +5272,11 @@ function App() {
                 ref={ecomFileInputRef} 
                 className="hidden" 
                 accept="image/png, image/jpeg, image/webp" 
+                multiple
                 onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const r = new FileReader();
-                    r.onload = (ev) => {
-                      setEcomProductImage(ev.target?.result as string);
-                      setEcomResults([]);
-                    };
-                    r.readAsDataURL(file);
-                  }
+                  const files = Array.from(e.target.files || []).slice(0, 5 - ecomProductImages.length);
+                  if (files.length > 0) processFiles(files);
+                  e.currentTarget.value = '';
                 }}
               />
               <input
@@ -5152,13 +5354,13 @@ function App() {
                   </div>
                 )}
 
-                <div className="pt-2 space-y-3">
+                <div className="gen-new-legacy-generate pt-2 space-y-3">
                   {(() => {
                     const runningBatches = ecomBatches.filter(b => b.status === 'running').length;
                     if (ecomSubTab === 'gen-new') {
                       // In T2I mode: enabled if prompt non-empty. In i2i: enabled if image uploaded.
                       const t2iReady = ecomT2IMode && (ecomPromptText.trim() || ecomSupplementaryPrompt.trim());
-                      const i2iReady = !ecomT2IMode && !!ecomProductImage;
+                      const i2iReady = !ecomT2IMode && ecomProductImages.length > 0;
                       return (
                         <Button
                           variant="filled"
@@ -5201,10 +5403,11 @@ function App() {
           {/* Right panel: Results — hidden on pattern-replace; side-by-side 5-col on gen-new; full-width below on clone */}
           <div className={`flex-col gap-4 ${
             ecomSubTab === 'pattern-replace' ? 'hidden'
-            : ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' || ecomSubTab === 'gen-new' ? 'lg:col-span-8 flex'
+            : ecomSubTab === 'gen-new' ? 'gen-new-canvas-shell lg:col-span-12 flex'
+            : ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-8 flex'
             : 'lg:col-span-12 flex'
           }`}>
-            <div className="glass-panel p-6 min-h-[500px] flex flex-col justify-center">
+            <div className={`glass-panel p-6 min-h-[500px] flex flex-col justify-center ${ecomSubTab === 'gen-new' ? 'gen-new-canvas' : ''}`}>
               {ecomSubTab === 'gen-new' && ecomLastFinalImages.length > 0 && (
                 <div className="mb-4 pb-4 border-b border-editor-border/50">
                   <div className="flex items-center justify-between mb-3">
@@ -6158,6 +6361,19 @@ function App() {
                   <div className="flex flex-col gap-5 w-full">
                     {ecomBatches.map((batch) => {
                       const elapsed = ((batch.finishedAt || Date.now()) - batch.startedAt) / 1000;
+                      const batchSettings: EcomGenerationSettings = {
+                        prompt: batch.basePromptText || batch.promptText,
+                        supplementaryPrompt: batch.supplementaryPrompt,
+                        promptId: batch.promptId,
+                        promptSource: batch.promptSource,
+                        inputImage: batch.inputImage,
+                        inputImages: batch.inputImages,
+                        modelKey: batch.model,
+                        aspectRatio: batch.aspectRatio,
+                        imageSize: batch.imageSize,
+                        imageCount: batch.imageCount,
+                        t2iMode: batch.t2iMode,
+                      };
                       return (
                         <div
                           key={batch.id}
@@ -6170,7 +6386,7 @@ function App() {
                           {/* Batch header */}
                           <div className="flex items-start gap-2">
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex flex-wrap items-center gap-2 mb-1">
                                 {batch.status === 'running' && (
                                   <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase" style={{ background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)', color: 'var(--color-accent)' }}>
                                     <Loader2 size={10} className="animate-spin" />
@@ -6197,42 +6413,62 @@ function App() {
                                 <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--color-text-tertiary)', letterSpacing: '0.04em' }}>
                                   {batch.model} • {batch.aspectRatio} • {batch.imageSize.toUpperCase()} • {batch.imageCount} ảnh
                                 </span>
+                                {batch.status === 'done' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => reuseEcomGeneration(batchSettings)}
+                                      className="px-2 py-1 rounded-lg inline-flex items-center gap-1 text-[10px] font-semibold"
+                                      style={{ background: 'var(--color-fill)', color: 'var(--color-accent)' }}
+                                      title="Nạp lại ảnh, prompt và cài đặt để chỉnh sửa"
+                                    >
+                                      <RotateCcw size={10} /> Sử dụng lại
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => regenerateEcomGeneration(batchSettings)}
+                                      className="px-2 py-1 rounded-lg inline-flex items-center gap-1 text-[10px] font-semibold"
+                                      style={{ background: 'var(--color-accent-soft)', color: 'var(--color-accent)' }}
+                                      title="Tạo ngay một batch mới với toàn bộ cài đặt cũ"
+                                    >
+                                      <Sparkles size={10} /> Gen lại
+                                    </button>
+                                  </>
+                                )}
                               </div>
-                              {batch.promptSource === 'saved' ? (
-                                <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                  <Save size={11} style={{ color: 'var(--color-text-tertiary)' }} />
-                                  <span style={{ color: 'var(--color-text-tertiary)' }}>Prompt mẫu:</span>
-                                  <span className="font-semibold">{batch.promptLabel || '(không tên)'}</span>
-                                </p>
-                              ) : (
-                                <p className="text-xs line-clamp-2" style={{ color: 'var(--color-text-secondary)' }} title={batch.promptText}>
+                              <div className="flex items-start gap-2">
+                                {batch.promptSource === 'saved' && (
+                                  <Save
+                                    size={11}
+                                    className="mt-0.5 shrink-0"
+                                    style={{ color: 'var(--color-text-tertiary)' }}
+                                    aria-label={`Prompt đã lưu: ${batch.promptLabel || '(không tên)'}`}
+                                  />
+                                )}
+                                <p
+                                  className="flex-1 min-w-0 text-xs whitespace-pre-wrap"
+                                  style={{ color: 'var(--color-text-secondary)' }}
+                                  title={batch.promptText}
+                                >
                                   {batch.promptText}
+                                  <button
+                                    type="button"
+                                    onClick={() => void copyEcomPrompt(batch.promptText, `batch-${batch.id}`)}
+                                    className="inline-flex items-center justify-center ml-1 p-1 rounded-md transition-colors"
+                                    style={{
+                                      verticalAlign: 'middle',
+                                      color: copiedPromptKey === `batch-${batch.id}` ? 'var(--color-success)' : 'var(--color-text-tertiary)',
+                                      background: 'var(--color-fill)',
+                                    }}
+                                    title="Copy prompt"
+                                    aria-label="Copy prompt của batch"
+                                  >
+                                    {copiedPromptKey === `batch-${batch.id}` ? <Check size={12} /> : <Copy size={12} />}
+                                  </button>
                                 </p>
-                              )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              {batch.status === 'done' && (
-                                <button
-                                  type="button"
-                                  onClick={() => reuseEcomGeneration({
-                                    prompt: batch.basePromptText || batch.promptText,
-                                    supplementaryPrompt: batch.supplementaryPrompt,
-                                    promptId: batch.promptId,
-                                    promptSource: batch.promptSource,
-                                    inputImage: batch.inputImage,
-                                    modelKey: batch.model,
-                                    aspectRatio: batch.aspectRatio,
-                                    imageSize: batch.imageSize,
-                                    imageCount: batch.imageCount,
-                                    t2iMode: batch.t2iMode,
-                                  })}
-                                  className="px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px] font-semibold"
-                                  style={{ background: 'var(--color-fill)', color: 'var(--color-accent)' }}
-                                  title="Nạp lại ảnh, prompt và cài đặt"
-                                >
-                                  <RotateCcw size={11} /> Sử dụng lại
-                                </button>
-                              )}
                               <button
                                 type="button"
                                 onClick={() => setEcomBatches((prev) => prev.filter(b => b.id !== batch.id))}
@@ -6333,6 +6569,14 @@ function App() {
                       const visibleHistory = ecomHistoryItems.filter((item) => !currentResultUrls.has(item.url));
                       if (visibleHistory.length === 0) return null;
 
+                      const historyGroups = visibleHistory.reduce<Array<{ key: string; items: EcomHistoryItem[] }>>((groups, item) => {
+                        const key = item.batchId || item.id;
+                        const existing = groups.find((group) => group.key === key);
+                        if (existing) existing.items.push(item);
+                        else groups.push({ key, items: [item] });
+                        return groups;
+                      }, []);
+
                       return (
                         <section
                           className="rounded-2xl p-4"
@@ -6360,62 +6604,140 @@ function App() {
                               Xem tất cả
                             </button>
                           </div>
-                          <div className="grid grid-cols-3 gap-3 items-start">
-                            {visibleHistory.map((item, index) => (
-                              <div
-                                key={item.id}
-                                className="relative group overflow-hidden"
-                                style={{ borderRadius: 14, background: 'var(--color-card)' }}
-                              >
-                                <img src={item.url} alt={`Lịch sử Gen New ${index + 1}`} className="block w-full h-auto" />
+                          <div className="flex flex-col gap-4">
+                            {historyGroups.map((historyGroup) => {
+                              const representative = historyGroup.items[0];
+                              const historyPrompt = representative.supplementaryPrompt?.trim()
+                                ? `${representative.prompt || ''}\n\n[YÊU CẦU BỔ SUNG — ƯU TIÊN CAO]:\n${representative.supplementaryPrompt.trim()}`
+                                : (representative.prompt || '');
+                              const copyKey = `history-${historyGroup.key}`;
+                              const historySettings: EcomGenerationSettings = {
+                                prompt: representative.prompt,
+                                supplementaryPrompt: representative.supplementaryPrompt,
+                                promptId: representative.promptId,
+                                promptSource: representative.promptSource,
+                                inputImage: representative.inputImage,
+                                inputImages: representative.inputImages,
+                                modelKey: representative.modelKey,
+                                aspectRatio: representative.aspectRatio,
+                                imageSize: representative.size,
+                                imageCount: representative.imageCount,
+                                t2iMode: representative.t2iMode,
+                              };
+                              const canRegenerate = Boolean(
+                                representative.t2iMode
+                                || representative.inputImage
+                                || representative.inputImages?.length,
+                              );
+
+                              return (
                                 <div
-                                  className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-semibold uppercase"
-                                  style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', backdropFilter: 'blur(6px)' }}
+                                  key={historyGroup.key}
+                                  className="relative p-3 pr-12 rounded-xl"
+                                  style={{ background: 'var(--color-card)', border: '1px solid var(--color-border-soft)' }}
                                 >
-                                  {item.model || 'Gen New'}{item.size ? ` · ${item.size.toUpperCase()}` : ''}
+                                  <button
+                                    type="button"
+                                    onClick={() => setPendingEcomHistoryDelete({
+                                      key: historyGroup.key,
+                                      items: historyGroup.items,
+                                    })}
+                                    className="absolute top-3 right-3 p-2 rounded-lg transition-colors"
+                                    style={{ color: 'var(--color-text-tertiary)', background: 'var(--color-fill)' }}
+                                    title="Xoá lần gen này khỏi lịch sử"
+                                    aria-label="Xoá lần gen khỏi lịch sử"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                  <div className="flex items-start gap-3 mb-3">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                                        <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--color-text-tertiary)', letterSpacing: '0.04em' }}>
+                                          {representative.model || 'Gen New'}{representative.aspectRatio ? ` • ${representative.aspectRatio}` : ''}{representative.size ? ` • ${representative.size.toUpperCase()}` : ''}{` • ${historyGroup.items.length} ảnh`}
+                                        </p>
+                                        <button
+                                          type="button"
+                                          onClick={() => reuseEcomGeneration(historySettings)}
+                                          className="px-2 py-1 rounded-lg inline-flex items-center gap-1 text-[10px] font-semibold"
+                                          style={{ background: 'var(--color-fill)', color: 'var(--color-accent)' }}
+                                          title="Nạp lại ảnh, prompt và cài đặt để chỉnh sửa"
+                                        >
+                                          <RotateCcw size={10} /> Sử dụng lại
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => regenerateEcomGeneration(historySettings)}
+                                          disabled={!canRegenerate}
+                                          className="px-2 py-1 rounded-lg inline-flex items-center gap-1 text-[10px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                                          style={{ background: 'var(--color-accent-soft)', color: 'var(--color-accent)' }}
+                                          title={canRegenerate
+                                            ? 'Tạo ngay một batch mới với toàn bộ cài đặt cũ'
+                                            : 'Lịch sử cũ này không còn lưu ảnh đầu vào để gen lại'}
+                                        >
+                                          <Sparkles size={10} /> Gen lại
+                                        </button>
+                                      </div>
+                                      {historyPrompt && (
+                                        <p
+                                          className="text-xs whitespace-pre-wrap"
+                                          style={{ color: 'var(--color-text-secondary)' }}
+                                          title={historyPrompt}
+                                        >
+                                          {historyPrompt}
+                                          <button
+                                            type="button"
+                                            onClick={() => void copyEcomPrompt(historyPrompt, copyKey)}
+                                            className="inline-flex items-center justify-center ml-1 p-1 rounded-md transition-colors"
+                                            style={{
+                                              verticalAlign: 'middle',
+                                              color: copiedPromptKey === copyKey ? 'var(--color-success)' : 'var(--color-text-tertiary)',
+                                              background: 'var(--color-fill)',
+                                            }}
+                                            title="Copy prompt"
+                                            aria-label="Copy prompt của lần gen"
+                                          >
+                                            {copiedPromptKey === copyKey ? <Check size={13} /> : <Copy size={13} />}
+                                          </button>
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-3 gap-3 items-start">
+                                    {historyGroup.items.map((item, index) => (
+                                      <div
+                                        key={item.id}
+                                        className="relative group overflow-hidden"
+                                        style={{ borderRadius: 14, background: 'var(--color-card-secondary)' }}
+                                      >
+                                        <img src={item.url} alt={`Lịch sử Gen New ${index + 1}`} className="block w-full h-auto" />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                          <button
+                                            onClick={() => setZoomImage(item.url)}
+                                            className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition"
+                                            title="Phóng to"
+                                          >
+                                            <ZoomIn size={16} />
+                                          </button>
+                                          <button
+                                            onClick={() => useEcomImageAsInput(item.url)}
+                                            className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
+                                          >
+                                            <Copy size={12} /> Dùng làm Mẫu
+                                          </button>
+                                          <button
+                                            onClick={() => handleImageDownload(item.url, `ecom-history-${item.id}.png`)}
+                                            className="px-3 py-1.5 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
+                                          >
+                                            <Download size={12} /> Tải
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
                                 </div>
-                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                                  <button
-                                    onClick={() => setZoomImage(item.url)}
-                                    className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition"
-                                    title="Phóng to"
-                                  >
-                                    <ZoomIn size={16} />
-                                  </button>
-                                  {item.prompt && (
-                                    <button
-                                      onClick={() => reuseEcomGeneration({
-                                        prompt: item.prompt,
-                                        supplementaryPrompt: item.supplementaryPrompt,
-                                        promptId: item.promptId,
-                                        promptSource: item.promptSource,
-                                        inputImage: item.inputImage,
-                                        modelKey: item.modelKey,
-                                        aspectRatio: item.aspectRatio,
-                                        imageSize: item.size,
-                                        imageCount: item.imageCount,
-                                        t2iMode: item.t2iMode,
-                                      })}
-                                      className="px-3 py-1.5 bg-white text-black font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
-                                    >
-                                      <RotateCcw size={12} /> Sử dụng lại
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => useEcomImageAsInput(item.url)}
-                                    className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
-                                  >
-                                    <Copy size={12} /> Dùng làm Mẫu
-                                  </button>
-                                  <button
-                                    onClick={() => handleImageDownload(item.url, `ecom-history-${item.id}.png`)}
-                                    className="px-3 py-1.5 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
-                                  >
-                                    <Download size={12} /> Tải
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </section>
                       );
@@ -6507,7 +6829,7 @@ function App() {
       )}
 
       {appMode === 'ofa' && (
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 xl:gap-6">
           {/* Left panel: settings */}
           <div className="lg:col-span-5 flex flex-col gap-6">
             <div
@@ -6679,8 +7001,8 @@ function App() {
               <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                 {(() => {
                   const modelOpts: SettingsDropdownOption<'gpt2' | 'banana-pro'>[] = [
-                    { value: 'banana-pro', label: 'Banana Pro', badge: { text: 'BEST', tone: 'accent' } },
-                    { value: 'gpt2', label: 'GPT2', badge: { text: 'FAST', tone: 'neutral' } },
+                    { value: 'banana-pro', label: 'Banana Pro', icon: <ModelLogo model="banana-pro" /> },
+                    { value: 'gpt2', label: 'GPT2', icon: <ModelLogo model="gpt2" /> },
                   ];
                   const arOpts: SettingsDropdownOption<string>[] = ['1:1', '3:4', '4:3', '9:16', '16:9'].map((a) => ({ value: a, label: a }));
                   const sizeOpts: SettingsDropdownOption<string>[] = ['1k', '2k', '4k'].map((s) => ({ value: s, label: s.toUpperCase() }));
@@ -6933,7 +7255,7 @@ function App() {
             />
           </div>
 
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <main className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-5 xl:gap-6">
         {activeTab === 'generate' && (
           <>
             {/* Preview Area */}
@@ -8524,19 +8846,19 @@ function App() {
       )}
 
       {/* Footer Info */}
-      <footer className="mt-8 pt-4 border-t border-editor-border flex flex-col md:flex-row justify-between items-center gap-4">
+      <footer className="mt-8 py-4 border-t flex flex-col md:flex-row justify-between items-center gap-3" style={{ borderColor: 'var(--color-border-soft)', color: 'var(--color-text-tertiary)' }}>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <CheckCircle2 size={14} className="text-editor-accent" />
-            <span className="text-[10px] text-gray-500 uppercase tracking-widest">{MODEL_CONFIG[selectedModel].name} Active</span>
+            <span className="text-[10px] uppercase tracking-widest">{MODEL_CONFIG[selectedModel].name} Active</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Layers size={14} className="text-editor-accent" />
-            <span className="text-[10px] text-gray-500 uppercase tracking-widest">Batch Editing (Max 5)</span>
+            <span className="text-[10px] uppercase tracking-widest">Batch Editing (Max 5)</span>
           </div>
         </div>
-        <div className="text-[10px] text-gray-600">
-          © 2026 Professional Photo Editor AI
+        <div className="text-[10px] uppercase tracking-[0.12em]">
+          © 2026 Otama Creative Studio
         </div>
       </footer>
       <HistoryModal
@@ -8545,6 +8867,73 @@ function App() {
         userId={user?.uid || null}
         onZoom={(url) => setZoomImage(url)}
       />
+
+      {/* Confirm deleting one complete Gen New history batch. */}
+      <AnimatePresence>
+        {pendingEcomHistoryDelete && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0"
+              style={{ background: 'rgba(15, 23, 42, 0.46)', backdropFilter: 'blur(7px)' }}
+              onClick={() => !isDeletingEcomHistory && setPendingEcomHistoryDelete(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="delete-ecom-history-title"
+              className="relative w-full max-w-sm p-5"
+              style={{
+                background: 'var(--color-card)',
+                border: '1px solid var(--color-border-soft)',
+                borderRadius: 20,
+                boxShadow: 'var(--shadow-sheet)',
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div
+                className="flex items-center justify-center mb-4"
+                style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(255,59,48,.12)', color: 'var(--color-danger)' }}
+              >
+                <Trash2 size={22} />
+              </div>
+              <h3 id="delete-ecom-history-title" className="font-bold mb-1" style={{ fontSize: 17, color: 'var(--color-text)' }}>
+                Xoá lần gen này?
+              </h3>
+              <p className="mb-5" style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--color-text-secondary)' }}>
+                {pendingEcomHistoryDelete.items.length} ảnh của lần gen này sẽ bị xoá khỏi lịch sử và không xuất hiện lại sau khi tải lại trang.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="plain"
+                  size="md"
+                  disabled={isDeletingEcomHistory}
+                  onClick={() => setPendingEcomHistoryDelete(null)}
+                >
+                  Huỷ
+                </Button>
+                <button
+                  type="button"
+                  disabled={isDeletingEcomHistory}
+                  onClick={() => void confirmDeleteEcomHistoryGroup()}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-semibold disabled:opacity-50"
+                  style={{ background: 'var(--color-danger)', color: '#fff', fontSize: 13 }}
+                >
+                  {isDeletingEcomHistory ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+                  {isDeletingEcomHistory ? 'Đang xoá…' : 'Xác nhận xoá'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isSettingsOpen && (
           <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4">
