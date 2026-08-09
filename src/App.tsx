@@ -55,6 +55,7 @@ import {
   Bed,
   Pencil,
   Check,
+  Clock,
   Sun,
   Moon,
   Monitor,
@@ -97,6 +98,7 @@ import { Segmented, SettingsDropdown } from './components/ui';
 import type { SettingsDropdownOption } from './components/ui';
 import { ARSelector, ModelCardPicker, PromptRow, PromptListModal } from './components/clothing';
 import { OFA_PROMPT_LIBRARY, buildOfaPrompt, type OfaPromptCategory } from './utils/ofaPromptLibrary';
+import { downloadFile } from './utils/downloadFile';
 import PicsetTab from './components/picset/PicsetTab';
 import RunninghubTab from './components/runninghub/RunninghubTab';
 
@@ -780,6 +782,16 @@ function App() {
   const [isReplacing, setIsReplacing] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+
+  const handleImageDownload = async (url: string, filename: string) => {
+    try {
+      await downloadFile(url, filename);
+    } catch (error: any) {
+      console.error('Image download failed:', error);
+      setGlobalError(error?.message || 'Không tải được ảnh.');
+      window.setTimeout(() => setGlobalError(null), 3000);
+    }
+  };
   const [isDragging, setIsDragging] = useState(false);
   const [hasPersonalKey, setHasPersonalKey] = useState(false);
   
@@ -2795,7 +2807,11 @@ function App() {
       if (generatedImages.length > 0) {
         const feat = ecomSubTab === 'clone-template' ? 'ecom-clone' : 'ecom-gen-new';
         logUsage(feat, config.id, generatedImages.length, snapshot.imageSize);
-        generatedImages.forEach((u) => pushHistory(u, { feature: feat, model: config.id, size: snapshot.imageSize }));
+        // Save the Gen New results before exposing the finished batch, so a
+        // download click or a quick navigation cannot interrupt persistence.
+        await Promise.all(generatedImages.map((u) =>
+          pushHistory(u, { feature: feat, model: config.id, size: snapshot.imageSize })
+        ));
         if (isConcurrent && batchId) {
           const finishedBatchId = batchId;
           setEcomBatches((prev) => prev.map(b => b.id === finishedBatchId
@@ -6011,7 +6027,7 @@ function App() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
                                 {batch.status === 'running' && (
-                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase" style={{ background: 'rgba(0,122,255,0.15)', color: 'var(--color-accent)' }}>
+                                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase" style={{ background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)', color: 'var(--color-accent)' }}>
                                     <Loader2 size={10} className="animate-spin" />
                                     Đang gen
                                   </span>
@@ -6129,12 +6145,7 @@ function App() {
                                       <Copy size={12} /> Dùng làm Mẫu
                                     </button>
                                     <button
-                                      onClick={() => {
-                                        const link = document.createElement('a');
-                                        link.href = res;
-                                        link.download = `ecom-${batch.id}-${i+1}.png`;
-                                        link.click();
-                                      }}
+                                      onClick={() => handleImageDownload(res, `ecom-${batch.id}-${i + 1}.png`)}
                                       className="px-3 py-1.5 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
                                     >
                                       <Download size={12} /> Tải
@@ -6214,12 +6225,7 @@ function App() {
                           </button>
                         )}
                         <button 
-                          onClick={() => {
-                            const link = document.createElement('a');
-                            link.href = res;
-                            link.download = `ecom-result-${i+1}-${Date.now()}.png`;
-                            link.click();
-                          }}
+                          onClick={() => handleImageDownload(res, `ecom-result-${i + 1}-${Date.now()}.png`)}
                           className="px-4 py-2 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-2 w-32 justify-center text-xs"
                         >
                           <Download size={14} /> Tải xuống
@@ -6510,7 +6516,7 @@ function App() {
                     const statusBadge = (() => {
                       switch (batch.status) {
                         case 'queued': return { label: 'Đang chờ', bg: 'var(--color-fill)', color: 'var(--color-text-secondary)' };
-                        case 'running': return { label: `Đang chạy ${doneCount}/${total}`, bg: 'rgba(0,122,255,0.15)', color: 'var(--color-accent)' };
+                        case 'running': return { label: `Đang chạy ${doneCount}/${total}`, bg: 'color-mix(in srgb, var(--color-accent) 15%, transparent)', color: 'var(--color-accent)' };
                         case 'done': return { label: `Xong ${doneCount}/${total}`, bg: 'rgba(52,199,89,0.15)', color: 'var(--color-success)' };
                         case 'cancelled': return { label: `Đã huỷ ${doneCount}/${total}`, bg: 'rgba(255,149,0,0.15)', color: 'var(--color-warning)' };
                         case 'error': return { label: 'Lỗi', bg: 'rgba(255,59,48,0.15)', color: 'var(--color-danger)' };
@@ -7172,7 +7178,7 @@ function App() {
                       <div
                         className="flex items-center gap-3 p-3 rounded-xl border border-editor-accent bg-editor-accent/5 transition-all cursor-pointer"
                       >
-                        <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_rgba(0,122,255,0.5)]" />
+                        <div className="shrink-0 w-2 h-2 rounded-full bg-editor-accent shadow-[0_0_8px_var(--color-accent)]" />
                         <p className="text-xs font-bold text-editor-accent">
                           📝 Nhập thủ công
                         </p>

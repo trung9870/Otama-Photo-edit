@@ -1,6 +1,6 @@
-// User-facing "Lịch sử của tôi" panel: last 15 days of the current user's gens.
-// - Query: history where uid==me AND ts>=(now-15d), ordered newest first, capped at 200.
-// - Lazy cleanup on open: deletes THIS user's Firestore docs + Storage files older than 15d.
+// User-facing "Lịch sử của tôi" panel: last 7 days of the current user's gens.
+// - Query: history where uid==me, kept live while the panel is open.
+// - Lazy cleanup on open: deletes THIS user's Firestore docs + Storage files older than 7d.
 //   No server cron needed; the sweep runs whenever a user opens the panel.
 // - Grouped by day header (Hôm nay / Hôm qua / DD-MM-YYYY).
 // - Feature filter chip row so users can find "just Ecom" or "just OFA".
@@ -11,11 +11,12 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Clock, Download, Trash2, X, Filter, ZoomIn, Loader2 } from 'lucide-react';
 import {
   db, storage,
-  collection, query, where, getDocs, doc, deleteDoc,
+  collection, query, where, onSnapshot, doc, deleteDoc,
   storageRef, deleteObject,
 } from '../firebase';
+import { downloadFile } from '../utils/downloadFile';
 
-const RETENTION_DAYS = 15;
+const RETENTION_DAYS = 7;
 const PAGE_LIMIT = 200;
 
 interface HistoryDoc {
@@ -87,58 +88,49 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
   const [featureFilter, setFeatureFilter] = useState<string>('all');
   const [deleting, setDeleting] = useState<Set<string>>(new Set());
 
-  // ============== Load + lazy cleanup ==============
+  // ============== Live load + lazy cleanup ==============
   useEffect(() => {
     if (!open || !userId) return;
     let cancelled = false;
 
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const cutoffMs = Date.now() - RETENTION_DAYS * 24 * 3600 * 1000;
+    let cleanupStarted = false;
+    setLoading(true);
+    setError(null);
 
-        // Only use where('uid') — Firestore's auto single-field index covers it.
-        // Combining where(uid) + orderBy(ts) or where(ts) would need a composite
-        // index that has to be created manually in the Firebase console. Since
-        // the per-user sweep keeps this collection small, sorting + filtering
-        // client-side is cheap and skips that setup entirely.
-        const q = query(collection(db, 'history'), where('uid', '==', userId));
-        const snap = await getDocs(q);
-        if (cancelled) return;
-        const all: HistoryDoc[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const cleanupExpired = async (all: HistoryDoc[], cutoffMs: number) => {
+      const stale = all.filter((it) => tsMillis(it.ts) < cutoffMs);
+      await Promise.allSettled(stale.map(async (it) => {
+        if (it.path) await deleteObject(storageRef(storage, it.path)).catch(() => {});
+        await deleteDoc(doc(db, 'history', it.id));
+      }));
+    };
 
-        const fresh = all
-          .filter((it) => tsMillis(it.ts) >= cutoffMs)
-          .sort((a, b) => tsMillis(b.ts) - tsMillis(a.ts))
-          .slice(0, PAGE_LIMIT);
-        setItems(fresh);
+    const q = query(collection(db, 'history'), where('uid', '==', userId));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      if (cancelled) return;
+      const cutoffMs = Date.now() - RETENTION_DAYS * 24 * 3600 * 1000;
+      const all: HistoryDoc[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      setItems(all
+        .filter((it) => tsMillis(it.ts) >= cutoffMs)
+        .sort((a, b) => tsMillis(b.ts) - tsMillis(a.ts))
+        .slice(0, PAGE_LIMIT));
+      setLoading(false);
 
-        // Background sweep — delete this user's docs older than 15 days.
-        // No await, no blocking. Firestore rules keep it scoped to the caller.
-        (async () => {
-          const stale = all.filter((it) => tsMillis(it.ts) < cutoffMs).slice(0, 50);
-          for (const it of stale) {
-            try {
-              if (it.path) {
-                await deleteObject(storageRef(storage, it.path)).catch(() => {});
-              }
-              await deleteDoc(doc(db, 'history', it.id));
-            } catch {
-              // Swallow — retry on next open.
-            }
-          }
-        })();
-      } catch (e: any) {
-        console.warn('history load failed', e);
-        if (!cancelled) setError(e?.message || 'Không tải được lịch sử.');
-      } finally {
-        if (!cancelled) setLoading(false);
+      if (!cleanupStarted) {
+        cleanupStarted = true;
+        void cleanupExpired(all, cutoffMs);
       }
-    })();
+    }, (e: any) => {
+      console.warn('history load failed', e);
+      if (!cancelled) {
+        setError(e?.message || 'Không tải được lịch sử.');
+        setLoading(false);
+      }
+    });
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [open, userId]);
 
@@ -193,11 +185,13 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
     }
   };
 
-  const handleDownload = (url: string, idx: number) => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `otama-history-${Date.now()}-${idx}.jpg`;
-    link.click();
+  const handleDownload = async (url: string, idx: number) => {
+    try {
+      await downloadFile(url, `otama-history-${Date.now()}-${idx}.jpg`);
+    } catch (e) {
+      console.warn('history download failed', e);
+      alert('Không tải được ảnh. Vui lòng thử lại.');
+    }
   };
 
   return (
