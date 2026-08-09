@@ -2807,11 +2807,10 @@ function App() {
       if (generatedImages.length > 0) {
         const feat = ecomSubTab === 'clone-template' ? 'ecom-clone' : 'ecom-gen-new';
         logUsage(feat, config.id, generatedImages.length, snapshot.imageSize);
-        // Save the Gen New results before exposing the finished batch, so a
-        // download click or a quick navigation cannot interrupt persistence.
-        await Promise.all(generatedImages.map((u) =>
-          pushHistory(u, { feature: feat, model: config.id, size: snapshot.imageSize })
-        ));
+        // The Kie result is ready now. Do not block the result card on the
+        // optional history upload (proxy + Storage + Firestore); a slow or
+        // temporarily unavailable history service must never leave a batch
+        // stuck in "ĐANG GEN".
         if (isConcurrent && batchId) {
           const finishedBatchId = batchId;
           setEcomBatches((prev) => prev.map(b => b.id === finishedBatchId
@@ -2823,6 +2822,11 @@ function App() {
           setEcomResults(generatedImages);
           onGenComplete('Ecom: gen xong', `${generatedImages.length} ảnh hoàn tất`);
         }
+
+        // Persist history in the background after the UI is marked complete.
+        void Promise.allSettled(generatedImages.map((u) =>
+          pushHistory(u, { feature: feat, model: config.id, size: snapshot.imageSize })
+        ));
       } else {
         throw new Error("Không có ảnh kết quả trả về.");
       }
