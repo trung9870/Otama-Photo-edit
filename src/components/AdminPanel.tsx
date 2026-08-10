@@ -1900,6 +1900,13 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           <div>
             {users.map((u, idx) => {
               const isAdmin = u.role === 'admin';
+              const isLocked = !isAdmin && !(
+                u.canUseClothing ||
+                u.canUseEcom ||
+                u.canUseOfa ||
+                u.canUsePicset ||
+                u.canUseRunninghub
+              );
               const initial = (u.email || '?').slice(0, 1).toUpperCase();
               return (
                 <div
@@ -1928,10 +1935,14 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                       <span className="font-semibold" style={{ fontSize: 14, color: 'var(--color-text)' }}>{u.email}</span>
                       {isAdmin
                         ? <Pill tone="accent">admin</Pill>
-                        : <Pill tone="secondary">user</Pill>}
+                        : isLocked
+                          ? <Pill tone="danger">đã khóa</Pill>
+                          : <Pill tone="secondary">user</Pill>}
                     </div>
                     <div className="mt-1" style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                      Mật khẩu được Firebase Authentication quản lý
+                      {isLocked
+                        ? 'Tắt toàn bộ quyền: tài khoản không thể sử dụng ứng dụng'
+                        : 'Mật khẩu được Firebase Authentication quản lý'}
                     </div>
                   </div>
 

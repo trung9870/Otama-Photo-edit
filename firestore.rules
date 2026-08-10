@@ -17,6 +17,19 @@ service cloud.firestore {
       );
     }
 
+    function hasAppAccess() {
+      return signedIn() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canUseClothing == true ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canUseEcom == true ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canUseOfa == true ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canUsePicset == true ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.canUseRunninghub == true
+        ))
+      );
+    }
+
     function recentTimestamp(ts) {
       return ts is timestamp &&
         ts >= request.time - duration.value(5, 'm') &&
@@ -143,47 +156,47 @@ service cloud.firestore {
     }
 
     match /prompts/{promptId} {
-      allow read: if signedIn() && (
+      allow read: if hasAppAccess() && (
         resource.data.uid == request.auth.uid || isAdmin() ||
         (isDefaultPrompt(resource.data) && isEncryptedPrompt(resource.data))
       );
-      allow create: if signedIn() && validPrompt(request.resource.data) && (
+      allow create: if hasAppAccess() && validPrompt(request.resource.data) && (
         isAdmin() || (request.resource.data.uid == request.auth.uid && !isDefaultPrompt(request.resource.data))
       );
-      allow update: if signedIn() && validPrompt(request.resource.data) && request.resource.data.uid == resource.data.uid && (
+      allow update: if hasAppAccess() && validPrompt(request.resource.data) && request.resource.data.uid == resource.data.uid && (
         isAdmin() || (resource.data.uid == request.auth.uid && !isDefaultPrompt(resource.data) && !isDefaultPrompt(request.resource.data))
       );
-      allow delete: if signedIn() && (isAdmin() || (resource.data.uid == request.auth.uid && !isDefaultPrompt(resource.data)));
+      allow delete: if hasAppAccess() && (isAdmin() || (resource.data.uid == request.auth.uid && !isDefaultPrompt(resource.data)));
     }
 
     match /models/{modelId} {
-      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin() || isSharedAsset(resource.data));
-      allow create: if signedIn() && validAsset(request.resource.data) && request.resource.data.uid == request.auth.uid &&
+      allow read: if hasAppAccess() && (resource.data.uid == request.auth.uid || isAdmin() || isSharedAsset(resource.data));
+      allow create: if hasAppAccess() && validAsset(request.resource.data) && request.resource.data.uid == request.auth.uid &&
         (isAdmin() || !isSharedAsset(request.resource.data));
-      allow update: if signedIn() && validAsset(request.resource.data) && request.resource.data.uid == resource.data.uid &&
+      allow update: if hasAppAccess() && validAsset(request.resource.data) && request.resource.data.uid == resource.data.uid &&
         (isAdmin() || (resource.data.uid == request.auth.uid && isSharedAsset(request.resource.data) == isSharedAsset(resource.data)));
-      allow delete: if signedIn() && (isAdmin() || resource.data.uid == request.auth.uid);
+      allow delete: if hasAppAccess() && (isAdmin() || resource.data.uid == request.auth.uid);
     }
 
     match /rooms/{roomId} {
-      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin() || isSharedAsset(resource.data));
-      allow create: if signedIn() && validAsset(request.resource.data) && request.resource.data.uid == request.auth.uid &&
+      allow read: if hasAppAccess() && (resource.data.uid == request.auth.uid || isAdmin() || isSharedAsset(resource.data));
+      allow create: if hasAppAccess() && validAsset(request.resource.data) && request.resource.data.uid == request.auth.uid &&
         (isAdmin() || !isSharedAsset(request.resource.data));
-      allow update: if signedIn() && validAsset(request.resource.data) && request.resource.data.uid == resource.data.uid &&
+      allow update: if hasAppAccess() && validAsset(request.resource.data) && request.resource.data.uid == resource.data.uid &&
         (isAdmin() || (resource.data.uid == request.auth.uid && isSharedAsset(request.resource.data) == isSharedAsset(resource.data)));
-      allow delete: if signedIn() && (isAdmin() || resource.data.uid == request.auth.uid);
+      allow delete: if hasAppAccess() && (isAdmin() || resource.data.uid == request.auth.uid);
     }
 
     match /usage/{logId} {
       allow read: if isAdmin();
-      allow create: if signedIn() && validUsage(request.resource.data);
+      allow create: if hasAppAccess() && validUsage(request.resource.data);
       allow update, delete: if false;
     }
 
     match /history/{historyId} {
-      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
-      allow create: if signedIn() && validHistory(request.resource.data);
-      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow read: if hasAppAccess() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if hasAppAccess() && validHistory(request.resource.data);
+      allow delete: if hasAppAccess() && (resource.data.uid == request.auth.uid || isAdmin());
       allow update: if false;
     }
 

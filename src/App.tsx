@@ -293,6 +293,16 @@ const DEFAULT_ECOM_PROMPTS: SavedPrompt[] = [
   { id: 'e2', name: 'Prompt 2', prompt: '', isDefault: true, isSecret: true },
 ];
 
+function hasAnyFeaturePermission(profile: Record<string, any> | null | undefined): boolean {
+  return Boolean(
+    profile?.canUseClothing ||
+    profile?.canUseEcom ||
+    profile?.canUseOfa ||
+    profile?.canUsePicset ||
+    profile?.canUseRunninghub
+  );
+}
+
 const MODEL_CONFIG = {
   'gpt2': {
     id: 'gpt-image-2-image-to-image',
@@ -547,6 +557,10 @@ function App() {
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [images, setImages] = useState<EditableImage[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [selectedModel, setSelectedModel] = useState<ModelType>('banana-pro');
@@ -1078,24 +1092,50 @@ function App() {
   useEffect(() => {
     let unsubUserDoc: any = null;
     const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (unsubUserDoc) {
+        unsubUserDoc();
+        unsubUserDoc = null;
+      }
       setUser(u);
       if (u) {
-        if (u.email === 'trungg9870@gmail.com') setIsAdmin(true);
+        const isPrimaryAdmin = u.email === 'trungg9870@gmail.com';
+        setIsAuthReady(false);
+        setIsAdmin(isPrimaryAdmin);
+        setUserPermissions(null);
         // Subscribe to user document
         unsubUserDoc = onSnapshot(doc(db, 'users', u.uid), (docSnap) => {
           if (docSnap.exists()) {
             const data = docSnap.data();
+            const profileIsAdmin = isPrimaryAdmin || data.role === 'admin';
+            if (!profileIsAdmin && !hasAnyFeaturePermission(data)) {
+              setUserPermissions(data);
+              setIsAuthReady(false);
+              setLoginError('Tài khoản đã bị khóa vì không còn quyền sử dụng tính năng nào. Vui lòng liên hệ quản trị viên.');
+              void signOut(auth);
+              return;
+            }
             setUserPermissions(data);
-            if (data.role === 'admin') setIsAdmin(true);
+            setIsAdmin(profileIsAdmin);
+            setIsAuthReady(true);
+          } else if (isPrimaryAdmin) {
+            setIsAdmin(true);
+            setIsAuthReady(true);
           } else {
             setUserPermissions(null);
+            setIsAuthReady(false);
+            setLoginError('Tài khoản chưa được quản trị viên cấp quyền truy cập.');
+            void signOut(auth);
           }
+        }, (error) => {
+          console.warn('User permission sync error:', error);
+          setUserPermissions(null);
+          setIsAuthReady(false);
+          setLoginError('Không thể xác minh quyền truy cập. Vui lòng đăng nhập lại.');
+          void signOut(auth);
         });
-        setIsAuthReady(true);
       } else {
         setIsAdmin(false);
         setUserPermissions(null);
-        if (unsubUserDoc) unsubUserDoc();
         setIsAuthReady(true);
       }
     });
@@ -1731,11 +1771,6 @@ function App() {
   }, [ecomSubTab, thayPasteTarget]);
 
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
-
   const handleLogin = () => {
     setLoginError(null);
     setShowLoginModal(true);

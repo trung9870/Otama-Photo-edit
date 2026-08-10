@@ -41,7 +41,16 @@ const PRIMARY_ADMIN_EMAIL = 'trungg9870@gmail.com';
 
 type RateBucket = { count: number; resetAt: number };
 const rateBuckets = new Map<string, RateBucket>();
-const profileCache = new Map<string, { profile: Record<string, unknown> | null; expiresAt: number }>();
+
+function hasAnyFeaturePermission(profile: Record<string, unknown> | null): boolean {
+  return Boolean(
+    profile?.canUseClothing === true ||
+    profile?.canUseEcom === true ||
+    profile?.canUseOfa === true ||
+    profile?.canUsePicset === true ||
+    profile?.canUseRunninghub === true
+  );
+}
 
 function decodeFirestoreValue(value: any): unknown {
   if (!value || typeof value !== 'object') return null;
@@ -54,15 +63,12 @@ function decodeFirestoreValue(value: any): unknown {
 }
 
 async function loadUserProfile(uid: string, idToken: string): Promise<Record<string, unknown> | null> {
-  const cached = profileCache.get(uid);
-  if (cached && cached.expiresAt > Date.now()) return cached.profile;
   const endpoint = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/users/${encodeURIComponent(uid)}`;
   const response = await fetch(endpoint, {
     headers: { Authorization: `Bearer ${idToken}` },
     signal: AbortSignal.timeout(8_000),
   });
   if (response.status === 404 || response.status === 403) {
-    profileCache.set(uid, { profile: null, expiresAt: Date.now() + 30_000 });
     return null;
   }
   if (!response.ok) throw new Error(`profile-http-${response.status}`);
@@ -71,7 +77,6 @@ async function loadUserProfile(uid: string, idToken: string): Promise<Record<str
   Object.entries(document?.fields || {}).forEach(([key, value]) => {
     profile[key] = decodeFirestoreValue(value);
   });
-  profileCache.set(uid, { profile, expiresAt: Date.now() + 60_000 });
   return profile;
 }
 
@@ -160,15 +165,21 @@ export async function authorizeApiRequest(
     const auth = await verifyFirebaseRequest(req);
     const customAdmin = auth.claims.admin === true || auth.claims.role === 'admin';
     const primaryAdmin = auth.email === PRIMARY_ADMIN_EMAIL && auth.emailVerified;
-    if (options.admin && !customAdmin && !primaryAdmin) {
-      res.status(403).json({ error: 'Chỉ quản trị viên được phép thực hiện thao tác này.' });
-      return false;
-    }
-    if (!customAdmin && !primaryAdmin && !auth.userProfile) {
+    const profileAdmin = auth.userProfile?.role === 'admin';
+    const admin = customAdmin || primaryAdmin || profileAdmin;
+    if (!admin && !auth.userProfile) {
       res.status(403).json({ error: 'Tài khoản chưa được quản trị viên cấp quyền sử dụng.' });
       return false;
     }
-    if (!customAdmin && !primaryAdmin && options.anyPermission?.length) {
+    if (!admin && !hasAnyFeaturePermission(auth.userProfile)) {
+      res.status(403).json({ error: 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.' });
+      return false;
+    }
+    if (options.admin && !admin) {
+      res.status(403).json({ error: 'Chỉ quản trị viên được phép thực hiện thao tác này.' });
+      return false;
+    }
+    if (!admin && options.anyPermission?.length) {
       const allowed = options.anyPermission.some((permission) => auth.userProfile?.[permission] === true);
       if (!allowed) {
         res.status(403).json({ error: 'Tài khoản không có quyền dùng tính năng này.' });
