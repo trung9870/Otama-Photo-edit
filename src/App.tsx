@@ -1103,7 +1103,10 @@ function App() {
         setIsAdmin(isPrimaryAdmin);
         setUserPermissions(null);
         // Subscribe to user document
-        unsubUserDoc = onSnapshot(doc(db, 'users', u.uid), (docSnap) => {
+        unsubUserDoc = onSnapshot(doc(db, 'users', u.uid), { includeMetadataChanges: true }, (docSnap) => {
+          // Firestore may emit a stale cached profile first. Never lock or
+          // unlock an employee until the server has confirmed current access.
+          if (!isPrimaryAdmin && docSnap.metadata.fromCache) return;
           if (docSnap.exists()) {
             const data = docSnap.data();
             const profileIsAdmin = isPrimaryAdmin || data.role === 'admin';
