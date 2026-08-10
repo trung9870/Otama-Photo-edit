@@ -57,6 +57,13 @@ interface EmployeeSummary {
 }
 
 type EmployeeChartMetric = 'credits' | 'cost' | 'images';
+type DailyChartSeries = 'images' | 'cost';
+
+interface DailyUsagePoint {
+  day: string;
+  count: number;
+  cost: number;
+}
 
 function usageTsMillis(entry: any): number {
   const timestamp = entry?.ts;
@@ -366,6 +373,246 @@ function EmployeeDistributionChart({
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function DailyUsageLineChart({ data }: { data: DailyUsagePoint[] }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [visibleSeries, setVisibleSeries] = useState<Record<DailyChartSeries, boolean>>({
+    images: true,
+    cost: true,
+  });
+
+  const chartWidth = 1000;
+  const chartHeight = 270;
+  const plot = { left: 58, right: 72, top: 28, bottom: 46 };
+  const plotWidth = chartWidth - plot.left - plot.right;
+  const plotHeight = chartHeight - plot.top - plot.bottom;
+  const maxImages = Math.max(...data.map((point) => point.count), 1);
+  const maxCost = Math.max(...data.map((point) => point.cost), 0.01);
+  const selectedCount = Number(visibleSeries.images) + Number(visibleSeries.cost);
+  const labelEvery = Math.max(1, Math.ceil((data.length - 1) / 6));
+
+  const xFor = (index: number) => data.length <= 1
+    ? plot.left + plotWidth / 2
+    : plot.left + (index / (data.length - 1)) * plotWidth;
+  const yFor = (value: number, max: number) => plot.top + plotHeight - (value / max) * plotHeight;
+  const imagePoints = data.map((point, index) => ({ x: xFor(index), y: yFor(point.count, maxImages) }));
+  const costPoints = data.map((point, index) => ({ x: xFor(index), y: yFor(point.cost, maxCost) }));
+  const toPath = (points: { x: number; y: number }[]) => points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ');
+
+  const toggleSeries = (series: DailyChartSeries) => {
+    setVisibleSeries((current) => {
+      if (current[series] && selectedCount === 1) return current;
+      return { ...current, [series]: !current[series] };
+    });
+  };
+
+  const hoveredPoint = hoveredIndex === null ? null : data[hoveredIndex];
+  const hoveredX = hoveredIndex === null ? 0 : xFor(hoveredIndex);
+  const tooltipWidth = 184;
+  const tooltipX = hoveredX > chartWidth - tooltipWidth - 12
+    ? hoveredX - tooltipWidth - 10
+    : hoveredX + 10;
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
+        <div>
+          <p className="font-semibold" style={{ fontSize: 13, color: 'var(--color-text)' }}>Hoạt động theo ngày</p>
+          <p style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+            So sánh số ảnh và chi phí trong khoảng thời gian đã chọn
+          </p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap" aria-label="Chọn dữ liệu hiển thị">
+          <button
+            type="button"
+            onClick={() => toggleSeries('images')}
+            className="inline-flex items-center gap-1.5 transition-opacity"
+            style={{ fontSize: 11, color: 'var(--color-text-secondary)', opacity: visibleSeries.images ? 1 : 0.42 }}
+            aria-pressed={visibleSeries.images}
+          >
+            <span className="rounded-full" style={{ width: 8, height: 8, background: 'var(--color-accent)' }} />
+            Số ảnh
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleSeries('cost')}
+            className="inline-flex items-center gap-1.5 transition-opacity"
+            style={{ fontSize: 11, color: 'var(--color-text-secondary)', opacity: visibleSeries.cost ? 1 : 0.42 }}
+            aria-pressed={visibleSeries.cost}
+          >
+            <span className="rounded-full" style={{ width: 8, height: 8, background: 'var(--color-teal)' }} />
+            Chi phí
+          </button>
+          <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>Đã chọn {selectedCount}/2</span>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto" onMouseLeave={() => setHoveredIndex(null)}>
+        <svg
+          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-label="Biểu đồ đường số ảnh và chi phí theo ngày"
+          style={{ display: 'block', width: '100%', minWidth: 680, height: 'auto', aspectRatio: `${chartWidth} / ${chartHeight}` }}
+        >
+          {Array.from({ length: 5 }, (_, index) => {
+            const ratio = index / 4;
+            const y = plot.top + ratio * plotHeight;
+            const imageValue = Math.round(maxImages * (1 - ratio));
+            const costValue = maxCost * (1 - ratio);
+            return (
+              <g key={index}>
+                <line
+                  x1={plot.left}
+                  x2={chartWidth - plot.right}
+                  y1={y}
+                  y2={y}
+                  stroke="var(--color-border-soft)"
+                  strokeDasharray="4 4"
+                />
+                <text x={plot.left - 10} y={y + 3} textAnchor="end" fill="var(--color-text-tertiary)" fontSize="9">
+                  {imageValue}
+                </text>
+                <text x={chartWidth - plot.right + 10} y={y + 3} textAnchor="start" fill="var(--color-text-tertiary)" fontSize="9">
+                  ${costValue.toFixed(costValue >= 10 ? 0 : 2)}
+                </text>
+              </g>
+            );
+          })}
+
+          <line
+            x1={plot.left}
+            x2={chartWidth - plot.right}
+            y1={plot.top + plotHeight}
+            y2={plot.top + plotHeight}
+            stroke="var(--color-border)"
+          />
+
+          {visibleSeries.images && (
+            <path
+              d={toPath(imagePoints)}
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth="2.5"
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          )}
+          {visibleSeries.cost && (
+            <path
+              d={toPath(costPoints)}
+              fill="none"
+              stroke="var(--color-teal)"
+              strokeWidth="2.5"
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          )}
+
+          {hoveredIndex !== null && (
+            <line
+              x1={hoveredX}
+              x2={hoveredX}
+              y1={plot.top}
+              y2={plot.top + plotHeight}
+              stroke="var(--color-text-tertiary)"
+              strokeDasharray="3 4"
+              opacity="0.7"
+            />
+          )}
+
+          {data.map((point, index) => {
+            const x = xFor(index);
+            const zoneStart = index === 0 ? plot.left : (xFor(index - 1) + x) / 2;
+            const zoneEnd = index === data.length - 1 ? chartWidth - plot.right : (x + xFor(index + 1)) / 2;
+            const [, month, day] = point.day.split('-');
+            const showLabel = index % labelEvery === 0 || index === data.length - 1;
+            const active = hoveredIndex === index;
+            return (
+              <g key={point.day}>
+                {visibleSeries.images && (
+                  <circle
+                    cx={x}
+                    cy={imagePoints[index].y}
+                    r={active ? 4.5 : 2.8}
+                    fill="var(--color-card)"
+                    stroke="var(--color-accent)"
+                    strokeWidth="2"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                {visibleSeries.cost && (
+                  <circle
+                    cx={x}
+                    cy={costPoints[index].y}
+                    r={active ? 4.5 : 2.8}
+                    fill="var(--color-card)"
+                    stroke="var(--color-teal)"
+                    strokeWidth="2"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )}
+                {showLabel && (
+                  <text x={x} y={chartHeight - 17} textAnchor="middle" fill="var(--color-text-tertiary)" fontSize="9">
+                    {day}/{month}
+                  </text>
+                )}
+                <rect
+                  x={zoneStart}
+                  y={plot.top}
+                  width={Math.max(1, zoneEnd - zoneStart)}
+                  height={plotHeight}
+                  fill="transparent"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${day}/${month}: ${point.count} ảnh, $${point.cost.toFixed(2)}`}
+                  onMouseEnter={() => setHoveredIndex(index)}
+                  onFocus={() => setHoveredIndex(index)}
+                  onBlur={() => setHoveredIndex(null)}
+                  onTouchStart={() => setHoveredIndex(index)}
+                  style={{ cursor: 'crosshair', outline: 'none' }}
+                />
+              </g>
+            );
+          })}
+
+          {hoveredPoint && (
+            <g pointerEvents="none">
+              <rect
+                x={tooltipX}
+                y={plot.top + 8}
+                width={tooltipWidth}
+                height="68"
+                rx="10"
+                fill="var(--color-text)"
+                opacity="0.96"
+              />
+              <text x={tooltipX + 12} y={plot.top + 27} fill="var(--color-bg-elevated)" fontSize="10" fontWeight="600">
+                {hoveredPoint.day.split('-').reverse().join('/')}
+              </text>
+              <circle cx={tooltipX + 14} cy={plot.top + 43} r="3" fill="var(--color-accent)" />
+              <text x={tooltipX + 23} y={plot.top + 46} fill="var(--color-bg-elevated)" fontSize="10">
+                {hoveredPoint.count.toLocaleString()} ảnh
+              </text>
+              <circle cx={tooltipX + 14} cy={plot.top + 60} r="3" fill="var(--color-teal)" />
+              <text x={tooltipX + 23} y={plot.top + 63} fill="var(--color-bg-elevated)" fontSize="10">
+                ${hoveredPoint.cost.toFixed(2)} chi phí
+              </text>
+            </g>
+          )}
+        </svg>
+      </div>
+      <div className="flex items-center justify-between gap-4 flex-wrap mt-1">
+        <span style={{ fontSize: 9.5, color: 'var(--color-text-tertiary)' }}>Trục trái: số ảnh</span>
+        <span style={{ fontSize: 9.5, color: 'var(--color-text-tertiary)' }}>Trục phải: chi phí (USD)</span>
       </div>
     </div>
   );
@@ -1304,46 +1551,10 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
             </p>
           )}
 
-          {/* Biểu đồ cột theo ngày — always render today (and any zero day) so the bar for hôm nay is never silently missing */}
+          {/* Biểu đồ đường theo ngày. Vẫn render cả ngày không có ảnh để xu hướng không bị đứt đoạn. */}
           {(analytics.totalImages > 0 || analytics.geminiTotal > 0) && (
             <div className="p-5" style={{ background: 'var(--color-card)', borderRadius: 18, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
-              <p className="uppercase font-semibold mb-4" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Ảnh gen theo ngày</p>
-              {(() => {
-                // Chart caps at the latest 30 days — matches the widest preset filter.
-                // Custom ranges longer than 30 days still cap here for readability.
-                const data = analytics.dailySeries.slice(-30);
-                const maxCount = Math.max(...data.map(d => d.count), 1);
-                const barW = 28;
-                const gap = 8;
-                const chartH = 160;
-                const labelEvery = Math.ceil(data.length / 12); // tránh nhãn chồng nhau
-                return (
-                  <div className="overflow-x-auto pb-1">
-                    <div className="flex items-end gap-2" style={{ height: chartH + 36, minWidth: data.length * (barW + gap) }}>
-                      {data.map((d, i) => {
-                        const h = Math.max(2, Math.round((d.count / maxCount) * chartH));
-                        const [, mm, dd] = d.day.split('-');
-                        return (
-                          <div key={d.day} className="flex flex-col items-center justify-end group" style={{ width: barW }}>
-                            <span className="font-semibold mb-1" style={{ fontSize: 10, color: 'var(--color-text-secondary)' }}>{d.count}</span>
-                            <div
-                              className="w-full rounded-t transition-all relative"
-                              style={{ height: h, background: 'var(--color-accent)' }}
-                              title={`${d.day}: ${d.count} ảnh · $${d.cost.toFixed(2)}`}
-                            />
-                            <span style={{ fontSize: 9, color: 'var(--color-text-tertiary)', marginTop: 4, transform: 'rotate(-45deg)', whiteSpace: 'nowrap', height: 24 }}>
-                              {(i % labelEvery === 0 || i === data.length - 1) ? `${dd}/${mm}` : ''}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-              <p style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 8 }}>
-                Di chuột vào cột để xem số ảnh + chi phí từng ngày.
-              </p>
+              <DailyUsageLineChart data={analytics.dailySeries.slice(-30)} />
             </div>
           )}
 
