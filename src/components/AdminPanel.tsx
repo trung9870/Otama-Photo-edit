@@ -38,7 +38,7 @@ async function revealProtectedPrompt(item: any): Promise<any> {
   const cached = decryptedPromptCache.get(cacheKey);
   if (cached !== undefined) return { ...item, prompt: cached };
 
-  const response = await apiFetch('/api/prompts-crypto', {
+  const response = await apiFetch('/api/kie-credits', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(encryptedPrompt

@@ -455,7 +455,7 @@ function isEncryptedSharedPrompt(value: unknown): value is string {
 }
 
 async function decryptSharedPromptForAdmin(encryptedPrompt: string): Promise<string> {
-  const response = await apiFetch('/api/prompts-crypto', {
+  const response = await apiFetch('/api/kie-credits', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'decrypt', prompt: encryptedPrompt }),
@@ -468,7 +468,7 @@ async function decryptSharedPromptForAdmin(encryptedPrompt: string): Promise<str
 }
 
 async function encryptSharedPromptForAdmin(plaintext: string): Promise<string> {
-  const response = await apiFetch('/api/prompts-crypto', {
+  const response = await apiFetch('/api/kie-credits', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'encrypt', prompt: plaintext }),

@@ -51,8 +51,8 @@ async function startServer() {
   app.get("/api/generate-check", secured(handleGenerateCheck, { scope: 'generate-check', maxRequests: 180, anyPermission: generationPermissions }));
   app.post("/api/analyze", secured(handleAnalyze, { scope: 'analyze', maxRequests: 20, anyPermission: ['canUseClothing', 'canUseEcom'] }));
   app.post("/api/detect-grid", secured(handleDetectGrid, { scope: 'detect-grid', maxRequests: 20, anyPermission: ['canUseClothing', 'canUseEcom'] }));
-  app.get("/api/kie-credits", secured(handleKieCredits, { scope: 'kie-credits', maxRequests: 20, admin: true }));
-  app.post("/api/prompts-crypto", secured(handlePromptCrypto, { scope: 'prompts-crypto', maxRequests: 120, admin: true }));
+  app.get("/api/kie-credits", secured(handleKieCredits, { scope: 'admin-tools', maxRequests: 140, admin: true }));
+  app.post("/api/kie-credits", secured(handlePromptCrypto, { scope: 'admin-tools', maxRequests: 140, admin: true }));
   app.post("/api/picset/analyze", secured(handlePicsetAnalyze, { scope: 'picset-analyze', maxRequests: 10, anyPermission: ['canUsePicset'] }));
   app.post("/api/picset/generate", secured(handlePicsetGenerate, { scope: 'picset-generate', maxRequests: 3, anyPermission: ['canUsePicset'] }));
   app.post("/api/runninghub/upload", secured(handleRunninghubUpload, { scope: 'runninghub-upload', maxRequests: 20, anyPermission: ['canUseRunninghub'] }));
