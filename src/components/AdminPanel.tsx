@@ -27,6 +27,30 @@ const MODEL_LABELS: Record<string, string> = {
   'gemini-3-flash-preview': 'Phân tích (text)',
 };
 
+const decryptedPromptCache = new Map<string, string>();
+
+async function revealProtectedPrompt(item: any): Promise<any> {
+  const encryptedPrompt = typeof item.prompt === 'string' && item.prompt.startsWith('enc:v1:')
+    ? item.prompt
+    : '';
+  const cacheKey = encryptedPrompt || (item.promptSource === 'saved' && item.promptId ? `id:${item.promptId}` : '');
+  if (!cacheKey) return item;
+  const cached = decryptedPromptCache.get(cacheKey);
+  if (cached !== undefined) return { ...item, prompt: cached };
+
+  const response = await apiFetch('/api/prompts-crypto', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(encryptedPrompt
+      ? { action: 'decrypt', prompt: encryptedPrompt }
+      : { action: 'resolve', promptId: item.promptId }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || typeof data.prompt !== 'string') return { ...item, prompt: '' };
+  decryptedPromptCache.set(cacheKey, data.prompt);
+  return { ...item, prompt: data.prompt };
+}
+
 // Color palette for pie slices — Apple system colors, cycled in order
 const PIE_COLORS = [
   'var(--color-accent)',     // blue
@@ -717,16 +741,19 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   // Lịch sử ảnh đã gen
   useEffect(() => {
     if (adminTab !== 'history') return;
+    let active = true;
     const unsub = onSnapshot(collection(db, 'history'), (snap) => {
-      const items = snap.docs.map(d => d.data());
-      items.sort((a, b) => {
-        const ta = a.ts?.toMillis ? a.ts.toMillis() : (a.ts?.seconds || 0) * 1000;
-        const tb = b.ts?.toMillis ? b.ts.toMillis() : (b.ts?.seconds || 0) * 1000;
-        return tb - ta;
-      });
-      setHistory(items);
+      void Promise.all(snap.docs.map(d => revealProtectedPrompt(d.data()))).then((items) => {
+        if (!active) return;
+        items.sort((a, b) => {
+          const ta = a.ts?.toMillis ? a.ts.toMillis() : (a.ts?.seconds || 0) * 1000;
+          const tb = b.ts?.toMillis ? b.ts.toMillis() : (b.ts?.seconds || 0) * 1000;
+          return tb - ta;
+        });
+        setHistory(items);
+      }).catch((err) => console.warn('history prompt decrypt error', err));
     }, (err) => console.warn('history subscribe error', err));
-    return () => unsub();
+    return () => { active = false; unsub(); };
   }, [adminTab]);
 
   const historyEmployeeOptions = useMemo(() => {
@@ -1138,7 +1165,11 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
               {visibleAdminHistory.map((h) => {
                 const d = h.ts?.toMillis ? new Date(h.ts.toMillis()) : h.ts?.seconds ? new Date(h.ts.seconds * 1000) : null;
                 const itemId = h.id || `${h.uid || h.email || 'history'}-${h.url}`;
-                const historyPrompt = String(h.supplementaryPrompt || h.prompt || '').trim();
+                const basePrompt = String(h.prompt || '').trim();
+                const supplementaryPrompt = String(h.supplementaryPrompt || '').trim();
+                const historyPrompt = [basePrompt, supplementaryPrompt ? `[YÊU CẦU BỔ SUNG]:\n${supplementaryPrompt}` : '']
+                  .filter(Boolean)
+                  .join('\n\n');
                 const promptExpanded = Boolean(expandedHistoryPrompts[itemId]);
                 const canExpandPrompt = historyPrompt.length > 145;
                 return (

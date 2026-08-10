@@ -13,6 +13,7 @@ type ApiResponse = {
 
 export interface FirebaseAuthContext {
   uid: string;
+  idToken: string;
   email: string | null;
   emailVerified: boolean;
   claims: JWTPayload;
@@ -141,6 +142,7 @@ export async function verifyFirebaseRequest(req: ApiRequest): Promise<FirebaseAu
   const userProfile = tokenAdmin || primaryAdmin ? await loadUserProfile(uid, idToken).catch(() => null) : await loadUserProfile(uid, idToken);
   return {
     uid,
+    idToken,
     email,
     emailVerified,
     claims: payload,

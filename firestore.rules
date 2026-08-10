@@ -31,6 +31,12 @@ service cloud.firestore {
       return 'isDefault' in data && data.isDefault == true;
     }
 
+    function isEncryptedPrompt(data) {
+      return data.prompt is string &&
+        data.prompt.size() > 35 && data.prompt.size() <= 20000 &&
+        data.prompt.matches('^enc:v1:[A-Za-z0-9_-]+$');
+    }
+
     function isSharedAsset(data) {
       return 'isShared' in data && data.isShared == true;
     }
@@ -40,11 +46,12 @@ service cloud.firestore {
         data.keys().hasOnly(['id', 'name', 'prompt', 'type', 'uid', 'createdAt', 'isDefault']) &&
         data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
         data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
-        data.prompt is string && data.prompt.size() > 0 && data.prompt.size() <= 12000 &&
+        data.prompt is string && data.prompt.size() > 0 && data.prompt.size() <= 20000 &&
         data.type in ['generate', 'tryon', 'ecom', 'ecom-thay'] &&
         data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
         data.createdAt is timestamp &&
-        (!('isDefault' in data) || data.isDefault is bool);
+        (!('isDefault' in data) || data.isDefault is bool) &&
+        (!isDefaultPrompt(data) || isEncryptedPrompt(data));
     }
 
     function validAsset(data) {
@@ -126,7 +133,7 @@ service cloud.firestore {
         data.feature is string && data.feature.size() > 0 && data.feature.size() <= 100 &&
         data.model is string && data.model.size() > 0 && data.model.size() <= 100 &&
         data.size is string && data.size.size() <= 10 &&
-        optionalShortString(data, 'batchId', 100) && optionalShortString(data, 'prompt', 12000) &&
+        optionalShortString(data, 'batchId', 100) && optionalShortString(data, 'prompt', 20000) &&
         optionalShortString(data, 'supplementaryPrompt', 12000) && optionalShortString(data, 'promptId', 100) &&
         (!('promptSource' in data) || data.promptSource in ['manual', 'saved']) &&
         optionalShortString(data, 'inputImage', 600000) && optionalShortString(data, 'modelKey', 100) &&
@@ -136,7 +143,10 @@ service cloud.firestore {
     }
 
     match /prompts/{promptId} {
-      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin() || isDefaultPrompt(resource.data));
+      allow read: if signedIn() && (
+        resource.data.uid == request.auth.uid || isAdmin() ||
+        (isDefaultPrompt(resource.data) && isEncryptedPrompt(resource.data))
+      );
       allow create: if signedIn() && validPrompt(request.resource.data) && (
         isAdmin() || (request.resource.data.uid == request.auth.uid && !isDefaultPrompt(request.resource.data))
       );

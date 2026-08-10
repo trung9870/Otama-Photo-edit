@@ -259,6 +259,7 @@ interface SavedPrompt {
   name: string;
   prompt: string;
   isDefault?: boolean;
+  isSecret?: boolean;
 }
 
 interface SavedModel {
@@ -278,33 +279,18 @@ interface SavedRoom {
 }
 
 const DEFAULT_GEN_PROMPTS: SavedPrompt[] = [
-  { 
-    id: 'g1', 
-    name: '✨ Prompt chính', 
-    prompt: 'A bright minimalist light-colored wood flooring in a herringbone pattern.. Soft, natural indoor lighting creating a professional retail aesthetic\n\nhigh-angle, aerial front view, close-up view to the clothes . The surface is a light grey oak parquet floor with a chevron/herringbone texture.',
-    isDefault: true
-  },
-  { 
-    id: 'g2', 
-    name: '📸 Chụp Flat Lay', 
-    prompt: '{\n  "prompt_structure": {\n    "subject": "A collection of premium men\'s short",\n    "styling": "laid flat",\n    "angle": "High-angle top-down shot, professional flat lay photography",\n    "lighting": "Soft natural studio lighting, diffused shadows, bright and clean aesthetic",\n    "background": "Light grey herringbone wooden floor texture",\n    "props": "Minimalist framed line art posters in the background corners, \'Vogue\' style aesthetic",\n    "technical_details": "High resolution, 8k, commercial fashion photography, sharp focus on fabric texture, clean lines"\n  },\n  "keywords": [\n    "flat lay",\n    "apparel photography",\n    "minimalist",\n    "folded clothes",\n    "e-commerce style",\n    "layered composition"\n  ]\n}',
-    isDefault: true
-  },
+  { id: 'g1', name: '✨ Prompt chính', prompt: '', isDefault: true, isSecret: true },
+  { id: 'g2', name: '📸 Chụp Flat Lay', prompt: '', isDefault: true, isSecret: true },
 ];
 
 const DEFAULT_TRYON_PROMPTS: SavedPrompt[] = [
-  {
-    id: 't1',
-    name: '👕 Nửa người',
-    prompt: 'Thay chiếc áo này cho người mẫu trong ảnh, giữ nguyên tư thế và biểu cảm. Đảm bảo ánh sáng và màu sắc hòa hợp với môi trường xung quanh.',
-    isDefault: true
-  },
-  {
-    id: 't2',
-    name: '👖 Thay quần',
-    prompt: 'Thay chiếc quần này cho người mẫu, giữ nguyên phần thân trên. Đảm bảo nếp nhăn và bóng đổ của vải trông tự nhiên.',
-    isDefault: true
-  }
+  { id: 't1', name: '👕 Nửa người', prompt: '', isDefault: true, isSecret: true },
+  { id: 't2', name: '👖 Thay quần', prompt: '', isDefault: true, isSecret: true },
+];
+
+const DEFAULT_ECOM_PROMPTS: SavedPrompt[] = [
+  { id: 'e1', name: 'Prompt 1', prompt: '', isDefault: true, isSecret: true },
+  { id: 'e2', name: 'Prompt 2', prompt: '', isDefault: true, isSecret: true },
 ];
 
 const MODEL_CONFIG = {
@@ -464,6 +450,36 @@ async function prepareKieReferences(sources: string[], apiKey: string): Promise<
   return prepared;
 }
 
+function isEncryptedSharedPrompt(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith('enc:v1:');
+}
+
+async function decryptSharedPromptForAdmin(encryptedPrompt: string): Promise<string> {
+  const response = await apiFetch('/api/prompts-crypto', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'decrypt', prompt: encryptedPrompt }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || typeof data.prompt !== 'string') {
+    throw new Error(data.error || 'Không thể mở prompt bảo mật.');
+  }
+  return data.prompt;
+}
+
+async function encryptSharedPromptForAdmin(plaintext: string): Promise<string> {
+  const response = await apiFetch('/api/prompts-crypto', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'encrypt', prompt: plaintext }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || typeof data.prompt !== 'string') {
+    throw new Error(data.error || 'Không thể mã hóa prompt.');
+  }
+  return data.prompt;
+}
+
 // Poll an array of Kie.ai task IDs until each completes (or fails / times out).
 // Returns the resulting image URLs in the same order as taskIds.
 // Each poll request hits /api/generate-check (~1s), so a Vercel function
@@ -554,19 +570,11 @@ function App() {
   }, []);
 
   // Ecom State
-  const defaultEcomPrompts: SavedPrompt[] = [
-    { id: 'e1', name: 'Prompt 1', prompt: '帮我给我们这件产品做一个详情页,高级感,像山下有松一样表达的售卖详情页。帮我生成电商详情页9:16详情图8张图一张图一页面一卖点', isDefault: true },
-    { id: 'e2', name: 'Prompt 2', prompt: '生成一套淘寶详情图, 越南语', isDefault: true }
-  ];
-  const [ecomSavedPrompts, setEcomSavedPrompts] = useState<SavedPrompt[]>(() => {
-    try {
-      const saved = localStorage.getItem('ecomPrompts');
-      if (saved) return JSON.parse(saved);
-    } catch(e) {}
-    return defaultEcomPrompts;
-  });
+  const [ecomSavedPrompts, setEcomSavedPrompts] = useState<SavedPrompt[]>(DEFAULT_ECOM_PROMPTS);
   const [selectedEcomPromptId, setSelectedEcomPromptId] = useState<string>('manual');
   const [ecomPromptText, setEcomPromptText] = useState<string>('');
+  const selectedEcomSavedPrompt = ecomSavedPrompts.find(prompt => prompt.id === selectedEcomPromptId);
+  const ecomUsesSecretPrompt = selectedEcomSavedPrompt?.isSecret === true;
   const [draggedEcomPromptIndex, setDraggedEcomPromptIndex] = useState<number | null>(null);
   const [ecomSupplementaryPrompt, setEcomSupplementaryPrompt] = useState<string>('');
   // Kho prompt riêng cho tab Thay (type 'ecom-thay'), tách khỏi Gen new
@@ -577,11 +585,12 @@ function App() {
   const [newThayPromptText, setNewThayPromptText] = useState('');
   const [editingThayPromptId, setEditingThayPromptId] = useState<string | null>(null);
   const [thayManualMode, setThayManualMode] = useState(false);
+  const [selectedEcomThayPromptId, setSelectedEcomThayPromptId] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedEcomPromptId !== 'manual') {
       const selected = ecomSavedPrompts.find(p => p.id === selectedEcomPromptId);
-      if (selected && selected.prompt !== ecomPromptText) {
+      if (selected?.prompt && selected.prompt !== ecomPromptText) {
         setEcomPromptText(selected.prompt);
       }
     }
@@ -625,8 +634,11 @@ function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem('ecomPrompts', JSON.stringify(ecomSavedPrompts));
-  }, [ecomSavedPrompts]);
+    // Older builds cached shared prompt plaintext in the browser. Remove that
+    // cache permanently; shared prompt bodies now stay encrypted in Firestore.
+    localStorage.removeItem('ecomPrompts');
+    localStorage.removeItem('banana_gen_prompts');
+  }, []);
 
   const [ecomBoxes, setEcomBoxes] = useState<{id: string, cropUrl: string}[]>([]);
   const [selectedBoxIds, setSelectedBoxIds] = useState<string[]>([]);
@@ -857,6 +869,7 @@ function App() {
   const [tryOnResult, setTryOnResult] = useState<string | null>(null);
   const [tryOnPrompt, setTryOnPrompt] = useState<string>('');
   const [tryOnManualMode, setTryOnManualMode] = useState<boolean>(false);
+  const [selectedTryOnPromptId, setSelectedTryOnPromptId] = useState<string | null>(null);
   const modelFileInputRef = useRef<HTMLInputElement>(null);
   const productFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -875,6 +888,8 @@ function App() {
 
   const [selectedPromptId, setSelectedPromptId] = useState<string>('');
   const [aiPrompt, setAiPrompt] = useState<string>('');
+  const selectedGenSavedPrompt = savedGenPrompts.find(prompt => prompt.id === selectedPromptId);
+  const hasClothingPrompt = Boolean(aiPrompt.trim() || selectedGenSavedPrompt?.isSecret);
   const [isAddingPrompt, setIsAddingPrompt] = useState(false);
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
   const [newPromptName, setNewPromptName] = useState('');
@@ -1100,10 +1115,15 @@ function App() {
     let cleanupStarted = false;
     const historyQuery = query(collection(db, 'history'), where('uid', '==', user.uid));
     const unsubscribe = onSnapshot(historyQuery, (snapshot) => {
-      const all = snapshot.docs.map((historyDoc) => ({
-        id: historyDoc.id,
-        ...(historyDoc.data() as Omit<EcomHistoryItem, 'id'>),
-      }));
+      const all = snapshot.docs.map((historyDoc) => {
+        const item = {
+          id: historyDoc.id,
+          ...(historyDoc.data() as Omit<EcomHistoryItem, 'id'>),
+        };
+        return item.promptSource === 'saved' && !isAdmin
+          ? { ...item, prompt: '' }
+          : item;
+      });
       const toMillis = (value: any) => {
         if (typeof value?.toMillis === 'function') return value.toMillis();
         if (typeof value?.seconds === 'number') return value.seconds * 1000;
@@ -1126,7 +1146,7 @@ function App() {
     });
 
     return unsubscribe;
-  }, [isAuthReady, user?.uid]);
+  }, [isAuthReady, user?.uid, isAdmin]);
 
   // Auto-switch appMode khi user không có quyền với mode hiện tại
   useEffect(() => {
@@ -1180,7 +1200,7 @@ function App() {
     if (!user) {
       setSavedGenPrompts(DEFAULT_GEN_PROMPTS);
       setSavedTryOnPrompts(DEFAULT_TRYON_PROMPTS);
-      setEcomSavedPrompts(defaultEcomPrompts);
+      setEcomSavedPrompts(DEFAULT_ECOM_PROMPTS);
       setEcomThaySavedPrompts([]);
       return;
     }
@@ -1211,7 +1231,7 @@ function App() {
 
       setSavedGenPrompts([...gen, ...DEFAULT_GEN_PROMPTS.filter(d => !merged.some(m => m.id === d.id))]);
       setSavedTryOnPrompts([...tryon, ...DEFAULT_TRYON_PROMPTS.filter(d => !merged.some(m => m.id === d.id))]);
-      setEcomSavedPrompts([...ecom, ...defaultEcomPrompts.filter(d => !merged.some(m => m.id === d.id))]);
+      setEcomSavedPrompts([...ecom, ...DEFAULT_ECOM_PROMPTS.filter(d => !merged.some(m => m.id === d.id))]);
       setEcomThaySavedPrompts(ecomThay);
 
       if (gen.length > 0 && !selectedPromptId) {
@@ -1225,13 +1245,28 @@ function App() {
       updatePrompts();
     }, e => console.warn(e));
 
-    const unsubDefault = onSnapshot(defaultPromptsQ, (snap) => {
-      defaultDocs = snap.docs.map(doc => doc.data());
+    const unsubDefault = onSnapshot(defaultPromptsQ, async (snap) => {
+      const rawDefaults = snap.docs.map(snapshot => snapshot.data());
+      defaultDocs = await Promise.all(rawDefaults.map(async (prompt) => {
+        const encrypted = isEncryptedSharedPrompt(prompt.prompt);
+        if (!encrypted) {
+          // Firestore rules block plaintext shared prompts for employees. Admin
+          // still sees the record so it can be repaired from the prompt manager.
+          return { ...prompt, isSecret: true, prompt: isAdmin ? prompt.prompt : '' };
+        }
+        if (!isAdmin) return { ...prompt, isSecret: true, prompt: '' };
+        try {
+          return { ...prompt, isSecret: true, prompt: await decryptSharedPromptForAdmin(prompt.prompt) };
+        } catch (decryptError) {
+          console.warn('shared prompt decrypt failed', prompt.id, decryptError);
+          return { ...prompt, isSecret: true, prompt: '' };
+        }
+      }));
       updatePrompts();
     }, e => console.warn(e));
 
     return () => { unsubUser(); unsubDefault(); };
-  }, [isAuthReady, user]);
+  }, [isAuthReady, user, isAdmin]);
 
   // Sync Saved Models — merge personal (uid === me) + shared (isShared === true)
   useEffect(() => {
@@ -1813,19 +1848,20 @@ function App() {
     const isTryOn = activeTab === 'tryon';
     const promptId = editingPromptId || Math.random().toString(36).substr(2, 9);
     
-    const isDefaultPrompt = isAdmin && (DEFAULT_GEN_PROMPTS.some(p => p.id === promptId) || DEFAULT_TRYON_PROMPTS.some(p => p.id === promptId));
-    
-    const newPromptData = {
-      id: promptId,
-      name: newPromptName,
-      prompt: newPromptText,
-      type: isTryOn ? 'tryon' : 'generate',
-      uid: isDefaultPrompt ? 'admin' : user.uid,
-      createdAt: Timestamp.now(),
-      ...(isDefaultPrompt ? { isDefault: true } : {})
-    };
+    const existingPrompt = [...savedGenPrompts, ...savedTryOnPrompts].find(p => p.id === promptId);
+    const isDefaultPrompt = isAdmin && existingPrompt?.isDefault === true;
 
     try {
+      const storedPrompt = isDefaultPrompt ? await encryptSharedPromptForAdmin(newPromptText) : newPromptText;
+      const newPromptData = {
+        id: promptId,
+        name: newPromptName,
+        prompt: storedPrompt,
+        type: isTryOn ? 'tryon' : 'generate',
+        uid: isDefaultPrompt ? 'admin' : user.uid,
+        createdAt: Timestamp.now(),
+        ...(isDefaultPrompt ? { isDefault: true } : {})
+      };
       await setDoc(doc(db, 'prompts', promptId), newPromptData);
       
       if (!isTryOn) {
@@ -1833,6 +1869,8 @@ function App() {
         setAiPrompt(newPromptText);
       } else {
         setTryOnPrompt(newPromptText);
+        setSelectedTryOnPromptId(promptId);
+        setTryOnManualMode(false);
       }
       
       setEditingPromptId(null);
@@ -1872,13 +1910,13 @@ function App() {
     }
     
     const promptId = editingEcomPromptId || Math.random().toString(36).substr(2, 9);
-    const isDefaultPrompt = isAdmin && defaultEcomPrompts.some(p => p.id === promptId);
-    
+    const isDefaultPrompt = isAdmin && ecomSavedPrompts.some(p => p.id === promptId && p.isDefault);
     try {
+      const storedPrompt = isDefaultPrompt ? await encryptSharedPromptForAdmin(ecomPromptText) : ecomPromptText;
       await setDoc(doc(db, 'prompts', promptId), {
         id: promptId,
         name: newEcomPromptName,
-        prompt: ecomPromptText,
+        prompt: storedPrompt,
         type: 'ecom',
         uid: isDefaultPrompt ? 'admin' : user.uid,
         createdAt: Timestamp.now(),
@@ -1897,7 +1935,7 @@ function App() {
     e.stopPropagation();
     if (!user) return;
 
-    if (!isAdmin && defaultEcomPrompts.some(p => p.id === id)) {
+    if (!isAdmin && ecomSavedPrompts.some(p => p.id === id && p.isDefault)) {
       setGlobalError("Không thể xóa prompt mặc định.");
       return;
     }
@@ -1924,8 +1962,12 @@ function App() {
       return;
     }
     try {
+      if (!p.prompt) throw new Error('Prompt chưa có nội dung để đồng bộ.');
+      const encryptedPrompt = await encryptSharedPromptForAdmin(p.prompt);
       await setDoc(doc(db, 'prompts', p.id), {
-        isDefault: true
+        prompt: encryptedPrompt,
+        isDefault: true,
+        uid: 'admin',
       }, { merge: true });
       alert("Đã đồng bộ Prompt này lên danh sách chung cho mọi người.");
     } catch (error) {
@@ -1941,8 +1983,12 @@ function App() {
       return;
     }
     try {
+      if (!p.prompt) throw new Error('Prompt chưa có nội dung để đồng bộ.');
+      const encryptedPrompt = await encryptSharedPromptForAdmin(p.prompt);
       await setDoc(doc(db, 'prompts', p.id), {
-        isDefault: true
+        prompt: encryptedPrompt,
+        isDefault: true,
+        uid: 'admin',
       }, { merge: true });
       alert("Đã đồng bộ Prompt này lên danh sách chung cho mọi người.");
     } catch (error) {
@@ -2107,7 +2153,9 @@ function App() {
   }, []);
 
   const handleAiEdit = async (targetIndex?: number) => {
-    if (images.length === 0 || !aiPrompt) return;
+    const selectedSavedPrompt = savedGenPrompts.find(prompt => prompt.id === selectedPromptId);
+    const usesSecretPrompt = selectedSavedPrompt?.isSecret === true;
+    if (images.length === 0 || (!aiPrompt.trim() && !usesSecretPrompt)) return;
     
     const config = MODEL_CONFIG[selectedModel];
     
@@ -2150,7 +2198,8 @@ function App() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 modelId,
-                prompt: promptText,
+                prompt: usesSecretPrompt ? '' : promptText,
+                savedPromptId: usesSecretPrompt ? selectedSavedPrompt.id : undefined,
                 referenceImages,
                 aspectRatio: img.aspectRatio,
               })
@@ -2342,7 +2391,14 @@ function App() {
         : tryOnProductCategory === 'bottom' ? 'pants/skirt/bottom'
           : tryOnProductCategory === 'shoes' ? 'shoes/footwear/accessories'
             : 'clothing item(s)';
-      const prompt = `Virtual Try-On Task: Take ONLY the ${categoryText} from Product Reference Image 1 and place it onto the person in Composition Reference Image 2. CRITICAL: Do NOT include any human parts from the product image. ${tryOnPrompt ? `Additional instructions: ${tryOnPrompt}` : "Ensure the fit is natural and follows the person's pose."} Output ONLY the resulting image.`;
+      const selectedSavedPrompt = selectedTryOnPromptId
+        ? savedTryOnPrompts.find(savedPrompt => savedPrompt.id === selectedTryOnPromptId)
+        : undefined;
+      const usesSecretPrompt = selectedSavedPrompt?.isSecret === true;
+      const visibleInstruction = !usesSecretPrompt && tryOnPrompt
+        ? `Additional instructions: ${tryOnPrompt}`
+        : "Ensure the fit is natural and follows the person's pose.";
+      const prompt = `Virtual Try-On Task: Take ONLY the ${categoryText} from Product Reference Image 1 and place it onto the person in Composition Reference Image 2. CRITICAL: Do NOT include any human parts from the product image. ${visibleInstruction} Output ONLY the resulting image.`;
       setTryOnStep('processing');
       const response = await apiFetch('/api/generate', {
         method: 'POST',
@@ -2350,6 +2406,8 @@ function App() {
         body: JSON.stringify({
           modelId: MODEL_CONFIG[selectedModel].id,
           prompt,
+          savedPromptId: usesSecretPrompt ? selectedSavedPrompt!.id : undefined,
+          savedPromptMode: usesSecretPrompt ? 'append' : undefined,
           referenceImages,
           referenceMode: 'product-composition',
           aspectRatio: '3:4',
@@ -2634,6 +2692,9 @@ function App() {
   ) => {
     const savedPromptStillExists = !!settings.promptId
       && ecomSavedPrompts.some((prompt) => prompt.id === settings.promptId);
+    const savedPrompt = savedPromptStillExists
+      ? ecomSavedPrompts.find((prompt) => prompt.id === settings.promptId)
+      : undefined;
 
     setAppMode('ecom');
     setEcomSubTab('gen-new');
@@ -2641,7 +2702,7 @@ function App() {
     replaceEcomProductImages(settings.t2iMode
       ? []
       : (settings.inputImages?.length ? settings.inputImages : (settings.inputImage ? [settings.inputImage] : [])));
-    setEcomPromptText(settings.prompt || '');
+    setEcomPromptText(savedPrompt?.isSecret ? '' : (settings.prompt || ''));
     setEcomSupplementaryPrompt(settings.supplementaryPrompt || '');
     setSelectedEcomPromptId(savedPromptStillExists ? settings.promptId! : 'manual');
     if (settings.modelKey && settings.modelKey in MODEL_CONFIG) setEcomModel(settings.modelKey);
@@ -2861,7 +2922,7 @@ function App() {
     // Text-to-image mode is gen-new only; otherwise the regular i2i product-image requirement applies.
     const t2iActive = ecomSubTab === 'gen-new' && ecomT2IMode;
     if (!t2iActive && ecomProductImages.length === 0) return;
-    if (t2iActive && !ecomPromptText.trim() && !ecomSupplementaryPrompt.trim()) {
+    if (t2iActive && !ecomPromptText.trim() && !ecomSupplementaryPrompt.trim() && !ecomUsesSecretPrompt) {
       setGlobalError("Chế độ Text-to-Image cần ít nhất 1 prompt mô tả ảnh muốn tạo.");
       return;
     }
@@ -2882,6 +2943,7 @@ function App() {
       productImages: t2iActive ? [] : ecomProductImages,
       t2iMode: t2iActive,
       promptText: ecomPromptText,
+      promptIsSecret: ecomSubTab === 'gen-new' && selectedPromptAtSubmit?.isSecret === true,
       supplementaryPrompt: ecomSupplementaryPrompt,
       model: ecomModel,
       aspectRatio: ecomAspectRatio,
@@ -2895,7 +2957,7 @@ function App() {
       promptLabel: isPromptManualAtSubmit ? undefined : selectedPromptAtSubmit?.name,
     };
 
-    let currentPrompt = snapshot.promptText || "帮我给我们这件产品做一个详情页,高级感,像山下有松一样表达的售卖详情页。帮我生成电商详情页9:16详情图8张图一张图一页面一卖点";
+    let currentPrompt = snapshot.promptIsSecret ? '' : snapshot.promptText;
     let config = MODEL_CONFIG[snapshot.model];
     let templateSource: string | undefined = undefined;
 
@@ -2905,11 +2967,6 @@ function App() {
         : (clonePrompts[snapshot.clonePromptType] || DEFAULT_CLONE_PROMPTS[snapshot.clonePromptType]);
       config = MODEL_CONFIG['gpt2'];
       templateSource = snapshot.templateImage!;
-    }
-
-    // Gộp prompt bổ sung (chỉ áp dụng cho Gen new)
-    if (ecomSubTab === 'gen-new' && snapshot.supplementaryPrompt.trim()) {
-      currentPrompt = `${currentPrompt}\n\n[YÊU CẦU BỔ SUNG — ƯU TIÊN CAO]:\n${snapshot.supplementaryPrompt.trim()}`;
     }
 
     // Branch on mode: concurrent batches vs single-batch blocking
@@ -2960,6 +3017,7 @@ function App() {
         : null;
 
       let generatedImages: string[] = [];
+      let protectedHistoryPrompt = '';
       let serverFailed = false;
 
       // Try server first
@@ -2970,6 +3028,8 @@ function App() {
           body: JSON.stringify({
             modelId: config.id,
             prompt: currentPrompt,
+            savedPromptId: snapshot.promptIsSecret ? snapshot.promptId : undefined,
+            supplementaryPrompt: ecomSubTab === 'gen-new' ? snapshot.supplementaryPrompt : undefined,
             referenceImages,
             referenceMode: templateSource ? 'product-composition' : undefined,
             aspectRatio: snapshot.aspectRatio,
@@ -2981,6 +3041,9 @@ function App() {
 
         if (response.ok) {
           const data = await response.json();
+          if (snapshot.promptIsSecret && isEncryptedSharedPrompt(data.protectedPrompt)) {
+            protectedHistoryPrompt = data.protectedPrompt;
+          }
           if (data.isAsync && Array.isArray(data.taskIds)) {
             // KIE async: poll each task until done. Each poll is fast → no Vercel timeout.
             const urls = await pollKieTasks(data.taskIds);
@@ -3077,7 +3140,7 @@ function App() {
             model: config.id,
             size: snapshot.imageSize,
             batchId: batchId || undefined,
-            prompt: snapshot.promptText,
+            prompt: snapshot.promptIsSecret ? protectedHistoryPrompt : snapshot.promptText,
             supplementaryPrompt: snapshot.supplementaryPrompt,
             promptId: snapshot.promptId,
             promptSource: snapshot.promptSource,
@@ -3179,10 +3242,11 @@ function App() {
     const id = editingThayPromptId || Math.random().toString(36).substr(2, 9);
     const isDefaultPrompt = isAdmin && ecomThaySavedPrompts.some(p => p.id === id && p.isDefault);
     try {
+      const storedPrompt = isDefaultPrompt ? await encryptSharedPromptForAdmin(newThayPromptText) : newThayPromptText;
       await setDoc(doc(db, 'prompts', id), {
         id,
         name: newThayPromptName,
-        prompt: newThayPromptText,
+        prompt: storedPrompt,
         type: 'ecom-thay',
         uid: isDefaultPrompt ? 'admin' : user.uid,
         createdAt: Timestamp.now(),
@@ -3192,6 +3256,9 @@ function App() {
       setEditingThayPromptId(null);
       setNewThayPromptName('');
       setNewThayPromptText('');
+      setSelectedEcomThayPromptId(id);
+      setEcomThayPrompt(newThayPromptText);
+      setThayManualMode(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `prompts/${id}`);
     }
@@ -3467,13 +3534,18 @@ function App() {
       );
       const actualModelId = MODEL_CONFIG[ecomThayModel]?.id || 'nano-banana-pro';
       const count = Math.max(1, Math.min(3, ecomThayCount));
+      const selectedSavedPrompt = selectedEcomThayPromptId
+        ? ecomThaySavedPrompts.find(prompt => prompt.id === selectedEcomThayPromptId)
+        : undefined;
+      const usesSecretPrompt = selectedSavedPrompt?.isSecret === true;
 
       const response = await apiFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelId: actualModelId,
-          prompt: ecomThayPrompt,
+          prompt: usesSecretPrompt ? '' : ecomThayPrompt,
+          savedPromptId: usesSecretPrompt ? selectedSavedPrompt!.id : undefined,
           referenceImages,
           referenceMode: 'product-composition',
           aspectRatio: ecomThayAspectRatio,
@@ -4536,7 +4608,7 @@ function App() {
                       <p className="uppercase font-semibold" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Danh sách đã lưu</p>
                       <div className="flex gap-3">
                         <button
-                          onClick={() => { setThayManualMode(true); setEcomThayPrompt(''); }}
+                          onClick={() => { setThayManualMode(true); setSelectedEcomThayPromptId(null); setEcomThayPrompt(''); }}
                           className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
                           style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.04em' }}
                         >
@@ -4606,9 +4678,9 @@ function App() {
                           <PromptRow
                             key={p.id}
                             name={p.name}
-                            active={!thayManualMode && ecomThayPrompt === p.prompt}
+                            active={!thayManualMode && selectedEcomThayPromptId === p.id}
                             synced={p.isDefault}
-                            onClick={() => { setEcomThayPrompt(p.prompt); setThayManualMode(false); }}
+                            onClick={() => { setSelectedEcomThayPromptId(p.id); setEcomThayPrompt(p.prompt || ''); setThayManualMode(false); }}
                             showSync={isAdmin}
                             onSync={(e) => toggleSyncEcomPrompt(p, e)}
                             showEdit={isAdmin || !p.isDefault}
@@ -4637,7 +4709,7 @@ function App() {
                   </div>
 
                   {/* Nội dung prompt hiện tại / thủ công */}
-                  <div>
+                  {(isAdmin || thayManualMode) && <div>
                     <p className="uppercase font-semibold mb-2" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
                       {thayManualMode ? 'Nhập Prompt mới' : 'Nội dung Prompt hiện tại'}
                     </p>
@@ -4650,7 +4722,13 @@ function App() {
                       onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
                       onBlur={(e) => (e.currentTarget.style.borderColor = 'transparent')}
                     />
-                  </div>
+                  </div>}
+                  {!isAdmin && !thayManualMode && selectedEcomThayPromptId && (
+                    <div className="rounded-lg px-4 py-3 flex items-center gap-2" style={{ background: 'var(--color-accent-soft)', border: '0.5px solid var(--color-accent)' }}>
+                      <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+                      <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>Đã chọn prompt bảo mật, sẵn sàng Thay</p>
+                    </div>
+                  )}
 
                   <Button
                     variant="filled"
@@ -4832,9 +4910,12 @@ function App() {
                           value={selectedEcomPromptId}
                           onChange={(promptId) => {
                             setSelectedEcomPromptId(promptId);
-                            if (promptId === 'manual') return;
+                            if (promptId === 'manual') {
+                              setEcomPromptText('');
+                              return;
+                            }
                             const selectedPrompt = ecomSavedPrompts.find((prompt) => prompt.id === promptId);
-                            if (selectedPrompt) setEcomPromptText(selectedPrompt.prompt);
+                            setEcomPromptText(selectedPrompt?.prompt || '');
                           }}
                           options={promptOptions}
                           width="fill"
@@ -4864,7 +4945,7 @@ function App() {
                   })()}
                   {(() => {
                     const runningBatches = ecomBatches.filter((batch) => batch.status === 'running').length;
-                    const t2iReady = ecomT2IMode && Boolean(ecomPromptText.trim() || ecomSupplementaryPrompt.trim());
+                    const t2iReady = ecomT2IMode && Boolean(ecomPromptText.trim() || ecomSupplementaryPrompt.trim() || ecomUsesSecretPrompt);
                     const i2iReady = !ecomT2IMode && ecomProductImages.length > 0;
                     const ready = t2iReady || i2iReady;
                     return (
@@ -4967,12 +5048,14 @@ function App() {
                   {/* Col 2 — Prompt */}
                   <div className="gen-new-prompt-card p-3 flex flex-col" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     <textarea
-                      value={ecomPromptText}
+                      value={!isAdmin && ecomUsesSecretPrompt ? '' : ecomPromptText}
                       onChange={(event) => {
+                        if (!isAdmin && ecomUsesSecretPrompt) return;
                         setEcomPromptText(event.target.value);
                         if (selectedEcomPromptId !== 'manual') setSelectedEcomPromptId('manual');
                       }}
-                      placeholder="Kết hợp ảnh tham chiếu và mô tả điều bạn muốn tạo…"
+                      readOnly={!isAdmin && ecomUsesSecretPrompt}
+                      placeholder={!isAdmin && ecomUsesSecretPrompt ? 'Prompt đã được bảo mật, sẵn sàng Gen' : 'Kết hợp ảnh tham chiếu và mô tả điều bạn muốn tạo…'}
                       className="gen-new-compact-prompt w-full resize-none outline-none"
                     />
                     <div className="mb-2 flex items-center gap-2">
@@ -5062,7 +5145,7 @@ function App() {
                               <button
                                 key={p.id}
                                 type="button"
-                                onClick={() => { setSelectedEcomPromptId(p.id); setEcomPromptText(p.prompt); }}
+                                onClick={() => { setSelectedEcomPromptId(p.id); setEcomPromptText(p.prompt || ''); }}
                                 title={p.name}
                                 className="text-left transition-all"
                                 style={{
@@ -5155,7 +5238,7 @@ function App() {
                                         active={selectedEcomPromptId === p.id}
                                         synced={p.isDefault}
                                         pinned={idx < 4}
-                                        onClick={() => { setSelectedEcomPromptId(p.id); setEcomPromptText(p.prompt); }}
+                                        onClick={() => { setSelectedEcomPromptId(p.id); setEcomPromptText(p.prompt || ''); }}
                                         showSync={isAdmin}
                                         onSync={(e) => toggleSyncEcomPrompt(p, e)}
                                         showEdit={isAdmin || !p.isDefault}
@@ -6439,10 +6522,10 @@ function App() {
                                 <p
                                   className="flex-1 min-w-0 text-xs whitespace-pre-wrap"
                                   style={{ color: 'var(--color-text-secondary)' }}
-                                  title={batch.promptText}
+                                  title={batch.promptSource === 'saved' && !isAdmin ? 'Prompt đã được bảo mật' : batch.promptText}
                                 >
-                                  {batch.promptText}
-                                  <button
+                                  {batch.promptSource === 'saved' && !isAdmin ? 'Prompt đã được bảo mật' : batch.promptText}
+                                  {!(batch.promptSource === 'saved' && !isAdmin) && batch.promptText && <button
                                     type="button"
                                     onClick={() => void copyEcomPrompt(batch.promptText, `batch-${batch.id}`)}
                                     className="inline-flex items-center justify-center ml-1 p-1 rounded-md transition-colors"
@@ -6455,7 +6538,7 @@ function App() {
                                     aria-label="Copy prompt của batch"
                                   >
                                     {copiedPromptKey === `batch-${batch.id}` ? <Check size={12} /> : <Copy size={12} />}
-                                  </button>
+                                  </button>}
                                 </p>
                               </div>
                             </div>
@@ -6598,7 +6681,8 @@ function App() {
                           <div className="flex flex-col gap-4">
                             {historyGroups.map((historyGroup) => {
                               const representative = historyGroup.items[0];
-                              const historyPrompt = representative.supplementaryPrompt?.trim()
+                              const protectedSavedPrompt = representative.promptSource === 'saved' && !isAdmin;
+                              const historyPrompt = protectedSavedPrompt ? '' : representative.supplementaryPrompt?.trim()
                                 ? `${representative.prompt || ''}\n\n[YÊU CẦU BỔ SUNG — ƯU TIÊN CAO]:\n${representative.supplementaryPrompt.trim()}`
                                 : (representative.prompt || '');
                               const copyKey = `history-${historyGroup.key}`;
@@ -7849,7 +7933,7 @@ function App() {
                     fullWidth
                     icon={currentImage?.isProcessing ? Loader2 : Sparkles}
                     onClick={() => handleAiEdit(selectedIndex)}
-                    disabled={isBatchProcessing || images.length === 0 || !aiPrompt || currentImage?.isProcessing}
+                    disabled={isBatchProcessing || images.length === 0 || !hasClothingPrompt || currentImage?.isProcessing}
                   >
                     {currentImage?.isProcessing ? 'Đang xử lý ảnh này…' : 'Gen ảnh hiện tại'}
                   </Button>
@@ -7861,7 +7945,7 @@ function App() {
                       fullWidth
                       icon={isBatchProcessing ? Loader2 : Layers}
                       onClick={() => handleAiEdit()}
-                      disabled={isBatchProcessing || !aiPrompt}
+                      disabled={isBatchProcessing || !hasClothingPrompt}
                     >
                       {isBatchProcessing ? 'Đang xử lý hàng loạt…' : `Gen tất cả (${images.length} ảnh)`}
                     </Button>
@@ -8653,6 +8737,7 @@ function App() {
                           <button
                             onClick={() => {
                               setTryOnManualMode(true);
+                              setSelectedTryOnPromptId(null);
                               setTryOnPrompt('');
                             }}
                             className="flex items-center gap-1 font-semibold hover:opacity-80 transition-opacity"
@@ -8732,11 +8817,12 @@ function App() {
                             <PromptRow
                               key={p.id}
                               name={p.name}
-                              active={!tryOnManualMode && tryOnPrompt === p.prompt}
+                              active={!tryOnManualMode && selectedTryOnPromptId === p.id}
                               synced={p.isDefault}
                               onClick={() => {
                                 setTryOnPrompt(p.prompt);
                                 setTryOnManualMode(false);
+                                setSelectedTryOnPromptId(p.id);
                               }}
                               showSync={isAdmin}
                               onSync={(e) => toggleSyncGenPrompt(p, e)}
@@ -8793,7 +8879,7 @@ function App() {
                         />
                       </div>
                     )}
-                    {!isAdmin && !tryOnManualMode && tryOnPrompt && (
+                    {!isAdmin && !tryOnManualMode && selectedTryOnPromptId && (
                       <div
                         className="rounded-lg px-4 py-3 flex items-center gap-2"
                         style={{
@@ -9314,10 +9400,11 @@ function App() {
         onClose={() => setShowTryOnPromptModal(false)}
         title="Tất cả Prompt Thay Đồ"
         prompts={savedTryOnPrompts}
-        selectedId={tryOnManualMode ? null : (savedTryOnPrompts.find((p) => p.prompt === tryOnPrompt)?.id ?? null)}
+        selectedId={tryOnManualMode ? null : selectedTryOnPromptId}
         onSelect={(p) => {
           setTryOnPrompt((p as any).prompt);
           setTryOnManualMode(false);
+          setSelectedTryOnPromptId((p as any).id);
         }}
         isAdmin={isAdmin}
         onSync={(p, e) => toggleSyncGenPrompt(p as any, e)}

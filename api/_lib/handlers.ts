@@ -1,11 +1,12 @@
 import { openTaskRef, sealTaskRef } from './taskRef.js';
+import { resolveSharedPrompt } from './promptVault.js';
 
 // Generic Request/Response interface compatible with both Express and Vercel
 type Req = {
   body: any;
   query: any;
   method?: string;
-  auth?: { uid: string };
+  auth?: { uid: string; idToken: string };
 };
 type Res = {
   status: (code: number) => Res;
@@ -366,7 +367,7 @@ export async function uploadBase64WithFallback(payload: string, apiKey: string):
 // ============== /api/generate ==============
 export async function handleGenerate(req: Req, res: Res) {
   try {
-    const { modelId, prompt, referenceMode, referenceImages, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, t2iMode } = req.body;
+    const { modelId, prompt, savedPromptId, savedPromptMode, supplementaryPrompt, referenceMode, referenceImages, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, t2iMode } = req.body;
     const explicitReferences: string[] = Array.isArray(referenceImages)
       ? referenceImages.filter((value: any) => typeof value === 'string' && value.length > 0)
       : [];
@@ -379,6 +380,27 @@ export async function handleGenerate(req: Req, res: Res) {
 
     if (typeof prompt !== 'string' || prompt.length > MAX_PROMPT_CHARS) {
       return res.status(400).json({ error: `Prompt phải là chuỗi và không vượt quá ${MAX_PROMPT_CHARS.toLocaleString()} ký tự.` });
+    }
+    if (savedPromptId !== undefined && (typeof savedPromptId !== 'string' || savedPromptId.length > 100)) {
+      return res.status(400).json({ error: 'Prompt đã lưu không hợp lệ.' });
+    }
+    if (supplementaryPrompt !== undefined && (typeof supplementaryPrompt !== 'string' || supplementaryPrompt.length > MAX_PROMPT_CHARS)) {
+      return res.status(400).json({ error: 'Prompt bổ sung không hợp lệ.' });
+    }
+    let resolvedPrompt = prompt.trim();
+    let protectedPrompt: string | undefined;
+    if (savedPromptId) {
+      const savedPrompt = await resolveSharedPrompt(savedPromptId, req.auth.uid, req.auth.idToken);
+      protectedPrompt = savedPrompt.protectedPrompt;
+      resolvedPrompt = savedPromptMode === 'append' && resolvedPrompt
+        ? `${resolvedPrompt}\n\n${savedPrompt.plaintext}`
+        : savedPrompt.plaintext;
+    }
+    if (typeof supplementaryPrompt === 'string' && supplementaryPrompt.trim()) {
+      resolvedPrompt = `${resolvedPrompt}\n\n[YÊU CẦU BỔ SUNG - ƯU TIÊN CAO]:\n${supplementaryPrompt.trim()}`;
+    }
+    if (resolvedPrompt.length > MAX_PROMPT_CHARS) {
+      return res.status(400).json({ error: `Tổng nội dung prompt vượt quá ${MAX_PROMPT_CHARS.toLocaleString()} ký tự.` });
     }
     if (explicitReferences.length > 8 || composeList.length > 8) {
       return res.status(400).json({ error: 'Mỗi lần gen chỉ hỗ trợ tối đa 8 ảnh tham chiếu.' });
@@ -393,7 +415,7 @@ export async function handleGenerate(req: Req, res: Res) {
     if (!Number.isInteger(count) || count < 1 || count > 8) {
       return res.status(400).json({ error: 'Số ảnh mỗi lần gen phải từ 1 đến 8.' });
     }
-    if (isT2I && !prompt.trim()) {
+    if (isT2I && !resolvedPrompt) {
       return res.status(400).json({ error: "Chế độ Text-to-Image cần prompt mô tả ảnh muốn tạo." });
     }
     if (!isT2I && explicitReferences.length === 0 && !imageBase64 && composeList.length === 0 && !templateBase64) {
@@ -434,8 +456,8 @@ export async function handleGenerate(req: Req, res: Res) {
       }
 
       const finalPrompt = referenceMode === 'product-composition' && inputUrls.length >= 2
-        ? `Reference Image 1 = Product Reference. Preserve its identity, material, colors, texture, logos, and fine details.\nReference Image 2 = Composition Reference. Use it only for layout, pose, camera, lighting, and scene structure.\n\n${prompt}`
-        : prompt;
+        ? `Reference Image 1 = Product Reference. Preserve its identity, material, colors, texture, logos, and fine details.\nReference Image 2 = Composition Reference. Use it only for layout, pose, camera, lighting, and scene structure.\n\n${resolvedPrompt}`
+        : resolvedPrompt;
       try {
         // Create N tasks in parallel, return taskIds immediately.
         // Client will poll /api/generate-check to track each task's completion.
@@ -445,7 +467,11 @@ export async function handleGenerate(req: Req, res: Res) {
           )
         );
         console.log("[api] Created Kie tasks:", taskIds.length);
-        return res.json({ taskIds: taskIds.map((taskId) => sealTaskRef('kie', taskId, req.auth!.uid)), isAsync: true });
+        return res.json({
+          taskIds: taskIds.map((taskId) => sealTaskRef('kie', taskId, req.auth!.uid)),
+          isAsync: true,
+          ...(protectedPrompt ? { protectedPrompt } : {}),
+        });
       } catch (e: any) {
         console.error("[api] Kie.ai createTask error:", e);
         return res.status(500).json({ error: e.message || "Lỗi khi gọi Kie.ai" });
