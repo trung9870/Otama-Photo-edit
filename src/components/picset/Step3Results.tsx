@@ -3,6 +3,7 @@ import { Loader2, Download, AlertCircle, ArrowLeft, RefreshCcw, RotateCcw, X, Ch
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { Button } from '../ui';
+import { apiFetch } from '../../utils/apiFetch';
 
 // Per-slot task state used by Step3
 export interface PicsetSlotState {
@@ -27,7 +28,7 @@ interface Step3Props {
 }
 
 // Poll a single Kie task — calls /api/generate-check until success/failed/timeout.
-// Server uses env var KIE_API_KEY as fallback when no clientKieApiKey is sent.
+// Server uses KIE_API_KEY; provider keys never enter the browser.
 async function pollOneTask(
   taskId: string,
   signal: AbortSignal
@@ -41,11 +42,9 @@ async function pollOneTask(
     if (signal.aborted) return { url: null, error: 'Aborted' };
 
     const params = new URLSearchParams({ taskId });
-    const kie = localStorage.getItem('kieApiKey');
-    if (kie) params.set('clientKieApiKey', kie);
     let res: Response;
     try {
-      res = await fetch(`/api/generate-check?${params.toString()}`, { signal });
+      res = await apiFetch(`/api/generate-check?${params.toString()}`, { signal });
     } catch (e: any) {
       if (e?.name === 'AbortError') return { url: null, error: 'Aborted' };
       continue;

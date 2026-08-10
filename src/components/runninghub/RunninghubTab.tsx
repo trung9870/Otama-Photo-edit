@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Boxes, Upload, Loader2, AlertCircle, Download, ZoomIn, X, ImageIcon, Sparkles, ChevronsLeftRight, Video, Maximize2, Minimize2, Copy, Check, Settings, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { Button, Segmented } from '../ui';
-import { RunninghubSettings, loadRunninghubKey } from './RunninghubSettings';
+import { apiFetch } from '../../utils/apiFetch';
 
 // ============== Workflow catalog ==============
 // Mỗi entry mô tả 1 RunningHub workflow đã wire UI.
@@ -84,7 +84,6 @@ interface TaskState {
 }
 
 export default function RunninghubTab() {
-  const [apiKey, setApiKey] = useState<string>(() => loadRunninghubKey());
   const [mode, setMode] = useState<RhMode>('upimg');
 
   // Image-mode inputs
@@ -244,19 +243,17 @@ export default function RunninghubTab() {
         elapsedMs: parsed.startedAt ? Date.now() - parsed.startedAt : 0,
       });
       (async () => {
-        const key = localStorage.getItem('runninghub-api-key') || '';
-        if (!key) return;
         try {
           const MAX_ATTEMPTS = 200;
           for (let i = 0; i < MAX_ATTEMPTS; i++) {
             if (controller.signal.aborted) return;
             await new Promise((r) => setTimeout(r, 3000));
             if (controller.signal.aborted) return;
-            const sRes = await fetch('/api/runninghub/status', {
+            const sRes = await apiFetch('/api/runninghub/status', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               signal: controller.signal,
-              body: JSON.stringify({ taskId: parsed.taskId, clientRunninghubApiKey: key }),
+              body: JSON.stringify({ taskId: parsed.taskId }),
             }).catch(() => null);
             if (!sRes) continue;
             const sData = await sRes.json().catch(() => ({}));
@@ -420,6 +417,10 @@ export default function RunninghubTab() {
       alert('Cần upload video trước.');
       return;
     }
+    if (workflow.type === 'video') {
+      alert('Upload video đang tạm khóa để bảo vệ API key. Ảnh vẫn hoạt động bình thường qua server.');
+      return;
+    }
 
     pollAbortRef.current?.abort();
     const controller = new AbortController();
@@ -432,7 +433,7 @@ export default function RunninghubTab() {
       status: 'uploading',
       taskId: null,
       inputImageDataUrl: workflow.type === 'image' ? imageDataUrl : '',
-      inputVideoUrl: workflow.type === 'video' ? videoPreviewUrl : '',
+      inputVideoUrl: '',
       outputUrls: [],
       error: null,
       startedAt: Date.now(),
@@ -441,23 +442,18 @@ export default function RunninghubTab() {
     setOutputDims({});
 
     try {
-      // 1. Upload input — image qua backend (base64), video qua direct frontend (bypass body limit)
-      let fileUrl: string;
-      if (workflow.type === 'video' && videoFile) {
-        fileUrl = await uploadVideoDirectToRH(videoFile, apiKey, controller.signal);
-      } else {
-        const upRes = await fetch('/api/runninghub/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: controller.signal,
-          body: JSON.stringify({ imageBase64, clientRunninghubApiKey: apiKey }),
-        });
-        const upData = await upRes.json().catch(() => ({}));
-        if (!upRes.ok || !upData?.fileUrl) {
-          throw new Error(upData?.error || `Upload fail HTTP ${upRes.status}`);
-        }
-        fileUrl = upData.fileUrl;
+      // 1. Upload ảnh qua backend; provider key không bao giờ vào browser.
+      const upRes = await apiFetch('/api/runninghub/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({ imageBase64 }),
+      });
+      const upData = await upRes.json().catch(() => ({}));
+      if (!upRes.ok || !upData?.fileUrl) {
+        throw new Error(upData?.error || `Upload fail HTTP ${upRes.status}`);
       }
+      const fileUrl: string = upData.fileUrl;
 
       // 2. Create task — input + tuned params
       const nodeInfoList: Array<{ nodeId: string; fieldName: string; fieldValue: any }> = [
@@ -468,14 +464,13 @@ export default function RunninghubTab() {
           nodeInfoList.push({ nodeId: p.nodeId, fieldName: p.fieldName, fieldValue: getParamValue(p) });
         }
       }
-      const runRes = await fetch('/api/runninghub/run', {
+      const runRes = await apiFetch('/api/runninghub/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
           workflowId: workflow.id,
           nodeInfoList,
-          clientRunninghubApiKey: apiKey,
         }),
       });
       const runData = await runRes.json().catch(() => ({}));
@@ -493,11 +488,11 @@ export default function RunninghubTab() {
         await new Promise((r) => setTimeout(r, 3000));
         if (controller.signal.aborted) return;
 
-        const sRes = await fetch('/api/runninghub/status', {
+        const sRes = await apiFetch('/api/runninghub/status', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
-          body: JSON.stringify({ taskId, clientRunninghubApiKey: apiKey }),
+          body: JSON.stringify({ taskId }),
         }).catch(() => null);
         if (!sRes) continue;
         const sData = await sRes.json().catch(() => ({}));
@@ -559,9 +554,7 @@ export default function RunninghubTab() {
         Chạy ComfyUI workflows trên RunningHub.ai. Yêu cầu account RunningHub có membership trả phí.
       </p>
 
-      {/* BYOK Settings hidden — server uses RUNNINGHUB_API_KEY env var.
-          Admin can still override by writing into localStorage 'runninghub-api-key'
-          via DevTools if needed (legacy escape hatch). */}
+      {/* Provider credentials are server-only. */}
 
       {/* Mode sub-tab */}
       <div className="mb-3">
@@ -570,7 +563,6 @@ export default function RunninghubTab() {
           onChange={(v) => setMode(v)}
           options={[
             { value: 'upimg', label: 'UpIMG', icon: ImageIcon },
-            { value: 'upvid', label: 'UpVid', icon: Video },
           ]}
           size="md"
         />
@@ -1353,17 +1345,17 @@ function BeforeAfterSlider({
     setPct((x / rect.width) * 100);
   };
 
-  const onPointerDown = (e: React.PointerEvent) => {
+  const onPointerDown = (e: ReactPointerEvent) => {
     e.preventDefault();
     setDragging(true);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     updateFromClientX(e.clientX);
   };
-  const onPointerMove = (e: React.PointerEvent) => {
+  const onPointerMove = (e: ReactPointerEvent) => {
     if (!dragging) return;
     updateFromClientX(e.clientX);
   };
-  const onPointerUp = (e: React.PointerEvent) => {
+  const onPointerUp = (e: ReactPointerEvent) => {
     setDragging(false);
     try {
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);
@@ -1675,17 +1667,17 @@ function VideoBeforeAfterSlider({
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
     setPct((x / rect.width) * 100);
   };
-  const onPointerDown = (e: React.PointerEvent) => {
+  const onPointerDown = (e: ReactPointerEvent) => {
     e.preventDefault();
     setDragging(true);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     updateFromClientX(e.clientX);
   };
-  const onPointerMove = (e: React.PointerEvent) => {
+  const onPointerMove = (e: ReactPointerEvent) => {
     if (!dragging) return;
     updateFromClientX(e.clientX);
   };
-  const onPointerUp = (e: React.PointerEvent) => {
+  const onPointerUp = (e: ReactPointerEvent) => {
     setDragging(false);
     try {
       (e.target as HTMLElement).releasePointerCapture(e.pointerId);

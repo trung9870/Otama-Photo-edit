@@ -4,6 +4,7 @@ import Step1Input, { emptyForm, type PicsetStep1Form } from './Step1Input';
 import Step2Blueprint from './Step2Blueprint';
 import Step3Results, { type PicsetSlotState } from './Step3Results';
 import { dispatchGenDoneEvent } from '../../hooks/useNotify';
+import { apiFetch } from '../../utils/apiFetch';
 
 // ============== Types (mirror api/_lib/picset.ts blueprint schema) ==============
 export type ImageCategory =
@@ -131,7 +132,7 @@ export default function PicsetTab() {
           return idx >= 0 ? u.slice(idx + 1) : u;
         })
         .filter((b) => b.length > 0);
-      const res = await fetch('/api/picset/analyze', {
+      const res = await apiFetch('/api/picset/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -141,8 +142,7 @@ export default function PicsetTab() {
           targetCount: form.quantity,
           targetPlatform: form.platform,
           language: form.language,
-          // Analyze giờ chạy qua Kie.ai (Gemini 3.5 Flash) thay vì Gemini direct
-          clientKieApiKey: localStorage.getItem('kieApiKey') || undefined,
+          // API key chỉ tồn tại trên server.
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -176,7 +176,7 @@ export default function PicsetTab() {
   const callGenerate = async (images: BlueprintImage[]): Promise<PicsetSlotState[] | null> => {
     if (!blueprint) return null;
     try {
-      const res = await fetch('/api/picset/generate', {
+      const res = await apiFetch('/api/picset/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -186,7 +186,6 @@ export default function PicsetTab() {
           model: form.model,
           aspectRatio: form.aspectRatio,
           quality: form.quality,
-          clientKieApiKey: localStorage.getItem('kieApiKey') || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));

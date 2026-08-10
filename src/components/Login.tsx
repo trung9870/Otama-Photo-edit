@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion, type Variants } from 'motion/react';
 import { Palette, Loader2, LogIn, Sparkles, Check, Bed } from 'lucide-react';
 import { Button, Pill } from './ui';
 
@@ -233,11 +233,11 @@ function AmbientGlow() {
   );
 }
 
-const stagger = {
+const stagger: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.09, delayChildren: 0.05 } },
 };
-const rise = {
+const rise: Variants = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
 };

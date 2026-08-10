@@ -1,8 +1,11 @@
+import { openTaskRef, sealTaskRef } from './taskRef.js';
+
 // Generic Request/Response interface compatible with both Express and Vercel
 type Req = {
   body: any;
   query: any;
   method?: string;
+  auth?: { uid: string };
 };
 type Res = {
   status: (code: number) => Res;
@@ -10,6 +13,70 @@ type Res = {
   send: (data: any) => any;
   setHeader: (name: string, value: string) => any;
 };
+
+const PROXY_MAX_BYTES = 25 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_IMAGE_PAYLOAD_CHARS = 28 * 1024 * 1024;
+const MAX_TOTAL_IMAGE_CHARS = 45 * 1024 * 1024;
+const MAX_PROMPT_CHARS = 12_000;
+const PROXY_ALLOWED_HOSTS = [
+  'tmpfiles.org',
+  'catbox.moe',
+  '0x0.st',
+  'kieai.redpandaai.co',
+  'aiquickdraw.com',
+  'kie.ai',
+  'runninghub.ai',
+  'firebasestorage.googleapis.com',
+  'storage.googleapis.com',
+];
+
+function isAllowedProxyHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, '');
+  return PROXY_ALLOWED_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+}
+
+function parseAllowedProxyUrl(rawUrl: string): URL {
+  if (typeof rawUrl !== 'string' || rawUrl.length > 4_096) throw new Error('URL không hợp lệ');
+  const url = new URL(rawUrl);
+  if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')) {
+    throw new Error('Chỉ hỗ trợ URL HTTPS hợp lệ');
+  }
+  if (!isAllowedProxyHost(url.hostname)) throw new Error('Nguồn ảnh không được phép');
+  return url;
+}
+
+async function fetchAllowedMedia(rawUrl: string): Promise<{ data: Buffer; contentType: string }> {
+  let url = parseAllowedProxyUrl(rawUrl);
+  if (url.hostname === 'tmpfiles.org' && !url.pathname.startsWith('/dl/')) {
+    url.pathname = `/dl${url.pathname.startsWith('/') ? '' : '/'}${url.pathname}`;
+  }
+
+  for (let redirects = 0; redirects <= 3; redirects += 1) {
+    const response = await fetch(url, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(15_000),
+      headers: { Accept: 'image/*,video/*;q=0.8' },
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location || redirects === 3) throw new Error('Quá nhiều lần chuyển hướng');
+      url = parseAllowedProxyUrl(new URL(location, url).toString());
+      continue;
+    }
+    if (!response.ok) throw new Error(`Không tải được file (${response.status})`);
+    const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (!contentType.startsWith('image/') && !contentType.startsWith('video/')) {
+      throw new Error('URL không trả về ảnh hoặc video');
+    }
+    const declaredSize = Number(response.headers.get('content-length') || 0);
+    if (declaredSize > PROXY_MAX_BYTES) throw new Error('File vượt quá giới hạn 25 MB');
+    const arrayBuffer = await response.arrayBuffer();
+    if (arrayBuffer.byteLength > PROXY_MAX_BYTES) throw new Error('File vượt quá giới hạn 25 MB');
+    return { data: Buffer.from(arrayBuffer), contentType };
+  }
+  throw new Error('Không tải được file');
+}
 
 export const formatGeminiError = (errorMessage: string): string => {
   if (errorMessage.includes("API key not valid") || errorMessage.includes("API_KEY_INVALID")) {
@@ -32,22 +99,17 @@ export const formatGeminiError = (errorMessage: string): string => {
 
 // ============== /api/proxy ==============
 export async function handleProxy(req: Req, res: Res) {
-  let url = req.query.url as string;
+  const url = req.query.url as string;
   if (!url) return res.status(400).send("No URL provided");
   try {
-    if (url.includes('tmpfiles.org') && !url.includes('/dl/')) {
-      url = url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-    }
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("Failed to fetch image");
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const contentType = response.headers.get("content-type") || "image/jpeg";
+    const { data, contentType } = await fetchAllowedMedia(url);
     res.setHeader("Content-Type", contentType);
-    return res.send(buffer);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.send(data);
   } catch (e: any) {
     console.error("[api] Proxy error:", e);
-    return res.status(500).send(e.message);
+    return res.status(400).send(e.message);
   }
 }
 
@@ -56,17 +118,14 @@ export async function handleProxyImage(req: Req, res: Res) {
   try {
     const imageUrl = req.query.url as string;
     if (!imageUrl) return res.status(400).json({ error: "No URL provided" });
-    const response = await fetch(imageUrl);
-    if (!response.ok) throw new Error("Failed to fetch image");
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    const contentType = response.headers.get("content-type") || "image/jpeg";
+    const { data, contentType } = await fetchAllowedMedia(imageUrl);
     res.setHeader("Content-Type", contentType);
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    return res.send(buffer);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.send(data);
   } catch (e: any) {
     console.error("[api] Proxy image error:", e);
-    return res.status(500).json({ error: e.message });
+    return res.status(400).json({ error: e.message });
   }
 }
 
@@ -192,9 +251,15 @@ type ParsedImagePayload = {
 };
 
 function parseImagePayload(payload: string): ParsedImagePayload {
+  if (typeof payload !== 'string' || payload.length === 0 || payload.length > MAX_IMAGE_PAYLOAD_CHARS) {
+    throw new Error('Ảnh không hợp lệ hoặc vượt quá giới hạn 20 MB');
+  }
   const dataUrlMatch = payload.match(/^data:([^;,]+);base64,(.+)$/s);
   const rawBase64 = dataUrlMatch ? dataUrlMatch[2] : payload;
   const buffer = Buffer.from(rawBase64, 'base64');
+  if (buffer.length === 0 || buffer.length > MAX_IMAGE_BYTES) {
+    throw new Error('Ảnh không hợp lệ hoặc vượt quá giới hạn 20 MB');
+  }
   let mimeType = dataUrlMatch?.[1]?.toLowerCase() || '';
 
   // Legacy callers sent raw base64 and the old code mislabeled every file as
@@ -219,6 +284,10 @@ function parseImagePayload(payload: string): ParsedImagePayload {
         ? 'jpg'
         : 'bin';
 
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) {
+    throw new Error('Chỉ hỗ trợ ảnh PNG, JPEG hoặc WebP');
+  }
+
   return {
     buffer,
     dataUrl: `data:${mimeType};base64,${rawBase64}`,
@@ -232,7 +301,7 @@ function isRemoteImageUrl(value: string): boolean {
 }
 
 export async function uploadBase64WithFallback(payload: string, apiKey: string): Promise<string> {
-  if (isRemoteImageUrl(payload)) return payload;
+  if (isRemoteImageUrl(payload)) return parseAllowedProxyUrl(payload).toString();
 
   const { buffer, dataUrl, mimeType, extension } = parseImagePayload(payload);
   const uniqueName = `image-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
@@ -297,7 +366,7 @@ export async function uploadBase64WithFallback(payload: string, apiKey: string):
 // ============== /api/generate ==============
 export async function handleGenerate(req: Req, res: Res) {
   try {
-    const { modelId, prompt, referenceMode, referenceImages, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, t2iMode, clientKieApiKey } = req.body;
+    const { modelId, prompt, referenceMode, referenceImages, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, t2iMode } = req.body;
     const explicitReferences: string[] = Array.isArray(referenceImages)
       ? referenceImages.filter((value: any) => typeof value === 'string' && value.length > 0)
       : [];
@@ -305,9 +374,26 @@ export async function handleGenerate(req: Req, res: Res) {
     // T2I = client explicitly opted in via flag. Don't fall back when imageBase64 happens to be missing —
     // that masks real upload failures behind a silently-T2I path. Old clients without the flag stay i2i.
     const isT2I = !!t2iMode;
+    if (!req.auth?.uid) return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ.' });
     console.log(`[api] /generate modelId=${modelId} numberOfImages=${numberOfImages} imageSize=${imageSize} hasTemplate=${!!templateBase64} composeCount=${composeList.length} t2i=${isT2I}`);
 
-    if (isT2I && (!prompt || !String(prompt).trim())) {
+    if (typeof prompt !== 'string' || prompt.length > MAX_PROMPT_CHARS) {
+      return res.status(400).json({ error: `Prompt phải là chuỗi và không vượt quá ${MAX_PROMPT_CHARS.toLocaleString()} ký tự.` });
+    }
+    if (explicitReferences.length > 8 || composeList.length > 8) {
+      return res.status(400).json({ error: 'Mỗi lần gen chỉ hỗ trợ tối đa 8 ảnh tham chiếu.' });
+    }
+    const allImageSources = [...explicitReferences, ...composeList, imageBase64, templateBase64]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    if (allImageSources.some((value) => value.length > MAX_IMAGE_PAYLOAD_CHARS) ||
+        allImageSources.reduce((sum, value) => sum + value.length, 0) > MAX_TOTAL_IMAGE_CHARS) {
+      return res.status(413).json({ error: 'Tổng dung lượng ảnh tải lên quá lớn.' });
+    }
+    const count = Number(numberOfImages ?? 1);
+    if (!Number.isInteger(count) || count < 1 || count > 8) {
+      return res.status(400).json({ error: 'Số ảnh mỗi lần gen phải từ 1 đến 8.' });
+    }
+    if (isT2I && !prompt.trim()) {
       return res.status(400).json({ error: "Chế độ Text-to-Image cần prompt mô tả ảnh muốn tạo." });
     }
     if (!isT2I && explicitReferences.length === 0 && !imageBase64 && composeList.length === 0 && !templateBase64) {
@@ -321,7 +407,7 @@ export async function handleGenerate(req: Req, res: Res) {
     }
 
     if (KIE_MODELS.includes(modelId)) {
-      const apiKey = clientKieApiKey || defaultKieKey;
+      const apiKey = defaultKieKey;
       if (!apiKey) return res.status(401).json({ error: "Chưa cấu hình API key Kie.ai. Vui lòng liên hệ Admin." });
 
       let inputUrls: string[] = [];
@@ -347,7 +433,6 @@ export async function handleGenerate(req: Req, res: Res) {
         return res.status(500).json({ error: "Lỗi tải ảnh tĩnh lên máy chủ tạm: " + e.message });
       }
 
-      const count = numberOfImages && typeof numberOfImages === 'number' && numberOfImages > 0 ? numberOfImages : 1;
       const finalPrompt = referenceMode === 'product-composition' && inputUrls.length >= 2
         ? `Reference Image 1 = Product Reference. Preserve its identity, material, colors, texture, logos, and fine details.\nReference Image 2 = Composition Reference. Use it only for layout, pose, camera, lighting, and scene structure.\n\n${prompt}`
         : prompt;
@@ -359,8 +444,8 @@ export async function handleGenerate(req: Req, res: Res) {
             createKieImageTask(modelId, inputUrls, finalPrompt, apiKey, aspectRatio, imageSize)
           )
         );
-        console.log("[api] Created Kie taskIds:", taskIds);
-        return res.json({ taskIds, isAsync: true });
+        console.log("[api] Created Kie tasks:", taskIds.length);
+        return res.json({ taskIds: taskIds.map((taskId) => sealTaskRef('kie', taskId, req.auth!.uid)), isAsync: true });
       } catch (e: any) {
         console.error("[api] Kie.ai createTask error:", e);
         return res.status(500).json({ error: e.message || "Lỗi khi gọi Kie.ai" });
@@ -378,10 +463,16 @@ export async function handleGenerate(req: Req, res: Res) {
 // Client calls this every few seconds until status is 'success' or 'failed'.
 export async function handleGenerateCheck(req: Req, res: Res) {
   try {
-    const taskId = (req.query?.taskId as string) || req.body?.taskId;
-    const clientKieApiKey = (req.query?.clientKieApiKey as string) || req.body?.clientKieApiKey;
-    if (!taskId) return res.status(400).json({ error: "Missing taskId" });
-    const apiKey = clientKieApiKey || process.env.KIE_API_KEY;
+    const taskReference = (req.query?.taskId as string) || req.body?.taskId;
+    if (!req.auth?.uid) return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ.' });
+    if (!taskReference || typeof taskReference !== 'string' || taskReference.length > 2_048) return res.status(400).json({ error: "Missing or invalid taskId" });
+    let taskId: string;
+    try {
+      taskId = openTaskRef(taskReference, 'kie', req.auth.uid);
+    } catch (error: any) {
+      return res.status(403).json({ error: error?.message || 'Task không thuộc tài khoản hiện tại.' });
+    }
+    const apiKey = process.env.KIE_API_KEY;
     if (!apiKey) return res.status(401).json({ error: "Chưa cấu hình API key cho GPT2 (Kie.ai). Vui lòng liên hệ Admin." });
     const result = await pollKieTaskOnce(taskId, apiKey);
     return res.json(result);
@@ -439,9 +530,12 @@ async function geminiChatViaKie(opts: {
 // và tránh sạc GEMINI_API_KEY quota. Fashion mode = JSON; bedding = free text (Chinese format).
 export async function handleAnalyze(req: Req, res: Res) {
   try {
-    const { imageBase64, mode, clientKieApiKey } = req.body;
-    const kieApiKey = clientKieApiKey || process.env.KIE_API_KEY;
+    const { imageBase64, mode } = req.body;
+    const kieApiKey = process.env.KIE_API_KEY;
     if (!kieApiKey) return res.status(500).json({ error: "KIE_API_KEY chưa cấu hình trên server." });
+    if (typeof imageBase64 !== 'string' || imageBase64.length === 0 || imageBase64.length > MAX_IMAGE_PAYLOAD_CHARS) {
+      return res.status(413).json({ error: 'Ảnh phân tích không hợp lệ hoặc vượt quá 20 MB.' });
+    }
 
     const analyzeMode: 'fashion' | 'bedding' = mode === 'bedding' ? 'bedding' : 'fashion';
 
@@ -541,9 +635,12 @@ YÊU CẦU MỖI CẶP:
 // Kie response_format=json_object trả object, không phải array — prompt yêu cầu wrap trong { "boxes": [...] } rồi unwrap về array cho client.
 export async function handleDetectGrid(req: Req, res: Res) {
   try {
-    const { imageBase64, clientKieApiKey } = req.body;
-    const kieApiKey = clientKieApiKey || process.env.KIE_API_KEY;
+    const { imageBase64 } = req.body;
+    const kieApiKey = process.env.KIE_API_KEY;
     if (!kieApiKey) return res.status(500).json({ error: "KIE_API_KEY chưa cấu hình trên server." });
+    if (typeof imageBase64 !== 'string' || imageBase64.length === 0 || imageBase64.length > MAX_IMAGE_PAYLOAD_CHARS) {
+      return res.status(413).json({ error: 'Ảnh phân tích không hợp lệ hoặc vượt quá 20 MB.' });
+    }
 
     const prompt = 'Analyze this image layout, which contains multiple individual sub-images, panels or frames. Identify all the individual sub-images. Output a JSON object with a single key "boxes" whose value is an array of bounding boxes. Each object in the array must have exactly these properties: ymin, xmin, ymax, xmax — all integers between 0 and 1000. Do not include any other keys or commentary. Ensure the boxes accurately cover each separate panel. Example output: {"boxes":[{"ymin":0,"xmin":0,"ymax":500,"xmax":500}]}';
 
@@ -575,7 +672,7 @@ export async function handleDetectGrid(req: Req, res: Res) {
 // Trả về số credit còn lại trong tài khoản Kie.ai (dùng key server, không lộ ra client).
 export async function handleKieCredits(req: Req, res: Res) {
   try {
-    const apiKey = (req.query?.clientKieApiKey as string) || process.env.KIE_API_KEY;
+    const apiKey = process.env.KIE_API_KEY;
     if (!apiKey) return res.status(401).json({ error: "Chưa cấu hình Kie API key." });
     const r = await fetch('https://api.kie.ai/api/v1/chat/credit', {
       headers: { 'Authorization': `Bearer ${apiKey}` }

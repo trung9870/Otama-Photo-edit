@@ -97,6 +97,7 @@ import { OFA_PROMPT_LIBRARY, buildOfaPrompt, type OfaPromptCategory } from './ut
 import { downloadFile } from './utils/downloadFile';
 import PicsetTab from './components/picset/PicsetTab';
 import RunninghubTab from './components/runninghub/RunninghubTab';
+import { apiFetch } from './utils/apiFetch';
 
 type OfaBatchStatus = 'queued' | 'running' | 'done' | 'cancelled' | 'error';
 interface OfaBatch {
@@ -175,8 +176,8 @@ interface EcomGenerationSettings {
 }
 
 // Error Boundary Component
-class ErrorBoundary extends (Component as any) {
-  constructor(props: any) {
+class ErrorBoundary extends Component<React.PropsWithChildren, { hasError: boolean; error: any }> {
+  constructor(props: React.PropsWithChildren) {
     super(props);
     this.state = { hasError: false, error: null };
   }
@@ -190,8 +191,8 @@ class ErrorBoundary extends (Component as any) {
   }
 
   render() {
-    const state = (this as any).state;
-    const props = (this as any).props;
+    const state = this.state;
+    const props = this.props;
 
     if (state.hasError) {
       let errorMessage = "Đã có lỗi xảy ra.";
@@ -265,6 +266,7 @@ interface SavedModel {
   imageUrl: string;
   uid: string;
   createdAt: any;
+  isShared?: boolean;
 }
 
 interface SavedRoom {
@@ -272,6 +274,7 @@ interface SavedRoom {
   imageUrl: string;
   uid: string;
   createdAt: any;
+  isShared?: boolean;
 }
 
 const DEFAULT_GEN_PROMPTS: SavedPrompt[] = [
@@ -465,7 +468,7 @@ async function prepareKieReferences(sources: string[], apiKey: string): Promise<
 // Returns the resulting image URLs in the same order as taskIds.
 // Each poll request hits /api/generate-check (~1s), so a Vercel function
 // timeout never applies to the long-running KIE task itself.
-async function pollKieTasks(taskIds: string[], clientKieApiKey?: string, signal?: AbortSignal): Promise<string[]> {
+async function pollKieTasks(taskIds: string[], signal?: AbortSignal): Promise<string[]> {
   const throwIfAborted = () => {
     if (signal?.aborted) {
       const err = new Error('Aborted');
@@ -486,10 +489,9 @@ async function pollKieTasks(taskIds: string[], clientKieApiKey?: string, signal?
       });
       throwIfAborted();
       const params = new URLSearchParams({ taskId });
-      if (clientKieApiKey) params.set('clientKieApiKey', clientKieApiKey);
       let res: Response;
       try {
-        res = await fetch(`/api/generate-check?${params.toString()}`, { signal });
+        res = await apiFetch(`/api/generate-check?${params.toString()}`, { signal });
       } catch (e: any) {
         if (e?.name === 'AbortError') throw e;
         continue; // transient network error → retry
@@ -540,8 +542,16 @@ function App() {
   // API Keys and Settings
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [kieApiKey, setKieApiKey] = useState<string>(() => localStorage.getItem('kieApiKey') || '');
-  const [googleApiKey, setGoogleApiKey] = useState<string>(() => localStorage.getItem('googleApiKey') || '');
+  // Provider credentials are server-only. Keep legacy variables empty so old,
+  // unreachable compatibility branches cannot accidentally expose a key.
+  const kieApiKey = '';
+  const googleApiKey = '';
+
+  useEffect(() => {
+    localStorage.removeItem('kieApiKey');
+    localStorage.removeItem('googleApiKey');
+    localStorage.removeItem('runninghub-api-key');
+  }, []);
 
   // Ecom State
   const defaultEcomPrompts: SavedPrompt[] = [
@@ -1035,7 +1045,7 @@ function App() {
   const fetchKieCredits = async () => {
     setKieCreditsLoading(true);
     try {
-      const r = await fetch('/api/kie-credits');
+      const r = await apiFetch('/api/kie-credits');
       const data = await r.json();
       setKieCredits(typeof data.credits === 'number' ? data.credits : null);
     } catch (e) {
@@ -2135,7 +2145,7 @@ function App() {
 
           // Try calling Server-side API first (using owner's key)
           try {
-            const response = await fetch('/api/generate', {
+            const response = await apiFetch('/api/generate', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -2143,15 +2153,13 @@ function App() {
                 prompt: promptText,
                 referenceImages,
                 aspectRatio: img.aspectRatio,
-                clientKieApiKey: kieApiKey,
-                clientGoogleApiKey: googleApiKey
               })
             });
 
             if (response.ok) {
               const data = await response.json();
               if (data.isAsync && Array.isArray(data.taskIds)) {
-                const urls = await pollKieTasks(data.taskIds, kieApiKey);
+                const urls = await pollKieTasks(data.taskIds);
                 if (!urls[0]) throw new Error("Kie.ai không trả về ảnh.");
                 resultUrl = urls[0];
               } else if (data.isUrl) {
@@ -2227,10 +2235,10 @@ function App() {
 
       // Try server-side API first (via Kie.ai — migrated from Gemini direct)
       try {
-        const response = await fetch('/api/analyze', {
+        const response = await apiFetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, mode: analyzeMode, clientKieApiKey: kieApiKey })
+          body: JSON.stringify({ imageBase64: base64, mode: analyzeMode })
         });
 
         if (response.ok) {
@@ -2336,7 +2344,7 @@ function App() {
             : 'clothing item(s)';
       const prompt = `Virtual Try-On Task: Take ONLY the ${categoryText} from Product Reference Image 1 and place it onto the person in Composition Reference Image 2. CRITICAL: Do NOT include any human parts from the product image. ${tryOnPrompt ? `Additional instructions: ${tryOnPrompt}` : "Ensure the fit is natural and follows the person's pose."} Output ONLY the resulting image.`;
       setTryOnStep('processing');
-      const response = await fetch('/api/generate', {
+      const response = await apiFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2347,7 +2355,6 @@ function App() {
           aspectRatio: '3:4',
           imageSize: '1K',
           numberOfImages: 1,
-          clientKieApiKey: kieApiKey,
         }),
       });
       if (!response.ok) {
@@ -2356,7 +2363,7 @@ function App() {
       }
       const data = await response.json();
       const resultUrls = data.isAsync && Array.isArray(data.taskIds)
-        ? await pollKieTasks(data.taskIds, kieApiKey)
+        ? await pollKieTasks(data.taskIds)
         : (data.imagesBase64 || []);
       if (!resultUrls[0]) throw new Error('Kie.ai không trả về ảnh.');
       setTryOnResult(resultUrls[0]);
@@ -2557,7 +2564,7 @@ function App() {
         : tryOnProductCategory === 'bottom' ? 'pants/skirt/bottom'
           : tryOnProductCategory === 'shoes' ? 'shoes/footwear/accessories'
             : 'full outfit (both top and bottom)';
-      const response = await fetch('/api/generate', {
+      const response = await apiFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2567,7 +2574,6 @@ function App() {
           aspectRatio: '1:1',
           imageSize: '2K',
           numberOfImages: 1,
-          clientKieApiKey: kieApiKey,
         }),
       });
       if (!response.ok) {
@@ -2576,7 +2582,7 @@ function App() {
       }
       const data = await response.json();
       const resultUrls = data.isAsync && Array.isArray(data.taskIds)
-        ? await pollKieTasks(data.taskIds, kieApiKey)
+        ? await pollKieTasks(data.taskIds)
         : (data.imagesBase64 || []);
       if (!resultUrls[0]) throw new Error('Kie.ai không trả về ảnh.');
       setTryOnProductImage(resultUrls[0]);
@@ -2793,6 +2799,7 @@ function App() {
         if (reusableInput.length > 600_000) {
           reusableInput = await compressImageDataUrl(meta.inputImage!, 700, 0.55);
         }
+        if (reusableInput.length > 600_000) reusableInput = '';
       }
       // Firestore documents are capped at 1 MiB. Prefer keeping the output;
       // omit an oversized input snapshot rather than losing the whole history item.
@@ -2957,7 +2964,7 @@ function App() {
 
       // Try server first
       try {
-        const response = await fetch('/api/generate', {
+        const response = await apiFetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2969,8 +2976,6 @@ function App() {
             imageSize: snapshot.imageSize,
             numberOfImages: snapshot.imageCount,
             t2iMode: snapshot.t2iMode,
-            clientKieApiKey: kieApiKey,
-            clientGoogleApiKey: googleApiKey
           })
         });
 
@@ -2978,7 +2983,7 @@ function App() {
           const data = await response.json();
           if (data.isAsync && Array.isArray(data.taskIds)) {
             // KIE async: poll each task until done. Each poll is fast → no Vercel timeout.
-            const urls = await pollKieTasks(data.taskIds, kieApiKey);
+            const urls = await pollKieTasks(data.taskIds);
             generatedImages = urls;
           } else if (data.isUrl) {
             generatedImages = data.imagesBase64;
@@ -3124,7 +3129,7 @@ function App() {
     try {
       const referenceImages = await prepareKieReferences([patternSourceImage], kieApiKey);
 
-      const response = await fetch('/api/generate', {
+      const response = await apiFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3134,8 +3139,6 @@ function App() {
           aspectRatio: '1:1',
           imageSize: '1k',
           numberOfImages: 1,
-          clientKieApiKey: kieApiKey,
-          clientGoogleApiKey: googleApiKey
         })
       });
 
@@ -3143,7 +3146,7 @@ function App() {
         const data = await response.json();
         let finalImage = "";
         if (data.isAsync && Array.isArray(data.taskIds) && data.taskIds.length > 0) {
-          const urls = await pollKieTasks(data.taskIds, kieApiKey);
+          const urls = await pollKieTasks(data.taskIds);
           finalImage = urls[0];
         } else if (data.isUrl && data.imagesBase64?.length > 0) {
           finalImage = data.imagesBase64[0];
@@ -3230,7 +3233,7 @@ function App() {
       const referenceImages = await prepareKieReferences(imgs, kieApiKey);
       const config = MODEL_CONFIG[composeModel];
 
-      const response = await fetch('/api/generate', {
+      const response = await apiFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3240,8 +3243,6 @@ function App() {
           aspectRatio: composeAspectRatio,
           imageSize: composeQuality,
           numberOfImages: composeCount,
-          clientKieApiKey: kieApiKey,
-          clientGoogleApiKey: googleApiKey,
         }),
       });
 
@@ -3252,7 +3253,7 @@ function App() {
       const data = await response.json();
       let results: string[] = [];
       if (data.isAsync && Array.isArray(data.taskIds)) {
-        results = await pollKieTasks(data.taskIds, kieApiKey);
+        results = await pollKieTasks(data.taskIds);
       } else if (data.isUrl) {
         results = data.imagesBase64;
       } else if (Array.isArray(data.imagesBase64)) {
@@ -3307,7 +3308,7 @@ function App() {
         if (cancelRef.current) break;
         const fullPrompt = buildOfaPrompt(category, batch.productName, batch.description);
         try {
-          const response = await fetch('/api/generate', {
+          const response = await apiFetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -3317,8 +3318,6 @@ function App() {
               aspectRatio: batch.aspectRatio,
               imageSize: batch.quality,
               numberOfImages: 1,
-              clientKieApiKey: kieApiKey,
-              clientGoogleApiKey: googleApiKey,
             }),
             signal: controller.signal,
           });
@@ -3329,7 +3328,7 @@ function App() {
           const data = await response.json();
           let urls: string[] = [];
           if (data.isAsync && Array.isArray(data.taskIds)) {
-            urls = await pollKieTasks(data.taskIds, kieApiKey, controller.signal);
+            urls = await pollKieTasks(data.taskIds, controller.signal);
           } else if (data.isUrl) {
             urls = data.imagesBase64;
           } else if (Array.isArray(data.imagesBase64)) {
@@ -3469,7 +3468,7 @@ function App() {
       const actualModelId = MODEL_CONFIG[ecomThayModel]?.id || 'nano-banana-pro';
       const count = Math.max(1, Math.min(3, ecomThayCount));
 
-      const response = await fetch('/api/generate', {
+      const response = await apiFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3480,8 +3479,6 @@ function App() {
           aspectRatio: ecomThayAspectRatio,
           imageSize: ecomThayQuality.toUpperCase(),
           numberOfImages: count,
-          clientKieApiKey: kieApiKey,
-          clientGoogleApiKey: googleApiKey
         })
       });
 
@@ -3494,7 +3491,7 @@ function App() {
       // GPT2 (Kie.ai) trả về async — cần poll; Gemini trả về base64 ngay
       let thayResultUrls: string[] = [];
       if (data.isAsync && Array.isArray(data.taskIds)) {
-        const urls = await pollKieTasks(data.taskIds, kieApiKey);
+        const urls = await pollKieTasks(data.taskIds);
         thayResultUrls = urls.filter((u) => !!u);
       } else if (Array.isArray(data.imagesBase64) && data.imagesBase64.length > 0) {
         thayResultUrls = data.imagesBase64.map((b: string) => `data:image/png;base64,${b}`);
@@ -3548,7 +3545,7 @@ function App() {
         kieApiKey
       );
 
-      const response = await fetch('/api/generate', {
+      const response = await apiFetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3559,8 +3556,6 @@ function App() {
           aspectRatio: ecomAspectRatio, // Use the selected aspect ratio
           imageSize: ecomImageSize,
           numberOfImages: ecomImageCount,
-          clientKieApiKey: kieApiKey,
-          clientGoogleApiKey: googleApiKey
         })
       });
 
@@ -3568,7 +3563,7 @@ function App() {
         const data = await response.json();
         let generatedImages: string[] = [];
         if (data.isAsync && Array.isArray(data.taskIds)) {
-          const urls = await pollKieTasks(data.taskIds, kieApiKey);
+          const urls = await pollKieTasks(data.taskIds);
           generatedImages = urls;
         } else if (data.isUrl) {
           generatedImages = data.imagesBase64;
@@ -3648,10 +3643,10 @@ function App() {
       }
 
       // 1. Ask AI to detect grid boxes (via Kie.ai — migrated from Gemini direct)
-      const detectResponse = await fetch('/api/detect-grid', {
+      const detectResponse = await apiFetch('/api/detect-grid', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64ForApi, clientKieApiKey: kieApiKey })
+        body: JSON.stringify({ imageBase64: base64ForApi })
       });
       if (!detectResponse.ok) {
         let errorData;
@@ -3755,7 +3750,7 @@ function App() {
         const promises = batch.map(async (box) => {
           try {
              const referenceImages = await prepareKieReferences([box.cropUrl], kieApiKey);
-             const res = await fetch('/api/generate', {
+             const res = await apiFetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -3765,8 +3760,6 @@ function App() {
                   aspectRatio: enhanceAspectRatio,
                   imageSize: ecomImageSize.toUpperCase() || '1K',
                   numberOfImages: 1,
-                  clientGoogleApiKey: apiKey,
-                  clientKieApiKey: kieApiKey
                 })
              });
 
@@ -3778,7 +3771,7 @@ function App() {
              } else {
                 const data = await res.json();
                 if (data.isAsync && Array.isArray(data.taskIds)) {
-                  const urls = await pollKieTasks(data.taskIds, kieApiKey);
+                  const urls = await pollKieTasks(data.taskIds);
                   if (urls[0]) finalUrl = urls[0];
                 } else if (data.imageBase64) finalUrl = `data:image/jpeg;base64,${data.imageBase64}`;
                 else if (data.imagesBase64?.length > 0) finalUrl = `data:image/jpeg;base64,${data.imagesBase64[0]}`;
@@ -3831,7 +3824,7 @@ function App() {
 
           try {
              const referenceImages = await prepareKieReferences([imgToTranslate.url], kieApiKey);
-             const res = await fetch('/api/generate', {
+             const res = await apiFetch('/api/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -3841,8 +3834,6 @@ function App() {
                   aspectRatio: enhanceAspectRatio,
                   imageSize: ecomImageSize.toUpperCase() || '1K',
                   numberOfImages: 1,
-                  clientGoogleApiKey: apiKey,
-                  clientKieApiKey: kieApiKey
                 })
              });
 
@@ -3854,7 +3845,7 @@ function App() {
              } else {
                 const data = await res.json();
                 if (data.isAsync && Array.isArray(data.taskIds)) {
-                  const urls = await pollKieTasks(data.taskIds, kieApiKey);
+                  const urls = await pollKieTasks(data.taskIds);
                   if (urls[0]) finalUrl = urls[0];
                 } else if (data.imageBase64) finalUrl = `data:image/jpeg;base64,${data.imageBase64}`;
                 else if (data.imagesBase64?.length > 0) finalUrl = `data:image/jpeg;base64,${data.imagesBase64[0]}`;
@@ -6745,7 +6736,7 @@ function App() {
                   </div>
                 )
               ) : isEcomGenerating ? (
-                <div className={`grid gap-4 ${ecomSubTab === 'gen-new' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {Array.from({ length: ecomImageCount }).map((_, i) => (
                     <div
                       key={i}
@@ -6774,7 +6765,7 @@ function App() {
                   ))}
                 </div>
               ) : ecomResults.length > 0 ? (
-                <div className={`grid gap-4 items-start ${ecomSubTab === 'gen-new' ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'}`}>
+                <div className="grid gap-4 items-start grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {ecomResults.map((res, i) => (
                     <div
                       key={i}
@@ -6799,14 +6790,6 @@ function App() {
                         >
                           <Crop size={14} /> Chọn Tách
                         </button>
-                        {ecomSubTab === 'gen-new' && (
-                          <button
-                            onClick={() => useEcomImageAsInput(res)}
-                            className="px-4 py-2 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-2 w-32 justify-center text-xs hover:bg-indigo-600 transition-colors"
-                          >
-                            <Copy size={14} /> Dùng làm Mẫu
-                          </button>
-                        )}
                         <button 
                           onClick={() => handleImageDownload(res, `ecom-result-${i + 1}-${Date.now()}.png`)}
                           className="px-4 py-2 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-2 w-32 justify-center text-xs"
@@ -7487,7 +7470,7 @@ function App() {
                         <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 4 }}>{currentImage.error}</p>
                       </div>
                       <button
-                        onClick={handleAiEdit}
+                        onClick={() => void handleAiEdit()}
                         className="font-semibold transition-all hover:brightness-110"
                         style={{
                           padding: '8px 16px',
@@ -8982,48 +8965,14 @@ function App() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-                {/* SECTION: API Keys */}
+                {/* SECTION: Server credentials */}
                 <div>
-                  <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>API Keys</p>
-                  <div className="space-y-3">
-                    <div className="p-4 space-y-2" style={{ background: 'var(--color-fill)', borderRadius: 14 }}>
-                      <div className="flex items-center gap-2">
-                        <Key size={14} style={{ color: 'var(--color-warning)' }} />
-                        <h3 className="font-bold" style={{ fontSize: 13, color: 'var(--color-text)' }}>Kie.ai API Key</h3>
-                      </div>
-                      <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-                        Dùng cho "GPT2" và "Banana Pro". Lấy tại <a href="https://kie.ai" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>kie.ai</a>.
-                      </p>
-                      <input
-                        type="password"
-                        placeholder="sk-..."
-                        value={kieApiKey}
-                        onChange={(e) => { setKieApiKey(e.target.value); localStorage.setItem('kieApiKey', e.target.value); }}
-                        className="w-full outline-none transition-colors p-2.5"
-                        style={{ background: 'var(--color-card)', color: 'var(--color-text)', borderRadius: 10, fontSize: 13, border: '0.5px solid var(--color-border-soft)' }}
-                        onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
-                        onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-soft)')}
-                      />
-                    </div>
-                    <div className="p-4 space-y-2" style={{ background: 'var(--color-fill)', borderRadius: 14 }}>
-                      <div className="flex items-center gap-2">
-                        <Key size={14} style={{ color: 'var(--color-teal)' }} />
-                        <h3 className="font-bold" style={{ fontSize: 13, color: 'var(--color-text)' }}>Google AI Studio API Key</h3>
-                      </div>
-                      <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-                        Dùng cho "Banana 2" (miễn phí). Lấy tại <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}>aistudio.google.com</a>.
-                      </p>
-                      <input
-                        type="password"
-                        placeholder="AIzaSy..."
-                        value={googleApiKey}
-                        onChange={(e) => { setGoogleApiKey(e.target.value); localStorage.setItem('googleApiKey', e.target.value); }}
-                        className="w-full outline-none transition-colors p-2.5"
-                        style={{ background: 'var(--color-card)', color: 'var(--color-text)', borderRadius: 10, fontSize: 13, border: '0.5px solid var(--color-border-soft)' }}
-                        onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-accent)')}
-                        onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-soft)')}
-                      />
-                    </div>
+                  <p className="uppercase font-semibold mb-3" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Bảo mật API</p>
+                  <div className="p-4" style={{ background: 'var(--color-fill)', borderRadius: 14 }}>
+                    <p className="font-semibold" style={{ fontSize: 13, color: 'var(--color-text)' }}>API key được quản lý trên server</p>
+                    <p className="mt-1" style={{ fontSize: 11, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
+                      Kie.ai và RunningHub không còn lưu key trong trình duyệt. Nhân viên mở DevTools sẽ không đọc được credential nhà cung cấp.
+                    </p>
                   </div>
                 </div>
 

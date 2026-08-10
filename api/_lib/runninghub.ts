@@ -1,3 +1,5 @@
+import { openTaskRef, sealTaskRef } from './taskRef.js';
+
 // RunningHub backend — wraps the 4 OpenAPI endpoints we use:
 //   POST /task/openapi/upload     — upload image, get fileName URL
 //   POST /task/openapi/create     — start workflow task, get taskId
@@ -6,7 +8,7 @@
 //
 // BYOK pattern: each handler takes clientApiKey from body, falls back to env RUNNINGHUB_API_KEY.
 
-type Req = { body: any; query: any; method?: string };
+type Req = { body: any; query: any; method?: string; auth?: { uid: string } };
 type Res = {
   status: (code: number) => Res;
   json: (obj: any) => any;
@@ -15,9 +17,10 @@ type Res = {
 };
 
 const RH_BASE = 'https://www.runninghub.ai';
+const ALLOWED_WORKFLOW_IDS = new Set(['2005198388528377858', '1980834224272003074']);
 
 function getKey(body: any): string | undefined {
-  return body?.clientRunninghubApiKey || body?.apiKey || process.env.RUNNINGHUB_API_KEY;
+  return process.env.RUNNINGHUB_API_KEY;
 }
 
 function rhError(payload: any): string {
@@ -83,7 +86,7 @@ export async function uploadToRunninghub(base64: string, apiKey: string): Promis
 
 // =================================================================
 // POST /api/runninghub/upload
-// Body: { imageBase64, clientRunninghubApiKey? }
+// Body: { imageBase64 } — API key comes from server env only.
 // =================================================================
 export async function handleRunninghubUpload(req: Req, res: Res) {
   try {
@@ -91,6 +94,9 @@ export async function handleRunninghubUpload(req: Req, res: Res) {
     if (!apiKey) return res.status(401).json({ error: 'Thiếu API key RunningHub.' });
     const imageBase64: string | undefined = req.body?.imageBase64;
     if (!imageBase64) return res.status(400).json({ error: 'Thiếu imageBase64.' });
+    if (typeof imageBase64 !== 'string' || imageBase64.length > 28 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Ảnh vượt quá giới hạn 20 MB.' });
+    }
     const fileUrl = await uploadToRunninghub(imageBase64, apiKey);
     return res.json({ fileUrl });
   } catch (e: any) {
@@ -101,15 +107,22 @@ export async function handleRunninghubUpload(req: Req, res: Res) {
 
 // =================================================================
 // POST /api/runninghub/run
-// Body: { workflowId, nodeInfoList: [{nodeId, fieldName, fieldValue}], clientRunninghubApiKey? }
+// Body: { workflowId, nodeInfoList: [{nodeId, fieldName, fieldValue}] }
 // Returns: { taskId, clientId }
 // =================================================================
 export async function handleRunninghubRun(req: Req, res: Res) {
   try {
+    if (!req.auth?.uid) return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ.' });
     const apiKey = getKey(req.body);
     if (!apiKey) return res.status(401).json({ error: 'Thiếu API key RunningHub.' });
     const { workflowId, nodeInfoList } = req.body || {};
     if (!workflowId) return res.status(400).json({ error: 'Thiếu workflowId.' });
+    if (!ALLOWED_WORKFLOW_IDS.has(String(workflowId))) {
+      return res.status(400).json({ error: 'Workflow không nằm trong danh sách được phép.' });
+    }
+    if (!Array.isArray(nodeInfoList) || nodeInfoList.length > 20 || JSON.stringify(nodeInfoList).length > 50_000) {
+      return res.status(400).json({ error: 'Cấu hình workflow không hợp lệ hoặc quá lớn.' });
+    }
 
     const body = {
       apiKey,
@@ -132,7 +145,7 @@ export async function handleRunninghubRun(req: Req, res: Res) {
     const taskId = data?.data?.taskId;
     const clientId = data?.data?.clientId || null;
     if (!taskId) return res.status(500).json({ error: 'RunningHub không trả taskId.', raw: data });
-    return res.json({ taskId, clientId });
+    return res.json({ taskId: sealTaskRef('runninghub', String(taskId), req.auth.uid), clientId });
   } catch (e: any) {
     console.error('[api] RunningHub run error:', e);
     return res.status(500).json({ error: e?.message || 'Lỗi khi gọi RunningHub.' });
@@ -141,15 +154,22 @@ export async function handleRunninghubRun(req: Req, res: Res) {
 
 // =================================================================
 // POST /api/runninghub/status
-// Body: { taskId, clientRunninghubApiKey? }
+// Body: { taskId }
 // Returns: { status: 'QUEUED'|'RUNNING'|'SUCCESS'|'FAILED', outputs?: string[], error? }
 // =================================================================
 export async function handleRunninghubStatus(req: Req, res: Res) {
   try {
     const apiKey = getKey(req.body);
     if (!apiKey) return res.status(401).json({ error: 'Thiếu API key RunningHub.' });
-    const taskId: string | undefined = req.body?.taskId;
-    if (!taskId) return res.status(400).json({ error: 'Thiếu taskId.' });
+    const taskReference: string | undefined = req.body?.taskId;
+    if (!req.auth?.uid) return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ.' });
+    if (!taskReference || typeof taskReference !== 'string' || taskReference.length > 2_048) return res.status(400).json({ error: 'Thiếu hoặc sai taskId.' });
+    let taskId: string;
+    try {
+      taskId = openTaskRef(taskReference, 'runninghub', req.auth.uid);
+    } catch (error: any) {
+      return res.status(403).json({ error: error?.message || 'Task không thuộc tài khoản hiện tại.' });
+    }
 
     // 1. Check status
     const sRes = await fetch(`${RH_BASE}/task/openapi/status`, {

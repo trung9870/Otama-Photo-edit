@@ -11,7 +11,7 @@ import {
   Sun,
   Moon,
   Monitor,
-  Key,
+  Settings,
   Clock,
   LogIn,
   LogOut,
@@ -40,7 +40,7 @@ export interface HeaderProps {
   resolvedTheme: 'light' | 'dark';
   onThemeChange: (theme: Theme) => void;
 
-  // API Key (admin only)
+  // Settings (admin only)
   hasApiKey: boolean;
   onOpenSettings: () => void;
 
@@ -316,12 +316,10 @@ export function Header(props: HeaderProps) {
             <Button
               variant="secondary"
               size="sm"
-              icon={Key}
-              tone={hasApiKey ? 'success' : 'warning'}
+              icon={Settings}
               onClick={onOpenSettings}
-              style={hasApiKey ? { color: 'var(--color-success)' } : { color: 'var(--color-warning)' }}
             >
-              {hasApiKey ? 'API Key' : 'Thêm API Key'}
+              Cài đặt
             </Button>
           )}
           {user && onOpenHistory && <HistoryButton onClick={onOpenHistory} />}
@@ -336,10 +334,10 @@ export function Header(props: HeaderProps) {
               <Button
                 variant="secondary"
                 size="sm"
-                icon={Key}
+                icon={Settings}
                 onClick={onOpenSettings}
               >
-                {hasApiKey ? 'API' : 'Thêm API'}
+                Cài đặt
               </Button>
             )}
             {actions}

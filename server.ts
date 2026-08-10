@@ -14,6 +14,7 @@ import {
 } from "./api/_lib/handlers";
 import { handlePicsetAnalyze, handlePicsetGenerate } from "./api/_lib/picset";
 import { handleRunninghubUpload, handleRunninghubRun, handleRunninghubStatus } from "./api/_lib/runninghub";
+import { authorizeApiRequest, type ApiAuthOptions } from "./api/_lib/auth";
 
 dotenv.config({ path: ['.env.local', '.env'] });
 
@@ -25,19 +26,36 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
+  app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    next();
+  });
+
+  const secured = (
+    handler: (req: any, res: any) => unknown | Promise<unknown>,
+    options: ApiAuthOptions,
+  ) => async (req: express.Request, res: express.Response) => {
+    if (!await authorizeApiRequest(req as any, res as any, options)) return;
+    return handler(req as any, res as any);
+  };
 
   app.get("/api/proxy", (req, res) => handleProxy(req as any, res as any));
   app.get("/api/proxy-image", (req, res) => handleProxyImage(req as any, res as any));
-  app.post("/api/generate", (req, res) => handleGenerate(req as any, res as any));
-  app.get("/api/generate-check", (req, res) => handleGenerateCheck(req as any, res as any));
-  app.post("/api/analyze", (req, res) => handleAnalyze(req as any, res as any));
-  app.post("/api/detect-grid", (req, res) => handleDetectGrid(req as any, res as any));
-  app.get("/api/kie-credits", (req, res) => handleKieCredits(req as any, res as any));
-  app.post("/api/picset/analyze", (req, res) => handlePicsetAnalyze(req as any, res as any));
-  app.post("/api/picset/generate", (req, res) => handlePicsetGenerate(req as any, res as any));
-  app.post("/api/runninghub/upload", (req, res) => handleRunninghubUpload(req as any, res as any));
-  app.post("/api/runninghub/run", (req, res) => handleRunninghubRun(req as any, res as any));
-  app.post("/api/runninghub/status", (req, res) => handleRunninghubStatus(req as any, res as any));
+  const generationPermissions = ['canUseClothing', 'canUseEcom', 'canUseOfa', 'canUsePicset'];
+  app.post("/api/generate", secured(handleGenerate, { scope: 'generate', maxRequests: 6, anyPermission: generationPermissions }));
+  app.get("/api/generate-check", secured(handleGenerateCheck, { scope: 'generate-check', maxRequests: 180, anyPermission: generationPermissions }));
+  app.post("/api/analyze", secured(handleAnalyze, { scope: 'analyze', maxRequests: 20, anyPermission: ['canUseClothing', 'canUseEcom'] }));
+  app.post("/api/detect-grid", secured(handleDetectGrid, { scope: 'detect-grid', maxRequests: 20, anyPermission: ['canUseClothing', 'canUseEcom'] }));
+  app.get("/api/kie-credits", secured(handleKieCredits, { scope: 'kie-credits', maxRequests: 20, admin: true }));
+  app.post("/api/picset/analyze", secured(handlePicsetAnalyze, { scope: 'picset-analyze', maxRequests: 10, anyPermission: ['canUsePicset'] }));
+  app.post("/api/picset/generate", secured(handlePicsetGenerate, { scope: 'picset-generate', maxRequests: 3, anyPermission: ['canUsePicset'] }));
+  app.post("/api/runninghub/upload", secured(handleRunninghubUpload, { scope: 'runninghub-upload', maxRequests: 20, anyPermission: ['canUseRunninghub'] }));
+  app.post("/api/runninghub/run", secured(handleRunninghubRun, { scope: 'runninghub-run', maxRequests: 5, anyPermission: ['canUseRunninghub'] }));
+  app.post("/api/runninghub/status", secured(handleRunninghubStatus, { scope: 'runninghub-status', maxRequests: 120, anyPermission: ['canUseRunninghub'] }));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

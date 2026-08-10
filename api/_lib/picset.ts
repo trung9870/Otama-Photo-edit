@@ -9,6 +9,7 @@
 // KHÔNG sửa code các tab khác.
 
 import { uploadBase64WithFallback, createKieImageTask, formatGeminiError } from "./handlers.js";
+import { sealTaskRef } from './taskRef.js';
 import {
   PICSET_LANGUAGE_VI,
   PICSET_CATEGORIES,
@@ -19,7 +20,7 @@ import {
   type PicsetCategoryId,
 } from "./picsetCategories.js";
 
-type Req = { body: any; query: any; method?: string };
+type Req = { body: any; query: any; method?: string; auth?: { uid: string } };
 type Res = {
   status: (code: number) => Res;
   json: (obj: any) => any;
@@ -528,7 +529,7 @@ async function analyzeViaKie(opts: {
 // =================================================================
 // /api/picset/analyze
 // =================================================================
-// Body: { imageBase64, refImagesBase64?, brief?, targetCount?, targetPlatform?, language?, clientKieApiKey }
+// Body: { imageBase64, refImagesBase64?, brief?, targetCount?, targetPlatform?, language? }
 // Returns: { blueprint: Blueprint }
 // Provider: Kie.ai → Gemini 3.5 Flash (OpenAI-compatible endpoint).
 // Tận dụng credit Kie sẵn có thay vì Gemini direct (hay hết credit).
@@ -545,11 +546,20 @@ export async function handlePicsetAnalyze(req: Req, res: Res) {
     const targetPlatform: string = (body.targetPlatform || 'Shopee').toString();
     const language: string = (body.language || 'Vietnamese').toString();
     // BYOK: Kie key — analyze giờ chạy qua Kie.ai (Gemini 3.5 Flash OpenAI-compatible)
-    const kieApiKey: string | undefined = body.clientKieApiKey || body.keys?.kie || process.env.KIE_API_KEY;
+    const kieApiKey: string | undefined = process.env.KIE_API_KEY;
 
     if (!imageBase64) return res.status(400).json({ error: 'Thiếu ảnh sản phẩm (imageBase64).' });
-    if (!Number.isFinite(targetCount) || targetCount < 1 || targetCount > 15) {
-      return res.status(400).json({ error: 'Số lượng ảnh phải từ 1-15.' });
+    if (imageBase64.length > 28 * 1024 * 1024 || refImagesBase64.some((image) => image.length > 28 * 1024 * 1024)) {
+      return res.status(413).json({ error: 'Mỗi ảnh phải nhỏ hơn 20 MB.' });
+    }
+    if ([imageBase64, ...refImagesBase64].reduce((sum, image) => sum + image.length, 0) > 45 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Tổng dung lượng ảnh tải lên quá lớn.' });
+    }
+    if (brief.length > 4_000 || targetPlatform.length > 100 || language.length > 50) {
+      return res.status(400).json({ error: 'Nội dung yêu cầu vượt quá giới hạn cho phép.' });
+    }
+    if (!Number.isInteger(targetCount) || targetCount < 1 || targetCount > 8) {
+      return res.status(400).json({ error: 'Số lượng ảnh phải từ 1-8.' });
     }
     if (!kieApiKey) return res.status(401).json({ error: 'Thiếu API key Kie. Vui lòng nhập trong cài đặt.' });
 
@@ -656,6 +666,7 @@ export async function handlePicsetAnalyze(req: Req, res: Res) {
 // Client tiếp tục poll /api/generate-check theo từng taskId.
 export async function handlePicsetGenerate(req: Req, res: Res) {
   try {
+    if (!req.auth?.uid) return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ.' });
     const body = req.body || {};
     const images = Array.isArray(body.images) ? body.images : [];
     const designSpecs = body.designSpecs;
@@ -663,12 +674,16 @@ export async function handlePicsetGenerate(req: Req, res: Res) {
     const modelChoice: 'gpt2' | 'banana-pro' = body.model === 'gpt2' ? 'gpt2' : 'banana-pro';
     const aspectRatio: string = (body.aspectRatio || '4:5').toString();
     const quality: string = (body.quality || '2K').toString().toUpperCase();
-    const apiKey: string | undefined = body.keys?.kie || body.clientKieApiKey || process.env.KIE_API_KEY;
+    const apiKey: string | undefined = process.env.KIE_API_KEY;
 
     if (images.length === 0) return res.status(400).json({ error: 'Thiếu danh sách images.' });
-    if (images.length > 16) return res.status(400).json({ error: 'Picset chỉ hỗ trợ tối đa 16 ảnh / batch.' });
+    if (images.length > 8) return res.status(400).json({ error: 'Picset chỉ hỗ trợ tối đa 8 ảnh / batch.' });
     if (!designSpecs) return res.status(400).json({ error: 'Thiếu designSpecs.' });
     if (!productImageBase64) return res.status(400).json({ error: 'Thiếu ảnh sản phẩm (productImageBase64).' });
+    if (productImageBase64.length > 28 * 1024 * 1024) return res.status(413).json({ error: 'Ảnh sản phẩm vượt quá 20 MB.' });
+    if (JSON.stringify({ images, designSpecs }).length > 250_000) {
+      return res.status(413).json({ error: 'Blueprint vượt quá giới hạn cho phép.' });
+    }
     if (!apiKey) return res.status(401).json({ error: 'Thiếu API key kie.ai. Vui lòng nhập trong cài đặt Picset.' });
 
     // Coerce missing `category` on legacy blueprints (PATCH §8 backward-compat)
@@ -695,7 +710,7 @@ export async function handlePicsetGenerate(req: Req, res: Res) {
 
     const tasks = settled.map((r, i) => {
       const slot = images[i]?.slot ?? i + 1;
-      if (r.status === 'fulfilled') return { slot: r.value.slot, taskId: r.value.taskId, error: null };
+      if (r.status === 'fulfilled') return { slot: r.value.slot, taskId: sealTaskRef('kie', r.value.taskId, req.auth!.uid), error: null };
       return { slot, taskId: null, error: (r.reason as Error)?.message || 'Tạo task fail' };
     });
 
