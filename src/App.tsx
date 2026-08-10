@@ -586,6 +586,7 @@ function App() {
   const [editingThayPromptId, setEditingThayPromptId] = useState<string | null>(null);
   const [thayManualMode, setThayManualMode] = useState(false);
   const [selectedEcomThayPromptId, setSelectedEcomThayPromptId] = useState<string | null>(null);
+  const selectedEcomThaySavedPrompt = ecomThaySavedPrompts.find(prompt => prompt.id === selectedEcomThayPromptId);
 
   useEffect(() => {
     if (selectedEcomPromptId !== 'manual') {
@@ -878,6 +879,7 @@ function App() {
 
   // Prompt Management - Try-On
   const [savedTryOnPrompts, setSavedTryOnPrompts] = useState<SavedPrompt[]>(DEFAULT_TRYON_PROMPTS);
+  const selectedTryOnSavedPrompt = savedTryOnPrompts.find(prompt => prompt.id === selectedTryOnPromptId);
   const [savedModels, setSavedModels] = useState<SavedModel[]>([]);
   const [isSavingModel, setIsSavingModel] = useState(false);
   const modelListFileInputRef = useRef<HTMLInputElement>(null);
@@ -4726,7 +4728,9 @@ function App() {
                   {!isAdmin && !thayManualMode && selectedEcomThayPromptId && (
                     <div className="rounded-lg px-4 py-3 flex items-center gap-2" style={{ background: 'var(--color-accent-soft)', border: '0.5px solid var(--color-accent)' }}>
                       <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-                      <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>Đã chọn prompt bảo mật, sẵn sàng Thay</p>
+                      <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
+                        {selectedEcomThaySavedPrompt?.name || 'Prompt đã lưu'} — sẵn sàng Thay
+                      </p>
                     </div>
                   )}
 
@@ -5055,7 +5059,7 @@ function App() {
                         if (selectedEcomPromptId !== 'manual') setSelectedEcomPromptId('manual');
                       }}
                       readOnly={!isAdmin && ecomUsesSecretPrompt}
-                      placeholder={!isAdmin && ecomUsesSecretPrompt ? 'Prompt đã được bảo mật, sẵn sàng Gen' : 'Kết hợp ảnh tham chiếu và mô tả điều bạn muốn tạo…'}
+                      placeholder={!isAdmin && ecomUsesSecretPrompt ? (selectedEcomSavedPrompt?.name || 'Prompt đã lưu') : 'Kết hợp ảnh tham chiếu và mô tả điều bạn muốn tạo…'}
                       className="gen-new-compact-prompt w-full resize-none outline-none"
                     />
                     <div className="mb-2 flex items-center gap-2">
@@ -5278,7 +5282,9 @@ function App() {
                     {!isAdmin && selectedEcomPromptId !== 'manual' && selectedEcomPromptId && (
                       <div className="rounded-lg px-4 py-3 mb-4 flex items-center gap-2" style={{ background: 'var(--color-accent-soft)', border: '0.5px solid var(--color-accent)' }}>
                         <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-                        <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>Đã chọn prompt — sẵn sàng Gen</p>
+                        <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
+                          {selectedEcomSavedPrompt?.name || 'Prompt đã lưu'} — sẵn sàng Gen
+                        </p>
                       </div>
                     )}
 
@@ -6522,9 +6528,9 @@ function App() {
                                 <p
                                   className="flex-1 min-w-0 text-xs whitespace-pre-wrap"
                                   style={{ color: 'var(--color-text-secondary)' }}
-                                  title={batch.promptSource === 'saved' && !isAdmin ? 'Prompt đã được bảo mật' : batch.promptText}
+                                  title={batch.promptSource === 'saved' && !isAdmin ? (batch.promptLabel || 'Prompt đã lưu') : batch.promptText}
                                 >
-                                  {batch.promptSource === 'saved' && !isAdmin ? 'Prompt đã được bảo mật' : batch.promptText}
+                                  {batch.promptSource === 'saved' && !isAdmin ? (batch.promptLabel || 'Prompt đã lưu') : batch.promptText}
                                   {!(batch.promptSource === 'saved' && !isAdmin) && batch.promptText && <button
                                     type="button"
                                     onClick={() => void copyEcomPrompt(batch.promptText, `batch-${batch.id}`)}
@@ -7912,7 +7918,7 @@ function App() {
                   >
                     <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
                     <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
-                      Đã chọn prompt — sẵn sàng Gen
+                      {selectedGenSavedPrompt?.name || 'Prompt đã lưu'} — sẵn sàng Gen
                     </p>
                   </div>
                 )}
@@ -8889,7 +8895,7 @@ function App() {
                       >
                         <CheckCircle2 size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
                         <p className="font-bold" style={{ fontSize: 12, color: 'var(--color-accent)' }}>
-                          Đã chọn prompt — sẵn sàng Thay đồ
+                          {selectedTryOnSavedPrompt?.name || 'Prompt đã lưu'} — sẵn sàng Thay đồ
                         </p>
                       </div>
                     )}
