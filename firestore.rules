@@ -86,7 +86,7 @@ service cloud.firestore {
         data.keys().hasOnly([
           'uid', 'email', 'role', 'canUseClothing', 'canUseEcom',
           'canUseOfa', 'canUsePicset', 'canUseRunninghub', 'createdAt',
-          'creditLimitEnabled', 'dailyCreditLimit'
+          'creditLimitEnabled', 'creditLimitVersion', 'dailyCreditLimit'
         ]) &&
         data.uid == userId &&
         data.email is string && data.email.size() > 3 && data.email.size() <= 254 &&
@@ -94,6 +94,7 @@ service cloud.firestore {
         data.canUseClothing is bool && data.canUseEcom is bool &&
         data.canUseOfa is bool && data.canUsePicset is bool && data.canUseRunninghub is bool &&
         (!('creditLimitEnabled' in data) || data.creditLimitEnabled is bool) &&
+        (!('creditLimitVersion' in data) || data.creditLimitVersion == 1) &&
         (!('dailyCreditLimit' in data) || (
           data.dailyCreditLimit is int && data.dailyCreditLimit >= 500 && data.dailyCreditLimit <= 1000000
         )) &&

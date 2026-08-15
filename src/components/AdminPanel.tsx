@@ -685,7 +685,14 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         if (typeof data.canUseOfa !== 'boolean') migration.canUseOfa = false;
         if (typeof data.canUsePicset !== 'boolean') migration.canUsePicset = false;
         if (typeof data.canUseRunninghub !== 'boolean') migration.canUseRunninghub = data.canUsePicset === true;
-        if (typeof data.creditLimitEnabled !== 'boolean') migration.creditLimitEnabled = false;
+        // Version 1 changes the product default to 500 credits/day. The marker
+        // keeps a later, deliberate "unlimited" toggle from being enabled again.
+        if (data.creditLimitVersion !== 1) {
+          migration.creditLimitEnabled = true;
+          migration.creditLimitVersion = 1;
+        } else if (typeof data.creditLimitEnabled !== 'boolean') {
+          migration.creditLimitEnabled = true;
+        }
         if (!Number.isInteger(data.dailyCreditLimit) || data.dailyCreditLimit < 500) migration.dailyCreditLimit = 500;
         if (Object.keys(migration).length > 0) {
           updateDoc(doc(db, 'users', snapshot.id), migration)
@@ -1027,7 +1034,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         canUseOfa: true,
         canUsePicset: true,
         canUseRunninghub: true,
-        creditLimitEnabled: false,
+        creditLimitEnabled: true,
+        creditLimitVersion: 1,
         dailyCreditLimit: 500,
         createdAt: new Date(),
       });
@@ -1055,6 +1063,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     try {
       await setDoc(doc(db, 'users', user.uid), {
         creditLimitEnabled: !user.creditLimitEnabled,
+        creditLimitVersion: 1,
         dailyCreditLimit,
       }, { merge: true });
     } catch (err: any) {

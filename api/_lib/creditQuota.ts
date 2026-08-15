@@ -57,7 +57,12 @@ function isAdmin(auth: FirebaseAuthContext): boolean {
 }
 
 function dailyLimit(auth: FirebaseAuthContext): number | null {
-  if (isAdmin(auth) || auth.userProfile?.creditLimitEnabled !== true) return null;
+  if (isAdmin(auth)) return null;
+  const migratedToDefaultLimit = auth.userProfile?.creditLimitVersion === 1;
+  const limitEnabled = migratedToDefaultLimit
+    ? auth.userProfile?.creditLimitEnabled !== false
+    : true;
+  if (!limitEnabled) return null;
   const configured = Number(auth.userProfile?.dailyCreditLimit);
   if (!Number.isSafeInteger(configured)) return MIN_DAILY_CREDIT_LIMIT;
   return Math.min(MAX_DAILY_CREDIT_LIMIT, Math.max(MIN_DAILY_CREDIT_LIMIT, configured));
