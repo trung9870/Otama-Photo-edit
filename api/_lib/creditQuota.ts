@@ -1,6 +1,7 @@
 import type { FirebaseAuthContext } from './auth.js';
 
-export const MIN_DAILY_CREDIT_LIMIT = 500;
+export const DEFAULT_DAILY_CREDIT_LIMIT = 500;
+export const MIN_DAILY_CREDIT_LIMIT = 1;
 export const MAX_DAILY_CREDIT_LIMIT = 1_000_000;
 
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'at-local-edit';
@@ -64,7 +65,7 @@ function dailyLimit(auth: FirebaseAuthContext): number | null {
     : true;
   if (!limitEnabled) return null;
   const configured = Number(auth.userProfile?.dailyCreditLimit);
-  if (!Number.isSafeInteger(configured)) return MIN_DAILY_CREDIT_LIMIT;
+  if (!Number.isSafeInteger(configured)) return DEFAULT_DAILY_CREDIT_LIMIT;
   return Math.min(MAX_DAILY_CREDIT_LIMIT, Math.max(MIN_DAILY_CREDIT_LIMIT, configured));
 }
 

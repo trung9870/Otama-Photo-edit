@@ -693,7 +693,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         } else if (typeof data.creditLimitEnabled !== 'boolean') {
           migration.creditLimitEnabled = true;
         }
-        if (!Number.isInteger(data.dailyCreditLimit) || data.dailyCreditLimit < 500) migration.dailyCreditLimit = 500;
+        if (!Number.isInteger(data.dailyCreditLimit) || data.dailyCreditLimit < 1) migration.dailyCreditLimit = 500;
         if (Object.keys(migration).length > 0) {
           updateDoc(doc(db, 'users', snapshot.id), migration)
             .catch((cleanupError) => console.warn('user security migration failed', cleanupError));
@@ -1059,7 +1059,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   };
 
   const toggleCreditLimit = async (user: any) => {
-    const dailyCreditLimit = Math.max(500, Math.min(1_000_000, Number(user.dailyCreditLimit) || 500));
+    const dailyCreditLimit = Math.max(1, Math.min(1_000_000, Number(user.dailyCreditLimit) || 500));
     try {
       await setDoc(doc(db, 'users', user.uid), {
         creditLimitEnabled: !user.creditLimitEnabled,
@@ -1074,7 +1074,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const saveDailyCreditLimit = async (user: any) => {
     const draft = creditLimitDrafts[user.uid];
     const parsed = Number(draft ?? user.dailyCreditLimit ?? 500);
-    const dailyCreditLimit = Math.max(500, Math.min(1_000_000, Number.isFinite(parsed) ? Math.round(parsed) : 500));
+    const dailyCreditLimit = Math.max(1, Math.min(1_000_000, Number.isFinite(parsed) ? Math.round(parsed) : 500));
     setCreditLimitDrafts((current) => ({ ...current, [user.uid]: String(dailyCreditLimit) }));
     if (dailyCreditLimit === user.dailyCreditLimit) return;
     try {
@@ -1946,7 +1946,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                 u.canUsePicset ||
                 u.canUseRunninghub
               );
-              const dailyCreditLimit = Math.max(500, Number(u.dailyCreditLimit) || 500);
+              const dailyCreditLimit = Math.max(1, Number(u.dailyCreditLimit) || 500);
               const dailyCreditDraft = creditLimitDrafts[u.uid] ?? String(dailyCreditLimit);
               const initial = (u.email || '?').slice(0, 1).toUpperCase();
               return (
@@ -2009,9 +2009,9 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                       <label className="flex items-center gap-1.5">
                         <input
                           type="number"
-                          min={500}
+                          min={1}
                           max={1_000_000}
-                          step={100}
+                          step={1}
                           disabled={!u.creditLimitEnabled}
                           value={dailyCreditDraft}
                           onChange={(event) => setCreditLimitDrafts((current) => ({ ...current, [u.uid]: event.target.value }))}

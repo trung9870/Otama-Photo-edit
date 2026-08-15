@@ -96,7 +96,7 @@ service cloud.firestore {
         (!('creditLimitEnabled' in data) || data.creditLimitEnabled is bool) &&
         (!('creditLimitVersion' in data) || data.creditLimitVersion == 1) &&
         (!('dailyCreditLimit' in data) || (
-          data.dailyCreditLimit is int && data.dailyCreditLimit >= 500 && data.dailyCreditLimit <= 1000000
+          data.dailyCreditLimit is int && data.dailyCreditLimit >= 1 && data.dailyCreditLimit <= 1000000
         )) &&
         data.createdAt is timestamp;
     }
