@@ -125,6 +125,14 @@ service cloud.firestore {
               : 0;
     }
 
+    function creditsPerVideo(model, resolution, seconds, generateAudio) {
+      return model == 'gemini-omni-video'
+        ? seconds * (resolution == '4k' || resolution == '4K' ? 160 : (resolution == '1080p' ? 100 : 70))
+        : model == 'bytedance/seedance-2-5'
+          ? seconds * ((resolution == '480p' ? 14 : 22) + (generateAudio ? 2 : 0))
+          : 0;
+    }
+
     function validUsage(data) {
       return data.keys().hasAll(['type', 'uid', 'email', 'ts']) &&
         data.uid == request.auth.uid &&
@@ -146,6 +154,15 @@ service cloud.firestore {
            data.count is int && data.count >= 1 && data.count <= 8 &&
            creditsPerImage(data.model, data.size) > 0 &&
            data.credits == creditsPerImage(data.model, data.size) * data.count &&
+           data.cost == data.credits * 0.005) ||
+          (data.type == 'gen' && data.mediaType == 'video' &&
+           data.keys().hasOnly(['type', 'feature', 'model', 'count', 'size', 'credits', 'cost', 'mediaType', 'duration', 'generateAudio', 'uid', 'email', 'ts']) &&
+           data.feature is string && data.feature.size() > 0 && data.feature.size() <= 100 &&
+           data.model in ['gemini-omni-video', 'bytedance/seedance-2-5'] &&
+           data.size is string && data.size.size() <= 10 && data.count == 1 &&
+           data.duration is int && data.duration >= 4 && data.duration <= 30 &&
+           data.generateAudio is bool && creditsPerVideo(data.model, data.size, data.duration, data.generateAudio) > 0 &&
+           data.credits == creditsPerVideo(data.model, data.size, data.duration, data.generateAudio) &&
            data.cost == data.credits * 0.005)
         );
     }
@@ -155,7 +172,7 @@ service cloud.firestore {
         data.keys().hasOnly([
           'id', 'uid', 'email', 'url', 'ts', 'feature', 'model', 'size', 'batchId',
           'prompt', 'supplementaryPrompt', 'promptId', 'promptSource', 'inputImage',
-          'modelKey', 'aspectRatio', 'imageCount', 't2iMode'
+          'modelKey', 'aspectRatio', 'imageCount', 't2iMode', 'mediaType', 'duration', 'generateAudio'
         ]) &&
         data.uid == request.auth.uid && data.email == request.auth.token.email &&
         data.id is string && data.id.size() > 0 && data.id.size() <= 100 &&
@@ -170,7 +187,10 @@ service cloud.firestore {
         optionalShortString(data, 'inputImage', 600000) && optionalShortString(data, 'modelKey', 100) &&
         optionalShortString(data, 'aspectRatio', 20) &&
         (!('imageCount' in data) || (data.imageCount is int && data.imageCount >= 1 && data.imageCount <= 8)) &&
-        (!('t2iMode' in data) || data.t2iMode is bool);
+        (!('t2iMode' in data) || data.t2iMode is bool) &&
+        (!('mediaType' in data) || data.mediaType in ['image', 'video']) &&
+        (!('duration' in data) || (data.duration is int && data.duration >= 4 && data.duration <= 30)) &&
+        (!('generateAudio' in data) || data.generateAudio is bool);
     }
 
     match /prompts/{promptId} {

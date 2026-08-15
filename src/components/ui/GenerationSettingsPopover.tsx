@@ -3,6 +3,7 @@ import { Check, ChevronDown, Crop } from 'lucide-react';
 import type { SettingsDropdownOption } from './SettingsDropdown';
 
 export interface GenerationSettingsPopoverProps {
+  mediaType?: 'image' | 'video';
   aspectRatio: string;
   aspectRatios: SettingsDropdownOption<string>[];
   onAspectRatioChange: (value: string) => void;
@@ -12,6 +13,12 @@ export interface GenerationSettingsPopoverProps {
   imageCount: number;
   imageCounts: SettingsDropdownOption<number>[];
   onImageCountChange: (value: number) => void;
+  duration?: number;
+  durations?: SettingsDropdownOption<number>[];
+  onDurationChange?: (value: number) => void;
+  generateAudio?: boolean;
+  onGenerateAudioChange?: (value: boolean) => void;
+  supportsAudio?: boolean;
   placement?: 'top' | 'bottom';
 }
 
@@ -28,6 +35,7 @@ function ratioPreview(value: string) {
 }
 
 export function GenerationSettingsPopover({
+  mediaType = 'image',
   aspectRatio,
   aspectRatios,
   onAspectRatioChange,
@@ -37,8 +45,15 @@ export function GenerationSettingsPopover({
   imageCount,
   imageCounts,
   onImageCountChange,
+  duration = 4,
+  durations = [],
+  onDurationChange,
+  generateAudio = false,
+  onGenerateAudioChange,
+  supportsAudio = false,
   placement = 'top',
 }: GenerationSettingsPopoverProps) {
+  const isVideo = mediaType === 'video';
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -66,7 +81,7 @@ export function GenerationSettingsPopover({
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        title="Tỉ lệ, chất lượng và số lượng ảnh"
+        title={isVideo ? 'Tỉ lệ, độ phân giải và thời lượng video' : 'Tỉ lệ, chất lượng và số lượng ảnh'}
         style={{
           minHeight: 40,
           display: 'flex',
@@ -87,7 +102,7 @@ export function GenerationSettingsPopover({
         <span aria-hidden="true" style={{ width: 1, height: 13, background: 'var(--color-border)' }} />
         <span style={{ font: '600 12px/1 inherit' }}>{imageSize.toUpperCase()}</span>
         <span aria-hidden="true" style={{ width: 1, height: 13, background: 'var(--color-border)' }} />
-        <span style={{ font: '600 12px/1 inherit' }}>{imageCount} ảnh</span>
+        <span style={{ font: '600 12px/1 inherit' }}>{isVideo ? `${duration}s` : `${imageCount} ảnh`}</span>
         <ChevronDown
           size={12}
           strokeWidth={2}
@@ -102,7 +117,7 @@ export function GenerationSettingsPopover({
       {open && (
         <div
           role="dialog"
-          aria-label="Cài đặt đầu ra ảnh"
+          aria-label={isVideo ? 'Cài đặt đầu ra video' : 'Cài đặt đầu ra ảnh'}
           className="generation-settings-menu"
           style={{
             position: 'absolute',
@@ -124,7 +139,7 @@ export function GenerationSettingsPopover({
         >
           <section>
             <p style={{ margin: '0 0 8px', color: 'var(--color-text-tertiary)', font: '600 11px/1.2 inherit' }}>
-              Tỉ lệ ảnh
+              {isVideo ? 'Tỉ lệ video' : 'Tỉ lệ ảnh'}
             </p>
             <div
               style={{
@@ -183,7 +198,7 @@ export function GenerationSettingsPopover({
 
           <section style={{ marginTop: 14 }}>
             <p style={{ margin: '0 0 8px', color: 'var(--color-text-tertiary)', font: '600 11px/1.2 inherit' }}>
-              Chất lượng
+              {isVideo ? 'Độ phân giải' : 'Chất lượng'}
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${imageSizes.length}, minmax(0, 1fr))`, gap: 5, padding: 5, borderRadius: 12, background: 'var(--color-card-secondary)' }}>
               {imageSizes.map((option) => {
@@ -216,17 +231,17 @@ export function GenerationSettingsPopover({
 
           <section style={{ marginTop: 14 }}>
             <p style={{ margin: '0 0 8px', color: 'var(--color-text-tertiary)', font: '600 11px/1.2 inherit' }}>
-              Số lượng ảnh
+              {isVideo ? 'Thời lượng' : 'Số lượng ảnh'}
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${imageCounts.length}, minmax(0, 1fr))`, gap: 5, padding: 5, borderRadius: 12, background: 'var(--color-card-secondary)' }}>
-              {imageCounts.map((option) => {
-                const active = option.value === imageCount;
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isVideo ? durations.length : imageCounts.length}, minmax(0, 1fr))`, gap: 5, padding: 5, borderRadius: 12, background: 'var(--color-card-secondary)' }}>
+              {(isVideo ? durations : imageCounts).map((option) => {
+                const active = option.value === (isVideo ? duration : imageCount);
                 return (
                   <button
                     key={option.value}
                     type="button"
                     disabled={option.disabled}
-                    onClick={() => onImageCountChange(option.value)}
+                    onClick={() => isVideo ? onDurationChange?.(option.value) : onImageCountChange(option.value)}
                     aria-pressed={active}
                     style={{
                       minHeight: 38,
@@ -241,7 +256,7 @@ export function GenerationSettingsPopover({
                     }}
                   >
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      {option.label}
+                      {isVideo ? `${option.label}s` : option.label}
                       {active && <Check size={12} strokeWidth={2.2} style={{ color: 'var(--color-accent)' }} />}
                     </span>
                   </button>
@@ -249,6 +264,33 @@ export function GenerationSettingsPopover({
               })}
             </div>
           </section>
+
+          {isVideo && supportsAudio && (
+            <section style={{ marginTop: 14 }}>
+              <button
+                type="button"
+                onClick={() => onGenerateAudioChange?.(!generateAudio)}
+                className="w-full flex items-center justify-between"
+                style={{ padding: '10px 12px', border: 'none', borderRadius: 12, background: 'var(--color-card-secondary)', color: 'var(--color-text)', cursor: 'pointer' }}
+              >
+                <span style={{ font: '600 12px/1.2 inherit' }}>Tạo âm thanh cùng video</span>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 36,
+                    height: 21,
+                    padding: 2,
+                    display: 'flex',
+                    justifyContent: generateAudio ? 'flex-end' : 'flex-start',
+                    borderRadius: 999,
+                    background: generateAudio ? 'var(--color-accent)' : 'var(--color-fill-strong)',
+                  }}
+                >
+                  <span style={{ width: 17, height: 17, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.22)' }} />
+                </span>
+              </button>
+            </section>
+          )}
         </div>
       )}
     </div>

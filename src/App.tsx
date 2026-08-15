@@ -136,6 +136,9 @@ interface EcomBatch {
   aspectRatio: string;
   imageSize: string;
   t2iMode?: boolean;               // true when batch was submitted as text-to-image (no product image)
+  mediaType?: 'image' | 'video';
+  duration?: number;
+  generateAudio?: boolean;
   results: string[];               // URLs / data URIs
   status: EcomBatchStatus;
   errorMessage?: string;
@@ -158,6 +161,9 @@ interface EcomHistoryItem {
   aspectRatio?: string;
   imageCount?: number;
   t2iMode?: boolean;
+  mediaType?: 'image' | 'video';
+  duration?: number;
+  generateAudio?: boolean;
   ts: any;
 }
 
@@ -173,6 +179,9 @@ interface EcomGenerationSettings {
   imageSize?: string;
   imageCount?: number;
   t2iMode?: boolean;
+  mediaType?: 'image' | 'video';
+  duration?: number;
+  generateAudio?: boolean;
 }
 
 // Error Boundary Component
@@ -308,36 +317,59 @@ const MODEL_CONFIG = {
     id: 'gpt-image-2-image-to-image',
     name: 'GPT2',
     description: 'Sử dụng Kie.ai (Yêu cầu Kie API Key trong cài đặt)',
-    requiredKey: 'kie'
+    requiredKey: 'kie',
+    mediaType: 'image' as const,
   },
   'banana-pro': {
     id: 'nano-banana-pro',
     name: 'Banana Pro',
     description: 'Google Nano Banana Pro qua Kie.ai (rẻ hơn ~33-50% so với Google trực tiếp).',
-    requiredKey: 'kie'
+    requiredKey: 'kie',
+    mediaType: 'image' as const,
   },
   'banana-2': {
     id: 'nano-banana-2',
     name: 'Banana 2',
     description: 'Google Nano Banana 2 qua Kie.ai (rẻ hơn ~40% so với Google trực tiếp).',
-    requiredKey: 'kie'
+    requiredKey: 'kie',
+    mediaType: 'image' as const,
   },
   'seedream-4-5': {
     // Internal id (kebab-case) — backend swaps to "seedream/4.5-edit" or "seedream/4.5-text-to-image" alias
     id: 'seedream-4-5-edit',
     name: 'Seedream 4.5',
     description: 'ByteDance Seedream 4.5 qua Kie.ai (~$0.032/ảnh, hỗ trợ 4K). Tự chuyển sang T2I khi không có ảnh.',
-    requiredKey: 'kie'
+    requiredKey: 'kie',
+    mediaType: 'image' as const,
+  },
+  'google-omni': {
+    id: 'gemini-omni-video',
+    name: 'Google Omni',
+    description: 'Google Gemini Omni tạo video qua Kie.ai, hỗ trợ prompt hoặc tối đa 7 ảnh tham chiếu.',
+    requiredKey: 'kie',
+    mediaType: 'video' as const,
+  },
+  'seedance-2-5': {
+    id: 'bytedance/seedance-2-5',
+    name: 'Seedance 2.5',
+    description: 'ByteDance Seedance 2.5 tạo video qua Kie.ai, hỗ trợ ảnh tham chiếu và âm thanh.',
+    requiredKey: 'kie',
+    mediaType: 'video' as const,
   }
 };
 
 type ModelType = keyof typeof MODEL_CONFIG;
+const IMAGE_MODEL_KEYS: ModelType[] = ['gpt2', 'banana-pro', 'banana-2', 'seedream-4-5'];
+const GEN_NEW_MODEL_KEYS: ModelType[] = [...IMAGE_MODEL_KEYS, 'google-omni', 'seedance-2-5'];
+const isVideoModelKey = (model: ModelType) => MODEL_CONFIG[model].mediaType === 'video';
 
 const MODEL_ASPECT_RATIOS: Record<ModelType, string[]> = {
   gpt2: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '21:9', '9:21'],
   'banana-pro': ['auto', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'],
   'banana-2': ['auto', '1:1', '2:3', '3:2', '1:4', '4:1', '3:4', '4:3', '4:5', '5:4', '1:8', '8:1', '9:16', '16:9', '21:9'],
   'seedream-4-5': ['1:1', '2:3', '3:2', '3:4', '4:3', '9:16', '16:9', '21:9'],
+  'google-omni': ['16:9', '9:16'],
+  'seedance-2-5': ['auto', '1:1', '4:3', '3:4', '16:9', '9:16', '21:9'],
 };
 
 // Keep the ratio menu stable when switching models. Unsupported ratios remain
@@ -494,7 +526,12 @@ async function encryptSharedPromptForAdmin(plaintext: string): Promise<string> {
 // Returns the resulting image URLs in the same order as taskIds.
 // Each poll request hits /api/generate-check (~1s), so a Vercel function
 // timeout never applies to the long-running KIE task itself.
-async function pollKieTasks(taskIds: string[], signal?: AbortSignal): Promise<string[]> {
+async function pollKieTasks(
+  taskIds: string[],
+  signal?: AbortSignal,
+  options?: { mediaType?: 'image' | 'video' },
+): Promise<string[]> {
+  const isVideo = options?.mediaType === 'video';
   const throwIfAborted = () => {
     if (signal?.aborted) {
       const err = new Error('Aborted');
@@ -503,7 +540,7 @@ async function pollKieTasks(taskIds: string[], signal?: AbortSignal): Promise<st
     }
   };
   const pollSingle = async (taskId: string): Promise<string> => {
-    const MAX_ATTEMPTS = 120; // ~6 minutes at 3s interval
+    const MAX_ATTEMPTS = isVideo ? 300 : 120; // video: ~15 minutes; image: ~6 minutes
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       // Sleep but wake immediately if aborted
       await new Promise<void>((resolve) => {
@@ -526,7 +563,7 @@ async function pollKieTasks(taskIds: string[], signal?: AbortSignal): Promise<st
       const data = await res.json().catch(() => null);
       if (!data) continue;
       if (data.status === 'success') {
-        if (!data.url) throw new Error('Kie.ai task xong nhưng không có URL ảnh.');
+        if (!data.url) throw new Error(`Kie.ai task xong nhưng không có URL ${isVideo ? 'video' : 'ảnh'}.`);
         return data.url as string;
       }
       if (data.status === 'failed') {
@@ -534,7 +571,7 @@ async function pollKieTasks(taskIds: string[], signal?: AbortSignal): Promise<st
       }
       // status === 'pending' → keep polling
     }
-    throw new Error('Timeout: Kie.ai task chạy quá lâu (>6 phút). Vui lòng thử lại.');
+    throw new Error(`Timeout: Kie.ai task chạy quá lâu (>${isVideo ? 15 : 6} phút). Vui lòng thử lại.`);
   };
   return Promise.all(taskIds.map(pollSingle));
 }
@@ -667,26 +704,47 @@ function App() {
   const [ecomModel, setEcomModel] = useState<ModelType>('gpt2');
   const [ecomAspectRatio, setEcomAspectRatio] = useState<string>('9:16');
   const [ecomImageSize, setEcomImageSize] = useState<string>('1k');
+  const [ecomVideoDuration, setEcomVideoDuration] = useState<number>(4);
+  const [ecomVideoGenerateAudio, setEcomVideoGenerateAudio] = useState<boolean>(true);
+  const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>('gen-new');
 
   // Auto-correct ecomImageSize khi model/aspect-ratio thay đổi khiến size hiện tại không khả dụng
   useEffect(() => {
     const supportedRatios = MODEL_ASPECT_RATIOS[ecomModel];
     if (!supportedRatios.includes(ecomAspectRatio)) {
-      setEcomAspectRatio(supportedRatios.includes('auto') ? 'auto' : '1:1');
+      setEcomAspectRatio(isVideoModelKey(ecomModel)
+        ? (supportedRatios.includes('16:9') ? '16:9' : supportedRatios[0])
+        : (supportedRatios.includes('auto') ? 'auto' : '1:1'));
       return;
     }
-    const availableSizes: string[] = ecomModel === 'gpt2'
+    const availableSizes: string[] = ecomModel === 'google-omni'
+      ? ['720p', '1080p', '4k']
+      : ecomModel === 'seedance-2-5'
+        ? ['480p', '720p']
+        : ecomModel === 'gpt2'
       ? (ecomAspectRatio === 'auto' ? ['1k']
         : ecomAspectRatio === '5:4' || ecomAspectRatio === '4:5' ? ['1k']
         : ecomAspectRatio === '1:1' ? ['1k', '2k']
         : ['1k', '2k', '4k'])
       : ['1k', '2k', '4k'];
     if (!availableSizes.includes(ecomImageSize)) {
-      setEcomImageSize(availableSizes[availableSizes.length - 1]);
+      setEcomImageSize(isVideoModelKey(ecomModel) ? '720p' : availableSizes[availableSizes.length - 1]);
     }
   }, [ecomModel, ecomAspectRatio]);
 
   const [ecomImageCount, setEcomImageCount] = useState<number>(3);
+  useEffect(() => {
+    if (isVideoModelKey(ecomModel)) {
+      setEcomImageCount(1);
+      setEcomVideoDuration((current) => ecomModel === 'google-omni'
+        ? ([4, 6, 8, 10].includes(current) ? current : 4)
+        : Math.max(4, Math.min(30, current || 8)));
+    }
+  }, [ecomModel]);
+
+  useEffect(() => {
+    if (ecomSubTab !== 'gen-new' && isVideoModelKey(ecomModel)) setEcomModel('gpt2');
+  }, [ecomSubTab, ecomModel]);
   const [isEcomGenerating, setIsEcomGenerating] = useState(false);
   const [ecomResults, setEcomResults] = useState<string[]>([]);
   // Concurrent gen-new batches — user can fire many in parallel without waiting
@@ -706,7 +764,6 @@ function App() {
   const [ecomLastFinalImages, setEcomLastFinalImages] = useState<{ id: string, url: string, loading: boolean }[]>([]);
   const [selectedResultIds, setSelectedResultIds] = useState<string[]>([]);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
-  const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>('gen-new');
   const [ecomTemplateImage, setEcomTemplateImage] = useState<string | null>(null);
 
   const replaceEcomProductImages = useCallback((sources: string[]) => {
@@ -2749,6 +2806,8 @@ function App() {
     if (settings.aspectRatio) setEcomAspectRatio(settings.aspectRatio);
     if (settings.imageSize) setEcomImageSize(settings.imageSize);
     if (typeof settings.imageCount === 'number') setEcomImageCount(settings.imageCount);
+    if (typeof settings.duration === 'number') setEcomVideoDuration(settings.duration);
+    if (typeof settings.generateAudio === 'boolean') setEcomVideoGenerateAudio(settings.generateAudio);
     if (!options?.silent) {
       setGlobalError(settings.t2iMode || settings.inputImage || settings.inputImages?.length
         ? 'Đã nạp lại ảnh, prompt và cài đặt của lần gen trước. Bạn có thể chỉnh sửa rồi gen tiếp.'
@@ -2821,12 +2880,38 @@ function App() {
     return 0; // analyze (text) — không tính credit ảnh
   };
 
-  const logUsage = async (feature: string, modelId: string, count: number, size?: string) => {
+  const creditsPerVideo = (modelId: string, resolution: string | undefined, duration: number, generateAudio: boolean) => {
+    const seconds = Math.max(4, Math.min(30, Math.round(duration || 4)));
+    const normalizedResolution = (resolution || '720p').toLowerCase();
+    if (modelId === 'gemini-omni-video') {
+      return seconds * (normalizedResolution === '4k' ? 160 : normalizedResolution === '1080p' ? 100 : 70);
+    }
+    if (modelId === 'bytedance/seedance-2-5') {
+      return seconds * ((normalizedResolution === '480p' ? 14 : 22) + (generateAudio ? 2 : 0));
+    }
+    return 0;
+  };
+
+  const logUsage = async (
+    feature: string,
+    modelId: string,
+    count: number,
+    size?: string,
+    options?: { mediaType?: 'image' | 'video'; duration?: number; generateAudio?: boolean; chargedCredits?: number },
+  ) => {
     if (!user) return;
     try {
-      const credits = creditsPerImage(modelId, size) * (count || 1);
+      const isVideo = options?.mediaType === 'video';
+      const duration = Math.round(options?.duration || 4);
+      const generateAudio = options?.generateAudio === true;
+      const calculatedCredits = isVideo
+        ? creditsPerVideo(modelId, size, duration, generateAudio)
+        : creditsPerImage(modelId, size) * (count || 1);
+      const credits = Number.isFinite(options?.chargedCredits) && Number(options?.chargedCredits) > 0
+        ? Number(options?.chargedCredits)
+        : calculatedCredits;
       const cost = credits * KIE_CREDIT_USD;
-      await setDoc(doc(collection(db, 'usage')), {
+      const usageData: Record<string, any> = {
         type: 'gen',
         feature,
         model: modelId,
@@ -2837,7 +2922,13 @@ function App() {
         uid: user.uid,
         email: user.email,
         ts: Timestamp.now(),
-      });
+      };
+      if (isVideo) {
+        usageData.mediaType = 'video';
+        usageData.duration = duration;
+        usageData.generateAudio = generateAudio;
+      }
+      await setDoc(doc(collection(db, 'usage')), usageData);
     } catch (e) {
       console.warn('logUsage failed', e);
     }
@@ -2880,6 +2971,9 @@ function App() {
     aspectRatio?: string;
     imageCount?: number;
     t2iMode?: boolean;
+    mediaType?: 'image' | 'video';
+    duration?: number;
+    generateAudio?: boolean;
   }) => {
     if (!user || !imageSrc) return;
     try {
@@ -2927,6 +3021,9 @@ function App() {
       if (meta.aspectRatio) historyData.aspectRatio = meta.aspectRatio;
       if (typeof meta.imageCount === 'number') historyData.imageCount = meta.imageCount;
       if (typeof meta.t2iMode === 'boolean') historyData.t2iMode = meta.t2iMode;
+      if (meta.mediaType) historyData.mediaType = meta.mediaType;
+      if (typeof meta.duration === 'number') historyData.duration = meta.duration;
+      if (typeof meta.generateAudio === 'boolean') historyData.generateAudio = meta.generateAudio;
       await setDoc(doc(collection(db, 'history'), id), historyData);
     } catch (e) {
       console.warn('pushHistory failed', e);
@@ -2960,10 +3057,13 @@ function App() {
 
   const handleEcomGenerate = async () => {
     // Text-to-image mode is gen-new only; otherwise the regular i2i product-image requirement applies.
+    const videoActive = ecomSubTab === 'gen-new' && isVideoModelKey(ecomModel);
     const t2iActive = ecomSubTab === 'gen-new' && ecomT2IMode;
     if (!t2iActive && ecomProductImages.length === 0) return;
     if (t2iActive && !ecomPromptText.trim() && !ecomSupplementaryPrompt.trim() && !ecomUsesSecretPrompt) {
-      setGlobalError("Chế độ Text-to-Image cần ít nhất 1 prompt mô tả ảnh muốn tạo.");
+      setGlobalError(videoActive
+        ? "Chế độ Text-to-Video cần ít nhất 1 prompt mô tả video muốn tạo."
+        : "Chế độ Text-to-Image cần ít nhất 1 prompt mô tả ảnh muốn tạo.");
       return;
     }
     if (ecomSubTab === 'clone-template' && !ecomTemplateImage) {
@@ -2988,7 +3088,10 @@ function App() {
       model: ecomModel,
       aspectRatio: ecomAspectRatio,
       imageSize: ecomImageSize,
-      imageCount: ecomImageCount,
+      imageCount: videoActive ? 1 : ecomImageCount,
+      mediaType: (videoActive ? 'video' : 'image') as 'image' | 'video',
+      duration: videoActive ? ecomVideoDuration : undefined,
+      generateAudio: videoActive ? (ecomModel === 'seedance-2-5' && ecomVideoGenerateAudio) : undefined,
       templateImage: ecomTemplateImage,
       cloneManualMode,
       clonePromptType,
@@ -3029,6 +3132,9 @@ function App() {
         aspectRatio: snapshot.aspectRatio,
         imageSize: snapshot.imageSize,
         t2iMode: snapshot.t2iMode,
+        mediaType: snapshot.mediaType,
+        duration: snapshot.duration,
+        generateAudio: snapshot.generateAudio,
         results: [],
         status: 'running',
       };
@@ -3059,6 +3165,7 @@ function App() {
       let generatedImages: string[] = [];
       let protectedHistoryPrompt = '';
       let serverFailed = false;
+      let chargedCredits: number | undefined;
 
       // Try server first
       try {
@@ -3076,6 +3183,9 @@ function App() {
             imageSize: snapshot.imageSize,
             numberOfImages: snapshot.imageCount,
             t2iMode: snapshot.t2iMode,
+            mediaType: snapshot.mediaType,
+            videoDuration: snapshot.duration,
+            generateAudio: snapshot.generateAudio,
           })
         });
 
@@ -3084,9 +3194,12 @@ function App() {
           if (snapshot.promptIsSecret && isEncryptedSharedPrompt(data.protectedPrompt)) {
             protectedHistoryPrompt = data.protectedPrompt;
           }
+          if (Number.isFinite(Number(data.chargedCredits)) && Number(data.chargedCredits) > 0) {
+            chargedCredits = Number(data.chargedCredits);
+          }
           if (data.isAsync && Array.isArray(data.taskIds)) {
             // KIE async: poll each task until done. Each poll is fast → no Vercel timeout.
-            const urls = await pollKieTasks(data.taskIds);
+            const urls = await pollKieTasks(data.taskIds, undefined, { mediaType: snapshot.mediaType });
             generatedImages = urls;
           } else if (data.isUrl) {
             generatedImages = data.imagesBase64;
@@ -3106,7 +3219,7 @@ function App() {
       }
       
       if (serverFailed) {
-        throw new Error("Không thể tạo ảnh qua Kie.ai. Ứng dụng không fallback sang Google trực tiếp.");
+        throw new Error(`Không thể tạo ${snapshot.mediaType === 'video' ? 'video' : 'ảnh'} qua Kie.ai. Ứng dụng không fallback sang Google trực tiếp.`);
         // Fallback to client-side
         let apiKey = '';
         if (config.requiredKey === 'google') {
@@ -3156,7 +3269,12 @@ function App() {
 
       if (generatedImages.length > 0) {
         const feat = ecomSubTab === 'clone-template' ? 'ecom-clone' : 'ecom-gen-new';
-        logUsage(feat, config.id, generatedImages.length, snapshot.imageSize);
+        logUsage(feat, config.id, generatedImages.length, snapshot.imageSize, {
+          mediaType: snapshot.mediaType,
+          duration: snapshot.duration,
+          generateAudio: snapshot.generateAudio,
+          chargedCredits,
+        });
         // The Kie result is ready now. Do not block the result card on the
         // optional Firestore history write; a slow or
         // temporarily unavailable history service must never leave a batch
@@ -3167,10 +3285,10 @@ function App() {
             ? { ...b, results: generatedImages, status: 'done' as const, finishedAt: Date.now() }
             : b
           ));
-          onGenComplete('Ecom: gen xong', `${generatedImages.length} ảnh hoàn tất`);
+          onGenComplete('Ecom: gen xong', snapshot.mediaType === 'video' ? 'Video đã hoàn tất' : `${generatedImages.length} ảnh hoàn tất`);
         } else {
           setEcomResults(generatedImages);
-          onGenComplete('Ecom: gen xong', `${generatedImages.length} ảnh hoàn tất`);
+          onGenComplete('Ecom: gen xong', snapshot.mediaType === 'video' ? 'Video đã hoàn tất' : `${generatedImages.length} ảnh hoàn tất`);
         }
 
         // Persist history in the background after the UI is marked complete.
@@ -3189,10 +3307,13 @@ function App() {
             aspectRatio: snapshot.aspectRatio,
             imageCount: snapshot.imageCount,
             t2iMode: snapshot.t2iMode,
+            mediaType: snapshot.mediaType,
+            duration: snapshot.duration,
+            generateAudio: snapshot.generateAudio,
           })
         ));
       } else {
-        throw new Error("Không có ảnh kết quả trả về.");
+        throw new Error(`Không có ${snapshot.mediaType === 'video' ? 'video' : 'ảnh'} kết quả trả về.`);
       }
     } catch (error: any) {
       console.error(error);
@@ -4372,7 +4493,7 @@ function App() {
                   {/* Settings — compact one-row dropdowns */}
                   <div className="p-3 flex gap-2 items-start" style={{ background: 'var(--color-card-secondary)', borderRadius: 14, border: '1px solid var(--color-border-soft)', boxShadow: 'var(--sh-in)' }}>
                     {(() => {
-                      const modelOpts: SettingsDropdownOption<ModelType>[] = (Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                      const modelOpts: SettingsDropdownOption<ModelType>[] = IMAGE_MODEL_KEYS.map((m) => ({
                         value: m, label: MODEL_CONFIG[m].name, icon: <ModelLogo model={m} />,
                       }));
                       const availableSizes: string[] = ecomModel === 'gpt2'
@@ -4611,7 +4732,7 @@ function App() {
                       onChange={(m) => setEcomThayModel(m)}
                       columns={4}
                       size="sm"
-                      options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                      options={IMAGE_MODEL_KEYS.map((m) => ({
                         value: m,
                         name: MODEL_CONFIG[m].name,
                         sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
@@ -4890,7 +5011,9 @@ function App() {
                           fontWeight: 600,
                           letterSpacing: '0.04em',
                         }}
-                        title={ecomT2IMode ? 'Tắt chế độ Text-to-Image (cần ảnh sản phẩm)' : 'Bật chế độ Text-to-Image (chỉ cần prompt, không cần ảnh)'}
+                        title={ecomT2IMode
+                          ? `Tắt chế độ Text-to-${isVideoModelKey(ecomModel) ? 'Video' : 'Image'} (dùng ảnh tham chiếu)`
+                          : `Bật chế độ Text-to-${isVideoModelKey(ecomModel) ? 'Video' : 'Image'} (chỉ cần prompt)`}
                       >
                         <span
                           className="inline-block rounded-full transition-all"
@@ -4900,7 +5023,7 @@ function App() {
                             background: ecomT2IMode ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
                           }}
                         />
-                        TEXT‑TO‑IMAGE
+                        {isVideoModelKey(ecomModel) ? 'TEXT‑TO‑VIDEO' : 'TEXT‑TO‑IMAGE'}
                       </button>
                       <button
                         type="button"
@@ -4920,18 +5043,24 @@ function App() {
                       { value: 'manual', label: 'Prompt thủ công' },
                       ...ecomSavedPrompts.map((prompt) => ({ value: prompt.id, label: prompt.name })),
                     ];
-                    const modelOptions: SettingsDropdownOption<ModelType>[] = (Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                    const modelOptions: SettingsDropdownOption<ModelType>[] = GEN_NEW_MODEL_KEYS.map((m) => ({
                       value: m,
                       label: MODEL_CONFIG[m].name,
                       icon: <ModelLogo model={m} />,
                     }));
-                    const availableSizes: string[] = ecomModel === 'gpt2'
+                    const videoModel = isVideoModelKey(ecomModel);
+                    const availableSizes: string[] = ecomModel === 'google-omni'
+                      ? ['720p', '1080p', '4k']
+                      : ecomModel === 'seedance-2-5'
+                        ? ['480p', '720p']
+                        : ecomModel === 'gpt2'
                       ? (ecomAspectRatio === 'auto' ? ['1k']
                         : ecomAspectRatio === '5:4' || ecomAspectRatio === '4:5' ? ['1k']
                         : ecomAspectRatio === '1:1' ? ['1k', '2k']
                         : ['1k', '2k', '4k'])
                       : ['1k', '2k', '4k'];
-                    const sizeOptions: SettingsDropdownOption<string>[] = ['1k', '2k', '4k'].map((s) => ({
+                    const allSizes = videoModel ? ['480p', '720p', '1080p', '4k'] : ['1k', '2k', '4k'];
+                    const sizeOptions: SettingsDropdownOption<string>[] = allSizes.map((s) => ({
                       value: s,
                       label: s.toUpperCase(),
                       disabled: !availableSizes.includes(s),
@@ -4946,6 +5075,10 @@ function App() {
                       value: c,
                       label: String(c),
                     }));
+                    const durationOptions: SettingsDropdownOption<number>[] = (ecomModel === 'google-omni'
+                      ? [4, 6, 8, 10]
+                      : [4, 6, 8, 10, 15, 20, 30]
+                    ).map((duration) => ({ value: duration, label: String(duration) }));
                     return (
                       <>
                         <SettingsDropdown<string>
@@ -4965,12 +5098,16 @@ function App() {
                         />
                         <SettingsDropdown<ModelType>
                           value={ecomModel}
-                          onChange={(v) => setEcomModel(v)}
+                          onChange={(v) => {
+                            setEcomModel(v);
+                            if (isVideoModelKey(v)) setEcomImageCount(1);
+                          }}
                           options={modelOptions}
                           width="fill"
                           placement="top"
                         />
                         <GenerationSettingsPopover
+                          mediaType={videoModel ? 'video' : 'image'}
                           aspectRatio={ecomAspectRatio}
                           aspectRatios={arOptions}
                           onAspectRatioChange={setEcomAspectRatio}
@@ -4980,6 +5117,12 @@ function App() {
                           imageCount={ecomImageCount}
                           imageCounts={countOptions}
                           onImageCountChange={setEcomImageCount}
+                          duration={ecomVideoDuration}
+                          durations={durationOptions}
+                          onDurationChange={setEcomVideoDuration}
+                          generateAudio={ecomVideoGenerateAudio}
+                          onGenerateAudioChange={setEcomVideoGenerateAudio}
+                          supportsAudio={ecomModel === 'seedance-2-5'}
                           placement="top"
                         />
                       </>
@@ -4996,8 +5139,12 @@ function App() {
                         onClick={handleEcomGenerate}
                         disabled={!ready}
                         className="gen-new-submit shrink-0 inline-flex items-center justify-center rounded-xl transition-all disabled:opacity-35 disabled:cursor-not-allowed"
-                        aria-label={runningBatches > 0 ? `Gen thêm batch, đang chạy ${runningBatches}` : 'Bắt đầu tạo ảnh'}
-                        title={runningBatches > 0 ? `Gen thêm batch · đang chạy ${runningBatches}` : ecomT2IMode ? 'Gen ảnh từ prompt' : 'Gen ảnh TMĐT'}
+                        aria-label={runningBatches > 0 ? `Gen thêm batch, đang chạy ${runningBatches}` : `Bắt đầu tạo ${isVideoModelKey(ecomModel) ? 'video' : 'ảnh'}`}
+                        title={runningBatches > 0
+                          ? `Gen thêm batch · đang chạy ${runningBatches}`
+                          : ecomT2IMode
+                            ? `Gen ${isVideoModelKey(ecomModel) ? 'video' : 'ảnh'} từ prompt`
+                            : `Gen ${isVideoModelKey(ecomModel) ? 'video' : 'ảnh'} từ ảnh tham chiếu`}
                       >
                         {runningBatches > 0 ? <span className="text-xs font-bold">+{runningBatches}</span> : <Sparkles size={18} />}
                       </button>
@@ -5012,7 +5159,7 @@ function App() {
                       <div className="mb-2 flex items-center gap-2">
                         <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>1</span>
                         <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
-                          Ảnh sản phẩm
+                          {isVideoModelKey(ecomModel) ? 'Ảnh tham chiếu' : 'Ảnh sản phẩm'}
                         </p>
                       </div>
                       <div
@@ -5477,7 +5624,7 @@ function App() {
                     const runningBatches = ecomBatches.filter(b => b.status === 'running').length;
                     if (ecomSubTab === 'gen-new') {
                       // In T2I mode: enabled if prompt non-empty. In i2i: enabled if image uploaded.
-                      const t2iReady = ecomT2IMode && (ecomPromptText.trim() || ecomSupplementaryPrompt.trim());
+                      const t2iReady = ecomT2IMode && Boolean(ecomPromptText.trim() || ecomSupplementaryPrompt.trim() || ecomUsesSecretPrompt);
                       const i2iReady = !ecomT2IMode && ecomProductImages.length > 0;
                       return (
                         <Button
@@ -5490,7 +5637,9 @@ function App() {
                         >
                           {runningBatches > 0
                             ? `Gen thêm batch (đang chạy ${runningBatches})`
-                            : ecomT2IMode ? 'Gen ảnh từ Prompt' : 'Gen ảnh TMĐT'}
+                            : ecomT2IMode
+                              ? `Gen ${isVideoModelKey(ecomModel) ? 'video' : 'ảnh'} từ Prompt`
+                              : `Gen ${isVideoModelKey(ecomModel) ? 'video' : 'ảnh'} từ tham chiếu`}
                         </Button>
                       );
                     }
@@ -6473,7 +6622,7 @@ function App() {
                   <div className="flex flex-col items-center justify-center text-gray-500 h-full">
                     <ImageIcon size={64} className="opacity-20 mb-4" />
                     <p>Kết quả sẽ hiển thị ở đây</p>
-                    <p className="text-xs mt-2 opacity-60">Bấm "Gen ảnh TMĐT" để tạo batch đầu tiên</p>
+                    <p className="text-xs mt-2 opacity-60">Chọn model rồi bấm Gen để tạo batch đầu tiên</p>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-5 w-full">
@@ -6491,6 +6640,9 @@ function App() {
                         imageSize: batch.imageSize,
                         imageCount: batch.imageCount,
                         t2iMode: batch.t2iMode,
+                        mediaType: batch.mediaType,
+                        duration: batch.duration,
+                        generateAudio: batch.generateAudio,
                       };
                       return (
                         <div
@@ -6529,7 +6681,7 @@ function App() {
                                   </span>
                                 )}
                                 <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--color-text-tertiary)', letterSpacing: '0.04em' }}>
-                                  {batch.model} • {batch.aspectRatio} • {batch.imageSize.toUpperCase()} • {batch.imageCount} ảnh
+                                  {batch.model} • {batch.aspectRatio} • {batch.imageSize.toUpperCase()} • {batch.mediaType === 'video' ? `${batch.duration || 4}s video` : `${batch.imageCount} ảnh`}
                                 </span>
                                 {batch.status === 'done' && (
                                   <>
@@ -6603,13 +6755,13 @@ function App() {
                           {/* Batch body */}
                           {(() => {
                             // Fix card size at 1/3 width regardless of imageCount — empty cells stay invisible
-                            const batchGridCols = 'grid-cols-1 sm:grid-cols-3';
+                            const batchGridCols = batch.mediaType === 'video' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-3';
                             return batch.status === 'running' ? (
                             <div className={`grid ${batchGridCols} gap-3`}>
                               {Array.from({ length: batch.imageCount }).map((_, i) => (
                                 <div
                                   key={i}
-                                  className="relative overflow-hidden aspect-[3/4] flex flex-col items-center justify-center gap-3"
+                                  className={`relative overflow-hidden ${batch.mediaType === 'video' ? 'aspect-video' : 'aspect-[3/4]'} flex flex-col items-center justify-center gap-3`}
                                   style={{
                                     borderRadius: 14,
                                     background:
@@ -6630,7 +6782,9 @@ function App() {
                                     }}
                                   />
                                   <Loader2 className="animate-spin relative z-10" size={26} style={{ color: 'var(--color-accent)' }} />
-                                  <p className="relative z-10 animate-pulse" style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-secondary)' }}>Đang tạo ảnh {i + 1}...</p>
+                                  <p className="relative z-10 animate-pulse" style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+                                    {batch.mediaType === 'video' ? 'Đang tạo video…' : `Đang tạo ảnh ${i + 1}...`}
+                                  </p>
                                 </div>
                               ))}
                             </div>
@@ -6646,34 +6800,29 @@ function App() {
                                   className="relative group overflow-hidden"
                                   style={{ borderRadius: 14, background: 'var(--color-card-secondary)' }}
                                 >
-                                  <img src={res} alt={`Batch ${batch.id} #${i+1}`} className="block w-full h-auto" />
-                                  <div className="image-action-overlay absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                  {batch.mediaType === 'video' ? (
+                                    <>
+                                      <video src={res} controls playsInline preload="metadata" className="block w-full max-h-[70vh] bg-black" />
                                     <button
-                                      onClick={() => setZoomImage(res)}
-                                      className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition"
-                                      title="Phóng to"
+                                      onClick={() => handleImageDownload(res, `ecom-${batch.id}-${i + 1}.mp4`)}
+                                      className="absolute top-2 right-2 p-2 rounded-lg text-white"
+                                      style={{ background: 'rgba(0,0,0,.58)', backdropFilter: 'blur(10px)' }}
+                                      title="Tải video"
                                     >
-                                      <ZoomIn size={16} />
+                                      <Download size={16} />
                                     </button>
-                                    <button
-                                      onClick={() => setSelectedEcomGrid(res)}
-                                      className="px-3 py-1.5 bg-white text-black font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
-                                    >
-                                      <Crop size={12} /> Chọn Tách
-                                    </button>
-                                    <button
-                                      onClick={() => useEcomImageAsInput(res)}
-                                      className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px] hover:bg-indigo-600 transition-colors"
-                                    >
-                                      <Copy size={12} /> Dùng làm Mẫu
-                                    </button>
-                                    <button
-                                      onClick={() => handleImageDownload(res, `ecom-${batch.id}-${i + 1}.png`)}
-                                      className="px-3 py-1.5 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
-                                    >
-                                      <Download size={12} /> Tải
-                                    </button>
-                                  </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <img src={res} alt={`Batch ${batch.id} #${i+1}`} className="block w-full h-auto" />
+                                      <div className="image-action-overlay absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                        <button onClick={() => setZoomImage(res)} className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition" title="Phóng to"><ZoomIn size={16} /></button>
+                                        <button onClick={() => setSelectedEcomGrid(res)} className="px-3 py-1.5 bg-white text-black font-bold rounded-lg flex items-center gap-1.5 text-[11px]"><Crop size={12} /> Chọn Tách</button>
+                                        <button onClick={() => useEcomImageAsInput(res)} className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px] hover:bg-indigo-600 transition-colors"><Copy size={12} /> Dùng làm Mẫu</button>
+                                        <button onClick={() => handleImageDownload(res, `ecom-${batch.id}-${i + 1}.png`)} className="px-3 py-1.5 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"><Download size={12} /> Tải</button>
+                                      </div>
+                                    </>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -6709,7 +6858,7 @@ function App() {
                               <div className="min-w-0">
                                 <p className="font-bold text-sm" style={{ color: 'var(--color-text)' }}>Lịch sử 7 ngày</p>
                                 <p className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-                                  {visibleHistory.length} ảnh Gen New gần nhất
+                                  {visibleHistory.length} kết quả Gen New gần nhất
                                 </p>
                               </div>
                             </div>
@@ -6742,6 +6891,9 @@ function App() {
                                 imageSize: representative.size,
                                 imageCount: representative.imageCount,
                                 t2iMode: representative.t2iMode,
+                                mediaType: representative.mediaType,
+                                duration: representative.duration,
+                                generateAudio: representative.generateAudio,
                               };
                               const canRegenerate = Boolean(
                                 representative.t2iMode
@@ -6772,7 +6924,7 @@ function App() {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex flex-wrap items-center gap-2 mb-1">
                                         <p className="text-[10px] font-semibold uppercase" style={{ color: 'var(--color-text-tertiary)', letterSpacing: '0.04em' }}>
-                                          {representative.model || 'Gen New'}{representative.aspectRatio ? ` • ${representative.aspectRatio}` : ''}{representative.size ? ` • ${representative.size.toUpperCase()}` : ''}{` • ${historyGroup.items.length} ảnh`}
+                                          {representative.model || 'Gen New'}{representative.aspectRatio ? ` • ${representative.aspectRatio}` : ''}{representative.size ? ` • ${representative.size.toUpperCase()}` : ''}{representative.mediaType === 'video' ? ` • ${representative.duration || 4}s video` : ` • ${historyGroup.items.length} ảnh`}
                                         </p>
                                         <button
                                           type="button"
@@ -6829,28 +6981,28 @@ function App() {
                                         className="relative group overflow-hidden"
                                         style={{ borderRadius: 14, background: 'var(--color-card-secondary)' }}
                                       >
-                                        <img src={item.url} alt={`Lịch sử Gen New ${index + 1}`} className="block w-full h-auto" />
-                                        <div className="image-action-overlay absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                                          <button
-                                            onClick={() => setZoomImage(item.url)}
-                                            className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition"
-                                            title="Phóng to"
-                                          >
-                                            <ZoomIn size={16} />
-                                          </button>
-                                          <button
-                                            onClick={() => useEcomImageAsInput(item.url)}
-                                            className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
-                                          >
-                                            <Copy size={12} /> Dùng làm Mẫu
-                                          </button>
-                                          <button
-                                            onClick={() => handleImageDownload(item.url, `ecom-history-${item.id}.png`)}
-                                            className="px-3 py-1.5 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"
-                                          >
-                                            <Download size={12} /> Tải
-                                          </button>
-                                        </div>
+                                        {item.mediaType === 'video' ? (
+                                          <>
+                                            <video src={item.url} controls playsInline preload="metadata" className="block w-full max-h-[70vh] bg-black" />
+                                            <button
+                                              onClick={() => handleImageDownload(item.url, `ecom-history-${item.id}.mp4`)}
+                                              className="absolute top-2 right-2 p-2 rounded-lg text-white"
+                                              style={{ background: 'rgba(0,0,0,.58)', backdropFilter: 'blur(10px)' }}
+                                              title="Tải video"
+                                            >
+                                              <Download size={16} />
+                                            </button>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <img src={item.url} alt={`Lịch sử Gen New ${index + 1}`} className="block w-full h-auto" />
+                                            <div className="image-action-overlay absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                              <button onClick={() => setZoomImage(item.url)} className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-lg transition" title="Phóng to"><ZoomIn size={16} /></button>
+                                              <button onClick={() => useEcomImageAsInput(item.url)} className="px-3 py-1.5 bg-indigo-500 text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"><Copy size={12} /> Dùng làm Mẫu</button>
+                                              <button onClick={() => handleImageDownload(item.url, `ecom-history-${item.id}.png`)} className="px-3 py-1.5 bg-editor-accent text-white font-bold rounded-lg flex items-center gap-1.5 text-[11px]"><Download size={12} /> Tải</button>
+                                            </div>
+                                          </>
+                                        )}
                                       </div>
                                     ))}
                                   </div>
@@ -7751,7 +7903,7 @@ function App() {
                 <ModelCardPicker<ModelType>
                   value={selectedModel}
                   onChange={(m) => setSelectedModel(m)}
-                  options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                  options={IMAGE_MODEL_KEYS.map((m) => ({
                     value: m,
                     name: MODEL_CONFIG[m].name,
                     sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',
@@ -8754,7 +8906,7 @@ function App() {
                       <ModelCardPicker<ModelType>
                         value={selectedModel}
                         onChange={(m) => setSelectedModel(m)}
-                        options={(Object.keys(MODEL_CONFIG) as ModelType[]).map((m) => ({
+                        options={IMAGE_MODEL_KEYS.map((m) => ({
                           value: m,
                           name: MODEL_CONFIG[m].name,
                           sub: MODEL_CONFIG[m].requiredKey === 'google' ? 'Google' : 'Kie.ai',

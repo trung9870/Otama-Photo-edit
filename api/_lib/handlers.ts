@@ -133,7 +133,9 @@ export async function handleProxyImage(req: Req, res: Res) {
 }
 
 // ============== Kie.ai helpers ==============
-export const KIE_MODELS = ['gpt-image-2-image-to-image', 'kie-ai-gpt2', 'nano-banana-pro', 'nano-banana-2', 'seedream-4-5-edit', 'seedream-4-5-text-to-image'];
+export const KIE_IMAGE_MODELS = ['gpt-image-2-image-to-image', 'kie-ai-gpt2', 'nano-banana-pro', 'nano-banana-2', 'seedream-4-5-edit', 'seedream-4-5-text-to-image'];
+export const KIE_VIDEO_MODELS = ['gemini-omni-video', 'bytedance/seedance-2-5'];
+export const KIE_MODELS = [...KIE_IMAGE_MODELS, ...KIE_VIDEO_MODELS];
 
 // Create a task and return the taskId immediately (no polling).
 // Supports both GPT Image 2 (input_urls + constrained aspect/resolution) and
@@ -218,8 +220,69 @@ export async function createKieImageTask(model: string, inputUrls: string[], pro
   return taskId;
 }
 
+export async function createKieVideoTask(
+  model: string,
+  inputUrls: string[],
+  prompt: string,
+  apiKey: string,
+  aspectRatio: string,
+  resolution: string,
+  duration: number,
+  generateAudio: boolean,
+): Promise<string> {
+  let input: Record<string, any>;
+  if (model === 'gemini-omni-video') {
+    const allowedDurations = [4, 6, 8, 10];
+    const finalDuration = allowedDurations.includes(duration) ? duration : 4;
+    const finalAspectRatio = ['16:9', '9:16'].includes(aspectRatio) ? aspectRatio : '16:9';
+    const finalResolution = ['720p', '1080p', '4k'].includes((resolution || '').toLowerCase())
+      ? resolution.toLowerCase()
+      : '720p';
+    input = {
+      prompt,
+      duration: String(finalDuration),
+      aspect_ratio: finalAspectRatio,
+      resolution: finalResolution,
+    };
+    if (inputUrls.length > 0) input.image_urls = inputUrls.slice(0, 7);
+  } else if (model === 'bytedance/seedance-2-5') {
+    const finalDuration = Math.max(4, Math.min(30, Math.round(duration || 8)));
+    const finalAspectRatio = ['adaptive', '1:1', '4:3', '3:4', '16:9', '9:16', '21:9'].includes(aspectRatio)
+      ? aspectRatio
+      : 'adaptive';
+    const finalResolution = ['480p', '720p'].includes((resolution || '').toLowerCase())
+      ? resolution.toLowerCase()
+      : '720p';
+    input = {
+      prompt,
+      return_last_frame: false,
+      generate_audio: generateAudio,
+      resolution: finalResolution,
+      aspect_ratio: finalAspectRatio,
+      duration: finalDuration,
+      output_format: 'mp4',
+      nsfw_checker: true,
+    };
+    if (inputUrls.length > 0) input.reference_image_urls = inputUrls.slice(0, 30);
+  } else {
+    throw new Error(`Model video "${model}" không được hỗ trợ.`);
+  }
+
+  const createRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, input }),
+  });
+  if (!createRes.ok) throw new Error(`Kie.ai error: ${await createRes.text()}`);
+  const createData: any = await createRes.json();
+  if (createData?.code !== 200) throw new Error(createData?.msg || 'Lỗi khi gọi Kie.ai (createTask video)');
+  const taskId = createData?.data?.taskId;
+  if (!taskId) throw new Error('Kie.ai không trả về taskId video.');
+  return taskId;
+}
+
 // Single poll iteration — returns the current status without waiting.
-async function pollKieTaskOnce(taskId: string, apiKey: string): Promise<{ status: 'pending' | 'success' | 'failed'; url?: string; error?: string }> {
+async function pollKieTaskOnce(taskId: string, apiKey: string): Promise<{ status: 'pending' | 'success' | 'failed'; url?: string; error?: string; creditsConsumed?: number }> {
   const pollRes = await fetch(`https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`, {
     headers: { 'Authorization': `Bearer ${apiKey}` }
   });
@@ -237,10 +300,15 @@ async function pollKieTaskOnce(taskId: string, apiKey: string): Promise<{ status
         outUrl = rj.resultUrls?.[0] || rj.images?.[0] || rj.url;
       } catch {}
     }
-    return { status: 'success', url: outUrl };
+    const rawCredits = Number(taskData?.data?.creditsConsumed);
+    return {
+      status: 'success',
+      url: outUrl,
+      ...(Number.isFinite(rawCredits) && rawCredits >= 0 ? { creditsConsumed: rawCredits } : {}),
+    };
   }
   if (status === 'fail' || status === 'failed' || status === 'error' || status === 'FAILED' || status === 'ERROR') {
-    const errMsg = taskData?.data?.failMsg || taskData?.data?.error_message || taskData?.data?.failed_reason || "Lỗi tạo ảnh";
+    const errMsg = taskData?.data?.failMsg || taskData?.data?.error_message || taskData?.data?.failed_reason || "Lỗi tạo nội dung";
     return { status: 'failed', error: "Kie task failed: " + errMsg };
   }
   return { status: 'pending' };
@@ -369,16 +437,17 @@ export async function uploadBase64WithFallback(payload: string, apiKey: string):
 // ============== /api/generate ==============
 export async function handleGenerate(req: Req, res: Res) {
   try {
-    const { modelId, prompt, savedPromptId, savedPromptMode, supplementaryPrompt, referenceMode, referenceImages, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, t2iMode } = req.body;
+    const { modelId, prompt, savedPromptId, savedPromptMode, supplementaryPrompt, referenceMode, referenceImages, imageBase64, templateBase64, composeImages, aspectRatio, imageSize, numberOfImages, t2iMode, videoDuration, generateAudio } = req.body;
     const explicitReferences: string[] = Array.isArray(referenceImages)
       ? referenceImages.filter((value: any) => typeof value === 'string' && value.length > 0)
       : [];
     const composeList: string[] = Array.isArray(composeImages) ? composeImages.filter((b: any) => typeof b === 'string' && b.length > 0) : [];
+    const isVideoModel = KIE_VIDEO_MODELS.includes(modelId);
     // T2I = client explicitly opted in via flag. Don't fall back when imageBase64 happens to be missing —
     // that masks real upload failures behind a silently-T2I path. Old clients without the flag stay i2i.
     const isT2I = !!t2iMode;
     if (!req.auth?.uid) return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ.' });
-    console.log(`[api] /generate modelId=${modelId} numberOfImages=${numberOfImages} imageSize=${imageSize} hasTemplate=${!!templateBase64} composeCount=${composeList.length} t2i=${isT2I}`);
+    console.log(`[api] /generate modelId=${modelId} media=${isVideoModel ? 'video' : 'image'} numberOfImages=${numberOfImages} imageSize=${imageSize} hasTemplate=${!!templateBase64} composeCount=${composeList.length} t2i=${isT2I}`);
 
     if (typeof prompt !== 'string' || prompt.length > MAX_PROMPT_CHARS) {
       return res.status(400).json({ error: `Prompt phải là chuỗi và không vượt quá ${MAX_PROMPT_CHARS.toLocaleString()} ký tự.` });
@@ -417,11 +486,21 @@ export async function handleGenerate(req: Req, res: Res) {
     if (!Number.isInteger(count) || count < 1 || count > 8) {
       return res.status(400).json({ error: 'Số ảnh mỗi lần gen phải từ 1 đến 8.' });
     }
+    if (isVideoModel && count !== 1) {
+      return res.status(400).json({ error: 'Mỗi lần gen video chỉ tạo 1 video.' });
+    }
+    const parsedVideoDuration = Number(videoDuration ?? (modelId === 'gemini-omni-video' ? 4 : 8));
+    if (isVideoModel && (!Number.isInteger(parsedVideoDuration) || parsedVideoDuration < 4 || parsedVideoDuration > 30)) {
+      return res.status(400).json({ error: 'Thời lượng video không hợp lệ.' });
+    }
+    if (modelId === 'gemini-omni-video' && ![4, 6, 8, 10].includes(parsedVideoDuration)) {
+      return res.status(400).json({ error: 'Google Omni chỉ hỗ trợ video 4, 6, 8 hoặc 10 giây.' });
+    }
     if (isT2I && !resolvedPrompt) {
-      return res.status(400).json({ error: "Chế độ Text-to-Image cần prompt mô tả ảnh muốn tạo." });
+      return res.status(400).json({ error: isVideoModel ? "Chế độ Text-to-Video cần prompt mô tả video muốn tạo." : "Chế độ Text-to-Image cần prompt mô tả ảnh muốn tạo." });
     }
     if (!isT2I && explicitReferences.length === 0 && !imageBase64 && composeList.length === 0 && !templateBase64) {
-      return res.status(400).json({ error: "Thiếu ảnh sản phẩm. Bật chế độ Text-to-Image nếu muốn gen từ prompt thuần." });
+      return res.status(400).json({ error: isVideoModel ? "Thiếu ảnh tham chiếu. Bật chế độ Text-to-Video nếu muốn gen từ prompt thuần." : "Thiếu ảnh sản phẩm. Bật chế độ Text-to-Image nếu muốn gen từ prompt thuần." });
     }
 
     const defaultKieKey = process.env.KIE_API_KEY;
@@ -457,8 +536,13 @@ export async function handleGenerate(req: Req, res: Res) {
         return res.status(500).json({ error: "Lỗi tải ảnh tĩnh lên máy chủ tạm: " + e.message });
       }
 
+      let quotaReservation: Awaited<ReturnType<typeof reserveDailyCredits>>;
       try {
-        await reserveDailyCredits(req.auth, modelId, imageSize, count);
+        quotaReservation = await reserveDailyCredits(req.auth, modelId, imageSize, count, {
+          mediaType: isVideoModel ? 'video' : 'image',
+          duration: parsedVideoDuration,
+          generateAudio: generateAudio !== false,
+        });
       } catch (quotaError) {
         if (sendCreditQuotaError(quotaError, res)) return;
         console.error('[api] Credit quota reservation error:', quotaError);
@@ -469,17 +553,30 @@ export async function handleGenerate(req: Req, res: Res) {
         ? `Reference Image 1 = Product Reference. Preserve its identity, material, colors, texture, logos, and fine details.\nReference Image 2 = Composition Reference. Use it only for layout, pose, camera, lighting, and scene structure.\n\n${resolvedPrompt}`
         : resolvedPrompt;
       try {
-        // Create N tasks in parallel, return taskIds immediately.
-        // Client will poll /api/generate-check to track each task's completion.
-        const taskIds = await Promise.all(
-          Array.from({ length: count }).map(() =>
-            createKieImageTask(modelId, inputUrls, finalPrompt, apiKey, aspectRatio, imageSize)
-          )
-        );
+        // Image models support a small parallel batch. Video models create one
+        // long-running task and use the same signed polling endpoint.
+        const taskIds = isVideoModel
+          ? [await createKieVideoTask(
+              modelId,
+              inputUrls,
+              finalPrompt,
+              apiKey,
+              aspectRatio,
+              imageSize,
+              parsedVideoDuration,
+              generateAudio !== false,
+            )]
+          : await Promise.all(
+              Array.from({ length: count }).map(() =>
+                createKieImageTask(modelId, inputUrls, finalPrompt, apiKey, aspectRatio, imageSize)
+              )
+            );
         console.log("[api] Created Kie tasks:", taskIds.length);
         return res.json({
           taskIds: taskIds.map((taskId) => sealTaskRef('kie', taskId, req.auth!.uid)),
           isAsync: true,
+          mediaType: isVideoModel ? 'video' : 'image',
+          chargedCredits: quotaReservation.chargedCredits,
           ...(protectedPrompt ? { protectedPrompt } : {}),
         });
       } catch (e: any) {

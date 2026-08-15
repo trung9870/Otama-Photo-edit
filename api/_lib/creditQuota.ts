@@ -40,6 +40,31 @@ export function creditsPerImage(modelId: string, size?: string): number {
   return 0;
 }
 
+// Kie exposes the exact creditsConsumed only after an async video task finishes.
+// Reserve a conservative amount before submission so employee daily limits still
+// protect the shared account. Admin analytics use the same reservation, keeping
+// quota and reported cost consistent even while Kie pricing remains dynamic.
+export function creditsPerVideo(
+  modelId: string,
+  resolution?: string,
+  duration?: number,
+  generateAudio?: boolean,
+): number {
+  const seconds = Math.max(4, Math.min(30, Math.round(Number(duration) || 4)));
+  const normalizedResolution = (resolution || '720p').toLowerCase();
+  if (modelId === 'gemini-omni-video') {
+    const creditsPerSecond = normalizedResolution === '4k'
+      ? 160
+      : normalizedResolution === '1080p' ? 100 : 70;
+    return creditsPerSecond * seconds;
+  }
+  if (modelId === 'bytedance/seedance-2-5') {
+    const creditsPerSecond = normalizedResolution === '480p' ? 14 : 22;
+    return (creditsPerSecond + (generateAudio ? 2 : 0)) * seconds;
+  }
+  return 0;
+}
+
 function vietnamDay(now = Date.now()): string {
   return new Date(now + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
@@ -88,9 +113,12 @@ export async function reserveDailyCredits(
   modelId: string,
   size: string | undefined,
   imageCount: number,
+  options?: { mediaType?: 'image' | 'video'; duration?: number; generateAudio?: boolean },
 ): Promise<{ limited: boolean; chargedCredits: number; usedCredits?: number; dailyCreditLimit?: number }> {
   const limit = dailyLimit(auth);
-  const chargedCredits = creditsPerImage(modelId, size) * imageCount;
+  const chargedCredits = options?.mediaType === 'video'
+    ? creditsPerVideo(modelId, size, options.duration, options.generateAudio)
+    : creditsPerImage(modelId, size) * imageCount;
   if (limit === null || chargedCredits <= 0) return { limited: false, chargedCredits };
   if (!auth.email) throw new Error('Tài khoản thiếu email để ghi nhận quota.');
 

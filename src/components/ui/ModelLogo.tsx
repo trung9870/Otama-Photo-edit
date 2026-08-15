@@ -29,7 +29,24 @@ export function ModelLogo({ model, size = 18 }: ModelLogoProps) {
     );
   }
 
-  if (normalized.includes('seedream')) {
+  if (normalized.includes('omni') || normalized.includes('gemini')) {
+    return (
+      <span aria-hidden="true" style={{ width: size, height: size, flex: `0 0 ${size}px`, display: 'inline-flex' }}>
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <defs>
+            <linearGradient id="gemini-model-mark" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#4285F4" />
+              <stop offset="0.48" stopColor="#9B72CB" />
+              <stop offset="1" stopColor="#D96570" />
+            </linearGradient>
+          </defs>
+          <path d="M12 2.5c.8 5.05 4.45 8.7 9.5 9.5-5.05.8-8.7 4.45-9.5 9.5-.8-5.05-4.45-8.7-9.5-9.5C7.55 11.2 11.2 7.55 12 2.5Z" fill="url(#gemini-model-mark)" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (normalized.includes('seedream') || normalized.includes('seedance')) {
     return (
       <span
         aria-hidden="true"

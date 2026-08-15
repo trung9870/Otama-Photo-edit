@@ -24,6 +24,8 @@ const MODEL_LABELS: Record<string, string> = {
   'gemini-3-pro-image-preview': 'Banana Pro (Google)',
   'gemini-3.1-flash-image-preview': 'Banana 2 (Google)',
   'gpt-image-2-image-to-image': 'GPT2 (Kie)',
+  'gemini-omni-video': 'Google Omni (Video)',
+  'bytedance/seedance-2-5': 'Seedance 2.5 (Video)',
   'gemini-3-flash-preview': 'Phân tích (text)',
 };
 
@@ -1150,10 +1152,10 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <p className="font-semibold" style={{ fontSize: 13, color: 'var(--color-text)' }}>
-                {visibleAdminHistory.length.toLocaleString()} ảnh đang hiển thị
+                {visibleAdminHistory.length.toLocaleString()} kết quả đang hiển thị
               </p>
               <p style={{ fontSize: 10.5, color: 'var(--color-text-tertiary)', marginTop: 1 }}>
-                {history.length.toLocaleString()} ảnh trong lịch sử tổng
+                {history.length.toLocaleString()} kết quả trong lịch sử tổng
               </p>
             </div>
             <label
@@ -1192,7 +1194,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
           </div>
           {history.length === 0 ? (
             <p style={{ fontSize: 13, color: 'var(--color-text-tertiary)', textAlign: 'center', padding: '40px 0' }}>
-              Chưa có ảnh nào trong lịch sử. Ảnh sẽ tự lưu sau mỗi lần gen.
+              Chưa có kết quả nào trong lịch sử. Kết quả sẽ tự lưu sau mỗi lần gen.
             </p>
           ) : visibleAdminHistory.length === 0 ? (
             <div className="rounded-2xl text-center" style={{ padding: '48px 20px', background: 'var(--color-card)', border: '0.5px solid var(--color-border-soft)' }}>
@@ -1214,7 +1216,11 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                 return (
                   <article key={itemId} className="relative group overflow-hidden flex flex-col" style={{ background: 'var(--color-card)', borderRadius: 14, border: '0.5px solid var(--color-border-soft)', boxShadow: 'var(--shadow-card)' }}>
                     <div className="aspect-square overflow-hidden" style={{ background: 'var(--color-card-secondary)' }}>
-                      <img src={h.url} alt={`Ảnh lịch sử do ${h.email || h.uid || 'nhân viên'} tạo`} className="w-full h-full object-cover" loading="lazy" />
+                      {h.mediaType === 'video' ? (
+                        <video src={h.url} controls playsInline preload="metadata" className="w-full h-full object-contain bg-black" />
+                      ) : (
+                        <img src={h.url} alt={`Ảnh lịch sử do ${h.email || h.uid || 'nhân viên'} tạo`} className="w-full h-full object-cover" loading="lazy" />
+                      )}
                     </div>
                     <div className="p-3 flex-1 flex flex-col gap-2.5">
                       <div>
@@ -1281,8 +1287,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                       </div>
                     </div>
                     <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setZoomUrl(h.url)} className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', color: '#fff', boxShadow: 'var(--shadow-pop)' }} title="Phóng to"><ZoomIn size={14} /></button>
-                      <button onClick={() => { const a = document.createElement('a'); a.href = h.url; a.download = `${h.id}.jpg`; a.target = '_blank'; a.click(); }} className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, background: 'var(--color-accent)', color: '#fff', boxShadow: 'var(--shadow-pop)' }} title="Tải về"><Download size={14} /></button>
+                      {h.mediaType !== 'video' && <button onClick={() => setZoomUrl(h.url)} className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', color: '#fff', boxShadow: 'var(--shadow-pop)' }} title="Phóng to"><ZoomIn size={14} /></button>}
+                      <button onClick={() => { const a = document.createElement('a'); a.href = h.url; a.download = `${h.id}.${h.mediaType === 'video' ? 'mp4' : 'jpg'}`; a.target = '_blank'; a.click(); }} className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, background: 'var(--color-accent)', color: '#fff', boxShadow: 'var(--shadow-pop)' }} title="Tải về"><Download size={14} /></button>
                       <button onClick={() => deleteHistoryItem(h)} className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', color: '#fff', boxShadow: 'var(--shadow-pop)' }} title="Xóa"><Trash2 size={14} /></button>
                     </div>
                   </article>

@@ -26,6 +26,7 @@ interface HistoryDoc {
   feature: string;
   model?: string;
   size?: string;
+  mediaType?: 'image' | 'video';
   ts: any; // Firestore Timestamp
 }
 
@@ -165,7 +166,7 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
 
   // ============== Actions ==============
   const handleDelete = async (item: HistoryDoc) => {
-    if (!window.confirm('Xóa ảnh này khỏi lịch sử?')) return;
+    if (!window.confirm(`Xóa ${item.mediaType === 'video' ? 'video' : 'ảnh'} này khỏi lịch sử?`)) return;
     setDeleting((s) => new Set(s).add(item.id));
     try {
       if (item.path) {
@@ -185,9 +186,9 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
     }
   };
 
-  const handleDownload = async (url: string, idx: number) => {
+  const handleDownload = async (url: string, idx: number, mediaType?: 'image' | 'video') => {
     try {
-      await downloadFile(url, `otama-history-${Date.now()}-${idx}.jpg`);
+      await downloadFile(url, `otama-history-${Date.now()}-${idx}.${mediaType === 'video' ? 'mp4' : 'jpg'}`);
     } catch (e) {
       console.warn('history download failed', e);
       alert('Không tải được ảnh. Vui lòng thử lại.');
@@ -294,7 +295,7 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
                 <div className="py-20 flex flex-col items-center gap-3 text-center">
                   <Clock size={32} style={{ color: 'var(--color-text-tertiary)' }} />
                   <p style={{ fontSize: 14, color: 'var(--color-text-secondary)' }}>
-                    Chưa có ảnh nào trong {RETENTION_DAYS} ngày qua.
+                    Chưa có kết quả nào trong {RETENTION_DAYS} ngày qua.
                   </p>
                   <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
                     Mỗi lần gen thành công sẽ tự lưu tại đây.
@@ -308,7 +309,7 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
                         className="uppercase font-semibold mb-2"
                         style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}
                       >
-                        {g.label} · {g.items.length} ảnh
+                        {g.label} · {g.items.length} kết quả
                       </p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                         {g.items.map((it, idx) => {
@@ -327,17 +328,31 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
                                 boxShadow: 'var(--sh-up-sm)',
                               }}
                             >
-                              <img
-                                src={it.url}
-                                alt={it.feature}
-                                loading="lazy"
-                                className="w-full h-full object-cover"
-                                style={{ opacity: isDeleting ? 0.4 : 1, transition: 'opacity 200ms' }}
-                              />
+                              {it.mediaType === 'video' ? (
+                                <video
+                                  src={it.url}
+                                  controls
+                                  playsInline
+                                  preload="metadata"
+                                  className="w-full h-full object-cover bg-black"
+                                  style={{ opacity: isDeleting ? 0.4 : 1, transition: 'opacity 200ms' }}
+                                />
+                              ) : (
+                                <img
+                                  src={it.url}
+                                  alt={it.feature}
+                                  loading="lazy"
+                                  className="w-full h-full object-cover"
+                                  style={{ opacity: isDeleting ? 0.4 : 1, transition: 'opacity 200ms' }}
+                                />
+                              )}
                               {/* Hover overlay */}
                               <div
                                 className="absolute inset-0 flex flex-col justify-between opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
-                                style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 30%, transparent 60%, rgba(0,0,0,0.65))' }}
+                                style={{
+                                  background: 'linear-gradient(to bottom, rgba(0,0,0,0.5), transparent 30%, transparent 60%, rgba(0,0,0,0.65))',
+                                  pointerEvents: it.mediaType === 'video' ? 'none' : undefined,
+                                }}
                               >
                                 <div className="flex items-start justify-between p-2">
                                   <span
@@ -361,17 +376,15 @@ export default function HistoryModal({ open, onClose, userId, onZoom }: HistoryM
                                     {timeStr}
                                   </span>
                                 </div>
-                                <div className="flex items-center justify-end gap-1.5 p-2">
-                                  <IconBtn
-                                    title="Phóng to"
-                                    onClick={() => onZoom(it.url)}
-                                    disabled={isDeleting}
-                                  >
-                                    <ZoomIn size={13} />
-                                  </IconBtn>
+                                <div className="flex items-center justify-end gap-1.5 p-2" style={{ pointerEvents: 'auto' }}>
+                                  {it.mediaType !== 'video' && (
+                                    <IconBtn title="Phóng to" onClick={() => onZoom(it.url)} disabled={isDeleting}>
+                                      <ZoomIn size={13} />
+                                    </IconBtn>
+                                  )}
                                   <IconBtn
                                     title="Tải về"
-                                    onClick={() => handleDownload(it.url, idx)}
+                                    onClick={() => handleDownload(it.url, idx, it.mediaType)}
                                     disabled={isDeleting}
                                   >
                                     <Download size={13} />
