@@ -85,14 +85,31 @@ service cloud.firestore {
         ]) &&
         data.keys().hasOnly([
           'uid', 'email', 'role', 'canUseClothing', 'canUseEcom',
-          'canUseOfa', 'canUsePicset', 'canUseRunninghub', 'createdAt'
+          'canUseOfa', 'canUsePicset', 'canUseRunninghub', 'createdAt',
+          'creditLimitEnabled', 'dailyCreditLimit'
         ]) &&
         data.uid == userId &&
         data.email is string && data.email.size() > 3 && data.email.size() <= 254 &&
         data.role in ['admin', 'user'] &&
         data.canUseClothing is bool && data.canUseEcom is bool &&
         data.canUseOfa is bool && data.canUsePicset is bool && data.canUseRunninghub is bool &&
+        (!('creditLimitEnabled' in data) || data.creditLimitEnabled is bool) &&
+        (!('dailyCreditLimit' in data) || (
+          data.dailyCreditLimit is int && data.dailyCreditLimit >= 500 && data.dailyCreditLimit <= 1000000
+        )) &&
         data.createdAt is timestamp;
+    }
+
+    function validDailyCreditUsage(data, usageId) {
+      return data.keys().hasAll(['uid', 'email', 'day', 'usedCredits', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'day', 'usedCredits', 'updatedAt']) &&
+        data.uid == request.auth.uid && data.email == request.auth.token.email &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        data.email is string && data.email.size() > 3 && data.email.size() <= 254 &&
+        data.day is string && data.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        usageId == data.uid + '_' + data.day &&
+        data.usedCredits is int && data.usedCredits >= 1 && data.usedCredits <= 100000000 &&
+        recentTimestamp(data.updatedAt);
     }
 
     function creditsPerImage(model, size) {
@@ -198,6 +215,18 @@ service cloud.firestore {
       allow create: if hasAppAccess() && validHistory(request.resource.data);
       allow delete: if hasAppAccess() && (resource.data.uid == request.auth.uid || isAdmin());
       allow update: if false;
+    }
+
+    match /dailyCreditUsage/{usageId} {
+      allow read: if hasAppAccess() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if hasAppAccess() && validDailyCreditUsage(request.resource.data, usageId);
+      allow update: if hasAppAccess() &&
+        resource.data.uid == request.auth.uid &&
+        validDailyCreditUsage(request.resource.data, usageId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedCredits', 'updatedAt']) &&
+        request.resource.data.usedCredits > resource.data.usedCredits &&
+        request.resource.data.usedCredits - resource.data.usedCredits <= 5000;
+      allow delete: if false;
     }
 
     match /users/{userId} {

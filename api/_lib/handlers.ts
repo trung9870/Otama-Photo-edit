@@ -1,12 +1,14 @@
 import { openTaskRef, sealTaskRef } from './taskRef.js';
 import { resolveSharedPrompt } from './promptVault.js';
+import { reserveDailyCredits, sendCreditQuotaError } from './creditQuota.js';
+import type { FirebaseAuthContext } from './auth.js';
 
 // Generic Request/Response interface compatible with both Express and Vercel
 type Req = {
   body: any;
   query: any;
   method?: string;
-  auth?: { uid: string; idToken: string };
+  auth?: FirebaseAuthContext;
 };
 type Res = {
   status: (code: number) => Res;
@@ -453,6 +455,14 @@ export async function handleGenerate(req: Req, res: Res) {
         }
       } catch (e: any) {
         return res.status(500).json({ error: "Lỗi tải ảnh tĩnh lên máy chủ tạm: " + e.message });
+      }
+
+      try {
+        await reserveDailyCredits(req.auth, modelId, imageSize, count);
+      } catch (quotaError) {
+        if (sendCreditQuotaError(quotaError, res)) return;
+        console.error('[api] Credit quota reservation error:', quotaError);
+        return res.status(503).json({ error: 'Không thể kiểm tra giới hạn credit lúc này. Vui lòng thử lại.' });
       }
 
       const finalPrompt = referenceMode === 'product-composition' && inputUrls.length >= 2

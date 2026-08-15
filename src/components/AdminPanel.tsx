@@ -661,6 +661,7 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
   const [kieCredits, setKieCredits] = useState<number | null>(null);
   const [kieCreditsLoading, setKieCreditsLoading] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
+  const [creditLimitDrafts, setCreditLimitDrafts] = useState<Record<string, string>>({});
   const [usage, setUsage] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -684,6 +685,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         if (typeof data.canUseOfa !== 'boolean') migration.canUseOfa = false;
         if (typeof data.canUsePicset !== 'boolean') migration.canUsePicset = false;
         if (typeof data.canUseRunninghub !== 'boolean') migration.canUseRunninghub = data.canUsePicset === true;
+        if (typeof data.creditLimitEnabled !== 'boolean') migration.creditLimitEnabled = false;
+        if (!Number.isInteger(data.dailyCreditLimit) || data.dailyCreditLimit < 500) migration.dailyCreditLimit = 500;
         if (Object.keys(migration).length > 0) {
           updateDoc(doc(db, 'users', snapshot.id), migration)
             .catch((cleanupError) => console.warn('user security migration failed', cleanupError));
@@ -1024,6 +1027,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
         canUseOfa: true,
         canUsePicset: true,
         canUseRunninghub: true,
+        creditLimitEnabled: false,
+        dailyCreditLimit: 500,
         createdAt: new Date(),
       });
       await secondaryAuth.signOut();
@@ -1042,6 +1047,31 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
       await setDoc(doc(db, 'users', uid), { [field]: !currentValue }, { merge: true });
     } catch (err: any) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${uid}`);
+    }
+  };
+
+  const toggleCreditLimit = async (user: any) => {
+    const dailyCreditLimit = Math.max(500, Math.min(1_000_000, Number(user.dailyCreditLimit) || 500));
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        creditLimitEnabled: !user.creditLimitEnabled,
+        dailyCreditLimit,
+      }, { merge: true });
+    } catch (err: any) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+    }
+  };
+
+  const saveDailyCreditLimit = async (user: any) => {
+    const draft = creditLimitDrafts[user.uid];
+    const parsed = Number(draft ?? user.dailyCreditLimit ?? 500);
+    const dailyCreditLimit = Math.max(500, Math.min(1_000_000, Number.isFinite(parsed) ? Math.round(parsed) : 500));
+    setCreditLimitDrafts((current) => ({ ...current, [user.uid]: String(dailyCreditLimit) }));
+    if (dailyCreditLimit === user.dailyCreditLimit) return;
+    try {
+      await setDoc(doc(db, 'users', user.uid), { dailyCreditLimit }, { merge: true });
+    } catch (err: any) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
     }
   };
 
@@ -1907,6 +1937,8 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                 u.canUsePicset ||
                 u.canUseRunninghub
               );
+              const dailyCreditLimit = Math.max(500, Number(u.dailyCreditLimit) || 500);
+              const dailyCreditDraft = creditLimitDrafts[u.uid] ?? String(dailyCreditLimit);
               const initial = (u.email || '?').slice(0, 1).toUpperCase();
               return (
                 <div
@@ -1945,6 +1977,58 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
                         : 'Mật khẩu được Firebase Authentication quản lý'}
                     </div>
                   </div>
+
+                  {!isAdmin && (
+                    <div
+                      className="flex items-center gap-3 px-3 py-2 rounded-xl"
+                      style={{
+                        background: u.creditLimitEnabled ? 'var(--color-accent-soft)' : 'var(--color-fill)',
+                        border: '0.5px solid var(--color-border-soft)',
+                      }}
+                    >
+                      <div className="flex flex-col gap-1">
+                        <span className="uppercase font-semibold" style={{ fontSize: 9, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>
+                          Giới hạn/ngày
+                        </span>
+                        <Switch
+                          size="sm"
+                          checked={!!u.creditLimitEnabled}
+                          onChange={() => void toggleCreditLimit(u)}
+                          ariaLabel="Bật giới hạn credit mỗi ngày"
+                        />
+                      </div>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={500}
+                          max={1_000_000}
+                          step={100}
+                          disabled={!u.creditLimitEnabled}
+                          value={dailyCreditDraft}
+                          onChange={(event) => setCreditLimitDrafts((current) => ({ ...current, [u.uid]: event.target.value }))}
+                          onBlur={() => void saveDailyCreditLimit(u)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') event.currentTarget.blur();
+                          }}
+                          className="outline-none disabled:opacity-45"
+                          style={{
+                            width: 96,
+                            height: 34,
+                            padding: '0 9px',
+                            borderRadius: 9,
+                            border: '0.5px solid var(--color-border-soft)',
+                            background: 'var(--color-card)',
+                            color: 'var(--color-text)',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                          aria-label={`Giới hạn credit mỗi ngày của ${u.email}`}
+                        />
+                        <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>credits</span>
+                      </label>
+                    </div>
+                  )}
 
                   {/* Permission switches */}
                   {!isAdmin && (

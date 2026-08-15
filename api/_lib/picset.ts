@@ -10,6 +10,8 @@
 
 import { uploadBase64WithFallback, createKieImageTask, formatGeminiError } from "./handlers.js";
 import { sealTaskRef } from './taskRef.js';
+import { reserveDailyCredits, sendCreditQuotaError } from './creditQuota.js';
+import type { FirebaseAuthContext } from './auth.js';
 import {
   PICSET_LANGUAGE_VI,
   PICSET_CATEGORIES,
@@ -20,7 +22,7 @@ import {
   type PicsetCategoryId,
 } from "./picsetCategories.js";
 
-type Req = { body: any; query: any; method?: string; auth?: { uid: string } };
+type Req = { body: any; query: any; method?: string; auth?: FirebaseAuthContext };
 type Res = {
   status: (code: number) => Res;
   json: (obj: any) => any;
@@ -697,6 +699,14 @@ export async function handlePicsetGenerate(req: Req, res: Res) {
       inputUrl = await uploadBase64WithFallback(productImageBase64, apiKey);
     } catch (e: any) {
       return res.status(500).json({ error: `Lỗi upload ảnh sản phẩm: ${e?.message || 'unknown'}` });
+    }
+
+    try {
+      await reserveDailyCredits(req.auth, kieModelId, quality, images.length);
+    } catch (quotaError) {
+      if (sendCreditQuotaError(quotaError, res)) return;
+      console.error('[picset] Credit quota reservation error:', quotaError);
+      return res.status(503).json({ error: 'Không thể kiểm tra giới hạn credit lúc này. Vui lòng thử lại.' });
     }
 
     // Create N kie tasks in parallel — Promise.allSettled to keep partial success
