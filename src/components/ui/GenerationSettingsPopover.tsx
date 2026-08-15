@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Crop } from 'lucide-react';
 import type { SettingsDropdownOption } from './SettingsDropdown';
+import { CreditEstimate } from './CreditEstimate';
 
 export interface GenerationSettingsPopoverProps {
   mediaType?: 'image' | 'video';
@@ -19,6 +20,7 @@ export interface GenerationSettingsPopoverProps {
   generateAudio?: boolean;
   onGenerateAudioChange?: (value: boolean) => void;
   supportsAudio?: boolean;
+  estimatedCredits?: number;
   placement?: 'top' | 'bottom';
 }
 
@@ -51,6 +53,7 @@ export function GenerationSettingsPopover({
   generateAudio = false,
   onGenerateAudioChange,
   supportsAudio = false,
+  estimatedCredits,
   placement = 'top',
 }: GenerationSettingsPopoverProps) {
   const isVideo = mediaType === 'video';
@@ -103,6 +106,14 @@ export function GenerationSettingsPopover({
         <span style={{ font: '600 12px/1 inherit' }}>{imageSize.toUpperCase()}</span>
         <span aria-hidden="true" style={{ width: 1, height: 13, background: 'var(--color-border)' }} />
         <span style={{ font: '600 12px/1 inherit' }}>{isVideo ? `${duration}s` : `${imageCount} ảnh`}</span>
+        {typeof estimatedCredits === 'number' && estimatedCredits > 0 && (
+          <>
+            <span aria-hidden="true" style={{ width: 1, height: 13, background: 'var(--color-border)' }} />
+            <span style={{ font: '700 11px/1 inherit', color: 'var(--color-accent)', fontVariantNumeric: 'tabular-nums' }}>
+              {Math.round(estimatedCredits).toLocaleString('vi-VN')} cr
+            </span>
+          </>
+        )}
         <ChevronDown
           size={12}
           strokeWidth={2}
@@ -290,6 +301,12 @@ export function GenerationSettingsPopover({
                 </span>
               </button>
             </section>
+          )}
+
+          {typeof estimatedCredits === 'number' && estimatedCredits > 0 && (
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+              <CreditEstimate credits={estimatedCredits} label="Lượt này" />
+            </div>
           )}
         </div>
       )}

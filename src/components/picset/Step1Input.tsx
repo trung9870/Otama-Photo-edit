@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Upload, Image as ImageIcon, X, Sparkles, AlertCircle, Loader2 } from 'lucide-react';
 import { Button, ModelLogo, SettingsDropdown } from '../ui';
+import { estimateCreditUsd, estimateGenerationCredits } from '../../utils/creditEstimate';
 
 // ============== Public types ==============
 export type PicsetPlatform = 'Shopee' | 'TikTok Shop' | 'Lazada' | 'Smart Match';
@@ -97,10 +98,11 @@ export default function Step1Input({
   const mainInputRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
 
-  const cost = useMemo(
-    () => estimatePicsetCost(form.model, form.quality, form.quantity),
-    [form.model, form.quality, form.quantity]
-  );
+  const generationCredits = useMemo(() => estimateGenerationCredits({
+    modelId: form.model === 'gpt2' ? 'gpt-image-2-image-to-image' : 'nano-banana-pro',
+    size: form.quality,
+    count: form.quantity,
+  }), [form.model, form.quality, form.quantity]);
 
   const handleMainUpload = async (file: File | undefined) => {
     if (!file) return;
@@ -463,10 +465,13 @@ export default function Step1Input({
           }}
         >
           <div className="text-xs font-semibold">
-            Ước tính chi phí ({form.quantity} ảnh + analyze)
+            Credit dự kiến ({form.quantity} ảnh)
           </div>
-          <div className="text-sm font-bold">
-            ~${cost.totalUsd.toFixed(2)} (~{(cost.totalVnd / 1000).toFixed(1)}k₫)
+          <div className="text-right">
+            <div className="text-sm font-bold">
+              {generationCredits.toLocaleString('vi-VN')} credits (~${estimateCreditUsd(generationCredits).toFixed(3)})
+            </div>
+            <div className="text-[10px] font-semibold opacity-70">Analyze được Kie tính riêng</div>
           </div>
         </div>
 

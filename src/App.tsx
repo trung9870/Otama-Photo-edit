@@ -90,7 +90,7 @@ import { Button } from './components/ui';
 import { Header } from './components/Header';
 import HistoryModal from './components/HistoryModal';
 import { Login } from './components/Login';
-import { GenerationSettingsPopover, ModelLogo, Segmented, SettingsDropdown } from './components/ui';
+import { CreditEstimate, GenerationSettingsPopover, ModelLogo, Segmented, SettingsDropdown } from './components/ui';
 import type { SettingsDropdownOption } from './components/ui';
 import { ARSelector, ModelCardPicker, PromptRow, PromptListModal } from './components/clothing';
 import { OFA_PROMPT_LIBRARY, buildOfaPrompt, type OfaPromptCategory } from './utils/ofaPromptLibrary';
@@ -98,6 +98,7 @@ import { downloadFile } from './utils/downloadFile';
 import PicsetTab from './components/picset/PicsetTab';
 import RunninghubTab from './components/runninghub/RunninghubTab';
 import { apiFetch } from './utils/apiFetch';
+import { KIE_CREDIT_USD, creditsPerImage, creditsPerVideo, estimateGenerationCredits } from './utils/creditEstimate';
 
 type OfaBatchStatus = 'queued' | 'running' | 'done' | 'cancelled' | 'error';
 interface OfaBatch {
@@ -360,8 +361,10 @@ const MODEL_CONFIG = {
 
 type ModelType = keyof typeof MODEL_CONFIG;
 const IMAGE_MODEL_KEYS: ModelType[] = ['gpt2', 'banana-pro', 'banana-2', 'seedream-4-5'];
-const GEN_NEW_MODEL_KEYS: ModelType[] = [...IMAGE_MODEL_KEYS, 'google-omni', 'seedance-2-5'];
+const VIDEO_MODEL_KEYS: ModelType[] = ['google-omni', 'seedance-2-5'];
 const isVideoModelKey = (model: ModelType) => MODEL_CONFIG[model].mediaType === 'video';
+type EcomSubTab = 'gen-new' | 'gen-video' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh';
+const isEcomGenerationTab = (tab: EcomSubTab) => tab === 'gen-new' || tab === 'gen-video';
 
 const MODEL_ASPECT_RATIOS: Record<ModelType, string[]> = {
   gpt2: ['auto', '1:1', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '16:9', '9:16', '2:1', '1:2', '3:1', '1:3', '21:9', '9:21'],
@@ -706,7 +709,7 @@ function App() {
   const [ecomImageSize, setEcomImageSize] = useState<string>('1k');
   const [ecomVideoDuration, setEcomVideoDuration] = useState<number>(4);
   const [ecomVideoGenerateAudio, setEcomVideoGenerateAudio] = useState<boolean>(true);
-  const [ecomSubTab, setEcomSubTab] = useState<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>('gen-new');
+  const [ecomSubTab, setEcomSubTab] = useState<EcomSubTab>('gen-new');
 
   // Auto-correct ecomImageSize khi model/aspect-ratio thay đổi khiến size hiện tại không khả dụng
   useEffect(() => {
@@ -743,7 +746,11 @@ function App() {
   }, [ecomModel]);
 
   useEffect(() => {
-    if (ecomSubTab !== 'gen-new' && isVideoModelKey(ecomModel)) setEcomModel('gpt2');
+    if (ecomSubTab === 'gen-video' && !isVideoModelKey(ecomModel)) {
+      setEcomModel('google-omni');
+      return;
+    }
+    if (ecomSubTab !== 'gen-video' && isVideoModelKey(ecomModel)) setEcomModel('gpt2');
   }, [ecomSubTab, ecomModel]);
   const [isEcomGenerating, setIsEcomGenerating] = useState(false);
   const [ecomResults, setEcomResults] = useState<string[]>([]);
@@ -1233,7 +1240,7 @@ function App() {
       };
 
       setEcomHistoryItems(all
-        .filter((item) => item.feature === 'ecom-gen-new' && toMillis(item.ts) >= cutoffMs)
+        .filter((item) => ['ecom-gen-new', 'ecom-gen-video'].includes(item.feature) && toMillis(item.ts) >= cutoffMs)
         .sort((a, b) => toMillis(b.ts) - toMillis(a.ts))
         .slice(0, 12));
 
@@ -2794,7 +2801,7 @@ function App() {
       : undefined;
 
     setAppMode('ecom');
-    setEcomSubTab('gen-new');
+    setEcomSubTab(settings.mediaType === 'video' ? 'gen-video' : 'gen-new');
     setEcomT2IMode(!!settings.t2iMode);
     replaceEcomProductImages(settings.t2iMode
       ? []
@@ -2865,33 +2872,6 @@ function App() {
   };
 
   // ───────── Usage tracking (Admin analytics) ─────────
-  // Số CREDIT Kie.ai tiêu thụ/ảnh (đúng bảng giá Kie — 1 credit = $0.005):
-  //  - GPT2:        1K=6  / 2K=10 / 4K=16 credits
-  //  - Banana Pro:  1K-2K=18 / 4K=24 credits
-  //  - Banana 2:    1K=8  / 2K=12 / 4K=18 credits
-  const KIE_CREDIT_USD = 0.005;
-  const creditsPerImage = (modelId: string, size?: string) => {
-    const s = (size || '1k').toLowerCase();
-    if (modelId === 'nano-banana-pro' || modelId === 'gemini-3-pro-image-preview') return s === '4k' ? 24 : 18;
-    if (modelId === 'nano-banana-2' || modelId === 'gemini-3.1-flash-image-preview') return s === '4k' ? 18 : s === '2k' ? 12 : 8;
-    if (modelId === 'gpt-image-2-image-to-image') return s === '4k' ? 16 : s === '2k' ? 10 : 6;
-    // Seedream 4.5 (~$0.032/ảnh; basic→2K = $0.035 @ 7 credits, high→4K = $0.040 @ 8 credits — verify in Kie dashboard)
-    if (modelId === 'seedream-4-5-edit' || modelId === 'seedream-4-5-text-to-image') return s === '4k' ? 8 : 7;
-    return 0; // analyze (text) — không tính credit ảnh
-  };
-
-  const creditsPerVideo = (modelId: string, resolution: string | undefined, duration: number, generateAudio: boolean) => {
-    const seconds = Math.max(4, Math.min(30, Math.round(duration || 4)));
-    const normalizedResolution = (resolution || '720p').toLowerCase();
-    if (modelId === 'gemini-omni-video') {
-      return seconds * (normalizedResolution === '4k' ? 160 : normalizedResolution === '1080p' ? 100 : 70);
-    }
-    if (modelId === 'bytedance/seedance-2-5') {
-      return seconds * ((normalizedResolution === '480p' ? 14 : 22) + (generateAudio ? 2 : 0));
-    }
-    return 0;
-  };
-
   const logUsage = async (
     feature: string,
     modelId: string,
@@ -3057,8 +3037,9 @@ function App() {
 
   const handleEcomGenerate = async () => {
     // Text-to-image mode is gen-new only; otherwise the regular i2i product-image requirement applies.
-    const videoActive = ecomSubTab === 'gen-new' && isVideoModelKey(ecomModel);
-    const t2iActive = ecomSubTab === 'gen-new' && ecomT2IMode;
+    const generationTabActive = isEcomGenerationTab(ecomSubTab);
+    const videoActive = ecomSubTab === 'gen-video' && isVideoModelKey(ecomModel);
+    const t2iActive = generationTabActive && ecomT2IMode;
     if (!t2iActive && ecomProductImages.length === 0) return;
     if (t2iActive && !ecomPromptText.trim() && !ecomSupplementaryPrompt.trim() && !ecomUsesSecretPrompt) {
       setGlobalError(videoActive
@@ -3072,7 +3053,7 @@ function App() {
     }
 
     // Gen-new uses concurrent batch mode (doesn't block UI); other sub-tabs use original single-batch flow.
-    const isConcurrent = ecomSubTab === 'gen-new';
+    const isConcurrent = generationTabActive;
 
     // Snapshot all inputs at submit time so async run and history reuse the
     // exact values that were active when the user clicked.
@@ -3083,7 +3064,7 @@ function App() {
       productImages: t2iActive ? [] : ecomProductImages,
       t2iMode: t2iActive,
       promptText: ecomPromptText,
-      promptIsSecret: ecomSubTab === 'gen-new' && selectedPromptAtSubmit?.isSecret === true,
+      promptIsSecret: generationTabActive && selectedPromptAtSubmit?.isSecret === true,
       supplementaryPrompt: ecomSupplementaryPrompt,
       model: ecomModel,
       aspectRatio: ecomAspectRatio,
@@ -3176,7 +3157,7 @@ function App() {
             modelId: config.id,
             prompt: currentPrompt,
             savedPromptId: snapshot.promptIsSecret ? snapshot.promptId : undefined,
-            supplementaryPrompt: ecomSubTab === 'gen-new' ? snapshot.supplementaryPrompt : undefined,
+            supplementaryPrompt: generationTabActive ? snapshot.supplementaryPrompt : undefined,
             referenceImages,
             referenceMode: templateSource ? 'product-composition' : undefined,
             aspectRatio: snapshot.aspectRatio,
@@ -3268,7 +3249,9 @@ function App() {
       }
 
       if (generatedImages.length > 0) {
-        const feat = ecomSubTab === 'clone-template' ? 'ecom-clone' : 'ecom-gen-new';
+        const feat = ecomSubTab === 'clone-template'
+          ? 'ecom-clone'
+          : ecomSubTab === 'gen-video' ? 'ecom-gen-video' : 'ecom-gen-new';
         logUsage(feat, config.id, generatedImages.length, snapshot.imageSize, {
           mediaType: snapshot.mediaType,
           duration: snapshot.duration,
@@ -4151,13 +4134,22 @@ function App() {
         onLogin={handleLogin}
         onLogout={handleLogout}
         workspaceNav={appMode === 'ecom' ? (
-          <Segmented<'gen-new' | 'clone-template' | 'pattern-replace' | 'thay' | 'ghep-anh'>
+          <Segmented<EcomSubTab>
             value={ecomSubTab}
-            onChange={setEcomSubTab}
+            onChange={(nextTab) => {
+              setEcomSubTab(nextTab);
+              if (nextTab === 'gen-video') {
+                if (!isVideoModelKey(ecomModel)) setEcomModel('google-omni');
+                setEcomT2IMode(true);
+              } else if (nextTab === 'gen-new' && isVideoModelKey(ecomModel)) {
+                setEcomModel('gpt2');
+              }
+            }}
             size="sm"
             fullWidth
             options={[
               { value: 'gen-new', label: 'Gen new' },
+              { value: 'gen-video', label: 'Gen video' },
               { value: 'clone-template', label: 'Clone' },
               { value: 'pattern-replace', label: 'Pattern' },
               { value: 'thay', label: 'Thay' },
@@ -4213,15 +4205,15 @@ function App() {
       )}
 
       {appMode === 'ecom' && (
-        <main ref={ecomMainRef} className={`flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 xl:gap-6 relative ${ecomSubTab === 'gen-new' ? 'gen-new-workspace' : ''}`}>
+        <main ref={ecomMainRef} className={`flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 xl:gap-6 relative ${isEcomGenerationTab(ecomSubTab) ? 'gen-new-workspace' : ''}`}>
           {/* Left panel: Upload and Settings — full width on gen-new, pattern-replace + clone */}
           <div className={`flex flex-col gap-6 ${
             ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-4'
-            : ecomSubTab === 'gen-new' ? 'gen-new-composer-shell lg:col-span-12'
+            : isEcomGenerationTab(ecomSubTab) ? 'gen-new-composer-shell lg:col-span-12'
             : 'lg:col-span-12'
           }`}>
             <div
-              className={`p-4 ${ecomSubTab === 'gen-new' ? `gen-new-composer ${ecomComposerExpanded ? 'is-expanded' : ''}` : ''}`}
+              className={`p-4 ${isEcomGenerationTab(ecomSubTab) ? `gen-new-composer ${ecomComposerExpanded ? 'is-expanded' : ''}` : ''}`}
               style={{
                 background: 'var(--color-card)',
                 border: '0.5px solid var(--color-border-soft)',
@@ -4269,6 +4261,14 @@ function App() {
                             value={ecomImageCount}
                             onChange={(v) => setEcomImageCount(v)}
                             options={countOpts}
+                          />
+                          <CreditEstimate
+                            compact
+                            credits={estimateGenerationCredits({
+                              modelId: MODEL_CONFIG.gpt2.id,
+                              size: ecomImageSize,
+                              count: ecomImageCount,
+                            })}
                           />
                         </>
                       );
@@ -4529,6 +4529,14 @@ function App() {
                             onChange={(v) => setEcomImageCount(v)}
                             options={countOpts}
                           />
+                          <CreditEstimate
+                            compact
+                            credits={estimateGenerationCredits({
+                              modelId: MODEL_CONFIG[ecomModel].id,
+                              size: ecomImageSize,
+                              count: ecomImageCount,
+                            })}
+                          />
                         </>
                       );
                     })()}
@@ -4622,6 +4630,9 @@ function App() {
                               ? 'Tạo pattern khác'
                               : 'Tạo pattern 2D'}
                         </Button>
+                        <div className="mt-2 flex justify-end">
+                          <CreditEstimate compact credits={estimateGenerationCredits({ modelId: MODEL_CONFIG[ecomModel].id, size: '1k', count: 1 })} />
+                        </div>
                       </div>
                     </div>
 
@@ -4671,6 +4682,9 @@ function App() {
                         >
                           {isEcomGenerating ? 'Đang áp dụng…' : 'Áp pattern lên mockup'}
                         </Button>
+                        <div className="mt-2 flex justify-end">
+                          <CreditEstimate compact credits={estimateGenerationCredits({ modelId: MODEL_CONFIG[ecomModel].id, size: ecomImageSize, count: ecomImageCount })} />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -4760,6 +4774,14 @@ function App() {
                       onChange={(v) => setEcomThayCount(v)}
                       options={[1, 2, 3].map((c) => ({ value: c, label: `${c} ảnh` }))}
                       width="fill"
+                    />
+                    <CreditEstimate
+                      compact
+                      credits={estimateGenerationCredits({
+                        modelId: MODEL_CONFIG[ecomThayModel].id,
+                        size: ecomThayQuality,
+                        count: ecomThayCount,
+                      })}
                     />
                   </div>
 
@@ -4953,6 +4975,14 @@ function App() {
                             onChange={(v) => setComposeCount(v)}
                             options={countOpts}
                           />
+                          <CreditEstimate
+                            compact
+                            credits={estimateGenerationCredits({
+                              modelId: MODEL_CONFIG[composeModel].id,
+                              size: composeQuality,
+                              count: composeCount,
+                            })}
+                          />
                         </>
                       );
                     })()}
@@ -4997,7 +5027,7 @@ function App() {
                     <span className="inline-flex items-center justify-center font-bold rounded-full" style={{ width: 20, height: 20, fontSize: 11, background: 'var(--color-accent)', color: '#fff' }}>3</span>
                     <p className="font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', letterSpacing: '0.06em' }}>Cài đặt</p>
                   </div>
-                  {ecomSubTab === 'gen-new' && (
+                  {isEcomGenerationTab(ecomSubTab) && (
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -5023,7 +5053,9 @@ function App() {
                             background: ecomT2IMode ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
                           }}
                         />
-                        {isVideoModelKey(ecomModel) ? 'TEXT‑TO‑VIDEO' : 'TEXT‑TO‑IMAGE'}
+                        {ecomT2IMode
+                          ? (isVideoModelKey(ecomModel) ? 'TEXT‑TO‑VIDEO' : 'TEXT‑TO‑IMAGE')
+                          : (isVideoModelKey(ecomModel) ? 'IMAGE‑TO‑VIDEO' : 'IMAGE‑TO‑IMAGE')}
                       </button>
                       <button
                         type="button"
@@ -5043,7 +5075,8 @@ function App() {
                       { value: 'manual', label: 'Prompt thủ công' },
                       ...ecomSavedPrompts.map((prompt) => ({ value: prompt.id, label: prompt.name })),
                     ];
-                    const modelOptions: SettingsDropdownOption<ModelType>[] = GEN_NEW_MODEL_KEYS.map((m) => ({
+                    const modelKeys = ecomSubTab === 'gen-video' ? VIDEO_MODEL_KEYS : IMAGE_MODEL_KEYS;
+                    const modelOptions: SettingsDropdownOption<ModelType>[] = modelKeys.map((m) => ({
                       value: m,
                       label: MODEL_CONFIG[m].name,
                       icon: <ModelLogo model={m} />,
@@ -5079,6 +5112,14 @@ function App() {
                       ? [4, 6, 8, 10]
                       : [4, 6, 8, 10, 15, 20, 30]
                     ).map((duration) => ({ value: duration, label: String(duration) }));
+                    const estimatedCredits = estimateGenerationCredits({
+                      modelId: MODEL_CONFIG[ecomModel].id,
+                      size: ecomImageSize,
+                      count: videoModel ? 1 : ecomImageCount,
+                      mediaType: videoModel ? 'video' : 'image',
+                      duration: ecomVideoDuration,
+                      generateAudio: videoModel && ecomModel === 'seedance-2-5' && ecomVideoGenerateAudio,
+                    });
                     return (
                       <>
                         <SettingsDropdown<string>
@@ -5123,6 +5164,7 @@ function App() {
                           generateAudio={ecomVideoGenerateAudio}
                           onGenerateAudioChange={setEcomVideoGenerateAudio}
                           supportsAudio={ecomModel === 'seedance-2-5'}
+                          estimatedCredits={estimatedCredits}
                           placement="top"
                         />
                       </>
@@ -5603,7 +5645,7 @@ function App() {
                   }
                 }}
               />
-            {ecomSubTab === 'gen-new' && (
+            {isEcomGenerationTab(ecomSubTab) && (
               <>
                 {globalError && (
                   <div
@@ -5622,7 +5664,7 @@ function App() {
                 <div className="gen-new-legacy-generate pt-2 space-y-3">
                   {(() => {
                     const runningBatches = ecomBatches.filter(b => b.status === 'running').length;
-                    if (ecomSubTab === 'gen-new') {
+                    if (isEcomGenerationTab(ecomSubTab)) {
                       // In T2I mode: enabled if prompt non-empty. In i2i: enabled if image uploaded.
                       const t2iReady = ecomT2IMode && Boolean(ecomPromptText.trim() || ecomSupplementaryPrompt.trim() || ecomUsesSecretPrompt);
                       const i2iReady = !ecomT2IMode && ecomProductImages.length > 0;
@@ -5670,12 +5712,12 @@ function App() {
           {/* Right panel: Results — hidden on pattern-replace; side-by-side 5-col on gen-new; full-width below on clone */}
           <div className={`flex-col gap-4 ${
             ecomSubTab === 'pattern-replace' ? 'hidden'
-            : ecomSubTab === 'gen-new' ? 'gen-new-canvas-shell lg:col-span-12 flex'
+            : isEcomGenerationTab(ecomSubTab) ? 'gen-new-canvas-shell lg:col-span-12 flex'
             : ecomSubTab === 'thay' || ecomSubTab === 'ghep-anh' ? 'lg:col-span-8 flex'
             : 'lg:col-span-12 flex'
           }`}>
-            <div className={`glass-panel p-6 min-h-[500px] flex flex-col justify-center ${ecomSubTab === 'gen-new' ? 'gen-new-canvas' : ''}`}>
-              {ecomSubTab === 'gen-new' && ecomLastFinalImages.length > 0 && (
+            <div className={`glass-panel p-6 min-h-[500px] flex flex-col justify-center ${isEcomGenerationTab(ecomSubTab) ? 'gen-new-canvas' : ''}`}>
+              {isEcomGenerationTab(ecomSubTab) && ecomLastFinalImages.length > 0 && (
                 <div className="mb-4 pb-4 border-b border-editor-border/50">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
@@ -6341,9 +6383,9 @@ function App() {
                                 background: enhanceModel === 'banana-2' ? 'var(--color-accent)' : 'transparent',
                                 color: enhanceModel === 'banana-2' ? '#fff' : 'var(--color-text-secondary)',
                               }}
-                              title="Free, nhanh, chất lượng đủ"
+                              title="Nhanh, tiết kiệm credit"
                             >
-                              Banana 2 (Free)
+                              Banana 2
                             </button>
                             <button
                               onClick={() => setEnhanceModel('banana-pro')}
@@ -6358,12 +6400,20 @@ function App() {
                               }}
                               title="Tốn phí, chi tiết hơn, chậm hơn"
                             >
-                              Banana Pro ($)
+                              Banana Pro
                             </button>
                           </div>
                         </div>
 
-                        <div className="ml-auto">
+                        <div className="ml-auto flex items-center gap-2">
+                          <CreditEstimate
+                            compact
+                            credits={estimateGenerationCredits({
+                              modelId: MODEL_CONFIG[enhanceModel].id,
+                              size: ecomImageSize,
+                              count: Math.max(1, selectedBoxIds.length),
+                            })}
+                          />
                           <Button
                             variant="filled"
                             size="md"
@@ -6617,7 +6667,7 @@ function App() {
                     </>
                   )}
                 </div>
-              ) : ecomSubTab === 'gen-new' ? (
+              ) : isEcomGenerationTab(ecomSubTab) ? (
                 ecomBatches.length === 0 && ecomHistoryItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center text-gray-500 h-full">
                     <ImageIcon size={64} className="opacity-20 mb-4" />
@@ -7286,6 +7336,14 @@ function App() {
                         value={ofaQuality}
                         onChange={(v) => setOfaQuality(v)}
                         options={sizeOpts}
+                      />
+                      <CreditEstimate
+                        compact
+                        credits={estimateGenerationCredits({
+                          modelId: MODEL_CONFIG[ofaModel].id,
+                          size: ofaQuality,
+                          count: Math.max(1, ofaSelectedCategoryIds.length),
+                        })}
                       />
                     </>
                   );
@@ -8123,6 +8181,20 @@ function App() {
                 )}
 
                 <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <CreditEstimate
+                      compact
+                      credits={estimateGenerationCredits({ modelId: MODEL_CONFIG[selectedModel].id, size: '1k', count: 1 })}
+                      label="Ảnh hiện tại"
+                    />
+                    {images.length > 1 && (
+                      <CreditEstimate
+                        compact
+                        credits={estimateGenerationCredits({ modelId: MODEL_CONFIG[selectedModel].id, size: '1k', count: images.length })}
+                        label="Gen tất cả"
+                      />
+                    )}
+                  </div>
                   <Button
                     variant="filled"
                     size="lg"
@@ -9102,6 +9174,12 @@ function App() {
                 >
                   {isTryOnProcessing ? 'Đang xử lý…' : 'Bắt đầu Thay Đồ'}
                 </Button>
+                <div className="flex justify-end">
+                  <CreditEstimate
+                    compact
+                    credits={estimateGenerationCredits({ modelId: MODEL_CONFIG[selectedModel].id, size: '1k', count: 1 })}
+                  />
+                </div>
               </div>
             </div>
           </div>

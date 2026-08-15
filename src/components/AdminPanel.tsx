@@ -12,6 +12,7 @@ const FEATURE_LABELS: Record<string, string> = {
   'clothing-gen': 'Quần áo · Gen',
   'analyze': 'Quần áo · Phân tích',
   'ecom-gen-new': 'Ecom · Gen new',
+  'ecom-gen-video': 'Ecom · Gen video',
   'ecom-clone': 'Ecom · Clone',
   'ecom-pattern': 'Ecom · Pattern',
   'ecom-enhance': 'Ecom · Tách/Enhance',

@@ -24,3 +24,6 @@ export type { ModelLogoProps } from './ModelLogo';
 
 export { GenerationSettingsPopover } from './GenerationSettingsPopover';
 export type { GenerationSettingsPopoverProps } from './GenerationSettingsPopover';
+
+export { CreditEstimate } from './CreditEstimate';
+export type { CreditEstimateProps } from './CreditEstimate';
