@@ -710,6 +710,21 @@ function App() {
   const [ecomVideoDuration, setEcomVideoDuration] = useState<number>(4);
   const [ecomVideoGenerateAudio, setEcomVideoGenerateAudio] = useState<boolean>(true);
   const [ecomSubTab, setEcomSubTab] = useState<EcomSubTab>('gen-new');
+  const ecomImageSettingsRef = useRef({
+    model: 'gpt2' as ModelType,
+    aspectRatio: '9:16',
+    imageSize: '1k',
+    imageCount: 3,
+    t2iMode: false,
+  });
+  const ecomVideoSettingsRef = useRef({
+    model: 'google-omni' as ModelType,
+    aspectRatio: '9:16',
+    imageSize: '720p',
+    duration: 4,
+    generateAudio: true,
+    t2iMode: true,
+  });
 
   // Auto-correct ecomImageSize khi model/aspect-ratio thay đổi khiến size hiện tại không khả dụng
   useEffect(() => {
@@ -752,11 +767,50 @@ function App() {
     }
     if (ecomSubTab !== 'gen-video' && isVideoModelKey(ecomModel)) setEcomModel('gpt2');
   }, [ecomSubTab, ecomModel]);
+
+  useEffect(() => {
+    if (ecomSubTab === 'gen-video' && isVideoModelKey(ecomModel)) {
+      ecomVideoSettingsRef.current = {
+        model: ecomModel,
+        aspectRatio: ecomAspectRatio,
+        imageSize: ecomImageSize,
+        duration: ecomVideoDuration,
+        generateAudio: ecomVideoGenerateAudio,
+        t2iMode: ecomT2IMode,
+      };
+    } else if (ecomSubTab === 'gen-new' && !isVideoModelKey(ecomModel)) {
+      ecomImageSettingsRef.current = {
+        model: ecomModel,
+        aspectRatio: ecomAspectRatio,
+        imageSize: ecomImageSize,
+        imageCount: ecomImageCount,
+        t2iMode: ecomT2IMode,
+      };
+    }
+  }, [
+    ecomSubTab,
+    ecomModel,
+    ecomAspectRatio,
+    ecomImageSize,
+    ecomImageCount,
+    ecomVideoDuration,
+    ecomVideoGenerateAudio,
+    ecomT2IMode,
+  ]);
   const [isEcomGenerating, setIsEcomGenerating] = useState(false);
   const [ecomResults, setEcomResults] = useState<string[]>([]);
   // Concurrent gen-new batches — user can fire many in parallel without waiting
   const [ecomBatches, setEcomBatches] = useState<EcomBatch[]>([]);
   const [ecomHistoryItems, setEcomHistoryItems] = useState<EcomHistoryItem[]>([]);
+  const activeEcomMediaType: 'image' | 'video' = ecomSubTab === 'gen-video' ? 'video' : 'image';
+  const visibleEcomBatches = isEcomGenerationTab(ecomSubTab)
+    ? ecomBatches.filter((batch) => (batch.mediaType || 'image') === activeEcomMediaType)
+    : ecomBatches;
+  const visibleEcomHistoryItems = isEcomGenerationTab(ecomSubTab)
+    ? ecomHistoryItems.filter((item) => (
+      item.mediaType === 'video' || item.feature === 'ecom-gen-video' ? 'video' : 'image'
+    ) === activeEcomMediaType)
+    : ecomHistoryItems;
   const [pendingEcomHistoryDelete, setPendingEcomHistoryDelete] = useState<{
     key: string;
     items: EcomHistoryItem[];
@@ -4139,10 +4193,21 @@ function App() {
             onChange={(nextTab) => {
               setEcomSubTab(nextTab);
               if (nextTab === 'gen-video') {
-                if (!isVideoModelKey(ecomModel)) setEcomModel('google-omni');
-                setEcomT2IMode(true);
-              } else if (nextTab === 'gen-new' && isVideoModelKey(ecomModel)) {
-                setEcomModel('gpt2');
+                const saved = ecomVideoSettingsRef.current;
+                setEcomModel(saved.model);
+                setEcomAspectRatio(saved.aspectRatio);
+                setEcomImageSize(saved.imageSize);
+                setEcomVideoDuration(saved.duration);
+                setEcomVideoGenerateAudio(saved.generateAudio);
+                setEcomT2IMode(saved.t2iMode);
+                setEcomImageCount(1);
+              } else if (nextTab === 'gen-new') {
+                const saved = ecomImageSettingsRef.current;
+                setEcomModel(saved.model);
+                setEcomAspectRatio(saved.aspectRatio);
+                setEcomImageSize(saved.imageSize);
+                setEcomImageCount(saved.imageCount);
+                setEcomT2IMode(saved.t2iMode);
               }
             }}
             size="sm"
@@ -5171,7 +5236,7 @@ function App() {
                     );
                   })()}
                   {(() => {
-                    const runningBatches = ecomBatches.filter((batch) => batch.status === 'running').length;
+                    const runningBatches = visibleEcomBatches.filter((batch) => batch.status === 'running').length;
                     const t2iReady = ecomT2IMode && Boolean(ecomPromptText.trim() || ecomSupplementaryPrompt.trim() || ecomUsesSecretPrompt);
                     const i2iReady = !ecomT2IMode && ecomProductImages.length > 0;
                     const ready = t2iReady || i2iReady;
@@ -5663,7 +5728,7 @@ function App() {
 
                 <div className="gen-new-legacy-generate pt-2 space-y-3">
                   {(() => {
-                    const runningBatches = ecomBatches.filter(b => b.status === 'running').length;
+                    const runningBatches = visibleEcomBatches.filter(b => b.status === 'running').length;
                     if (isEcomGenerationTab(ecomSubTab)) {
                       // In T2I mode: enabled if prompt non-empty. In i2i: enabled if image uploaded.
                       const t2iReady = ecomT2IMode && Boolean(ecomPromptText.trim() || ecomSupplementaryPrompt.trim() || ecomUsesSecretPrompt);
@@ -5717,7 +5782,7 @@ function App() {
             : 'lg:col-span-12 flex'
           }`}>
             <div className={`glass-panel p-6 min-h-[500px] flex flex-col justify-center ${isEcomGenerationTab(ecomSubTab) ? 'gen-new-canvas' : ''}`}>
-              {isEcomGenerationTab(ecomSubTab) && ecomLastFinalImages.length > 0 && (
+              {ecomSubTab === 'gen-new' && ecomLastFinalImages.length > 0 && (
                 <div className="mb-4 pb-4 border-b border-editor-border/50">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
@@ -6668,7 +6733,7 @@ function App() {
                   )}
                 </div>
               ) : isEcomGenerationTab(ecomSubTab) ? (
-                ecomBatches.length === 0 && ecomHistoryItems.length === 0 ? (
+                visibleEcomBatches.length === 0 && visibleEcomHistoryItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center text-gray-500 h-full">
                     <ImageIcon size={64} className="opacity-20 mb-4" />
                     <p>Kết quả sẽ hiển thị ở đây</p>
@@ -6676,7 +6741,7 @@ function App() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-5 w-full">
-                    {ecomBatches.map((batch) => {
+                    {visibleEcomBatches.map((batch) => {
                       const elapsed = ((batch.finishedAt || Date.now()) - batch.startedAt) / 1000;
                       const batchSettings: EcomGenerationSettings = {
                         prompt: batch.basePromptText || batch.promptText,
@@ -6882,8 +6947,8 @@ function App() {
                       );
                     })}
                     {(() => {
-                      const currentResultUrls = new Set(ecomBatches.flatMap((batch) => batch.results));
-                      const visibleHistory = ecomHistoryItems.filter((item) => !currentResultUrls.has(item.url));
+                      const currentResultUrls = new Set(visibleEcomBatches.flatMap((batch) => batch.results));
+                      const visibleHistory = visibleEcomHistoryItems.filter((item) => !currentResultUrls.has(item.url));
                       if (visibleHistory.length === 0) return null;
 
                       const historyGroups = visibleHistory.reduce<Array<{ key: string; items: EcomHistoryItem[] }>>((groups, item) => {
@@ -6908,7 +6973,7 @@ function App() {
                               <div className="min-w-0">
                                 <p className="font-bold text-sm" style={{ color: 'var(--color-text)' }}>Lịch sử 7 ngày</p>
                                 <p className="text-[10px]" style={{ color: 'var(--color-text-tertiary)' }}>
-                                  {visibleHistory.length} kết quả Gen New gần nhất
+                                  {visibleHistory.length} kết quả {ecomSubTab === 'gen-video' ? 'Gen Video' : 'Gen New'} gần nhất
                                 </p>
                               </div>
                             </div>
@@ -9193,7 +9258,7 @@ function App() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <CheckCircle2 size={14} className="text-editor-accent" />
-            <span className="text-[10px] uppercase tracking-widest">{MODEL_CONFIG[selectedModel].name} Active</span>
+            <span className="text-[10px] uppercase tracking-widest">{MODEL_CONFIG[appMode === 'ecom' ? ecomModel : selectedModel].name} Active</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Layers size={14} className="text-editor-accent" />
